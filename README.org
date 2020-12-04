@@ -1,0 +1,12 @@
+#+TITLE: Palak Mathur's Emacs config
+#+AUTHOR: Palak Mathur
+
+#+HTML:<div align=center><a href="https://github.com/pmathur33/rabunctious-emacs"><img alt="Emacs Logo" width="240" height="240" src="https://upload.wikimedia.org/wikipedia/commons/0/08/EmacsIcon.svg"></a>
+ #+HTML:</div>
+* Why Emacs?
+
+    I started using Emacs in 2010 and my relationship with it has been on and off. I mostly use Jetbrains IntelliJ IDEA
+    for my work. But the idea of Emacs - everything inside is awesome. You can configure IDEA to an extent but after that
+    it just gives up. Checking emails, managing schedule, and taking notes - few things that are lacking in IDEA. Emacs
+    on the other hand is an Operating System in itself. You can configure it the way you want and for your comfort and
+    there is a huge community to help, guide and support you.

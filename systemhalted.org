@@ -1,0 +1,1339 @@
+#+title: systemhalted's Emacs
+#+AUTHOR: systemhalted
+#+Language: en
+#+PROPERTY: header-args :tangle yes
+#+OPTIONS: num:nil 
+#+INFOJS_OPT: view:info toc:t ltoc:t
+#+EXPORT_FILE_NAME: emacs-config.html
+
+* sytemhalted's Emacs :noexport:
+:PROPERTIES:
+:VISIBILITY: children
+:END:
+  
+* Table of Contents                                                     :toc_5:noexport:
+- [[#why-emacs][Why Emacs?]]
+- [[#about][About]]
+- [[#configurations][Configurations]]
+  - [[#about-this-file][About this file]]
+    - [[#org-file-tweaks][Org File Tweaks]]
+      - [[#automatically-tangle][Automatically Tangle]]
+      - [[#visibility-settings][Visibility Settings]]
+      - [[#table-of-contents][Table of Contents]]
+      - [[#org-babel][Org Babel]]
+  - [[#startup-performance][Startup Performance]]
+  - [[#global-settings][Global Settings]]
+    - [[#load-customizations-from-folder][Load Customizations from folder]]
+    - [[#setup-proxy][Setup Proxy]]
+    - [[#custom-file][Custom File]]
+    - [[#package-configuration][Package Configuration]]
+    - [[#install-and-configure-use-package][Install and Configure use-package]]
+  - [[#custom-functions][Custom Functions]]
+      - [[#speedtest][SpeedTest]]
+  - [[#ui-customization][UI Customization]]
+    - [[#lean-and-mean][Lean and mean]]
+      - [[#disable-startupsplash-screen][Disable startup/splash screen]]
+      - [[#setup-initial-major-mode-to-org-mode][Setup initial major mode to Org-mode]]
+      - [[#remove-scratch-message][Remove scratch message]]
+      - [[#disable-unnecessary-interface][Disable Unnecessary Interface]]
+      - [[#reduce-the-delay-echoing-the-keystrokes][Reduce the delay echoing the keystrokes]]
+      - [[#full-screen][Full Screen]]
+      - [[#display-line-numbers-on-the-side][Display Line Numbers on the side]]
+      - [[#but-disable-line-numbers-for-certain-modes][But disable line numbers for certain modes]]
+    - [[#fonts-theme-and-modeline][Fonts, Theme and Modeline]]
+      - [[#font][Font]]
+      - [[#theme][Theme]]
+      - [[#modeline][Modeline]]
+        - [[#time-and-battery][Time and Battery]]
+        - [[#doom-modeline][Doom Modeline]]
+        - [[#cursor-position][Cursor Position]]
+    - [[#which-key][Which Key?]]
+  - [[#text-manipulation][Text Manipulation]]
+    - [[#move-text][Move text]]
+    - [[#duplicate-the-current-line][Duplicate the current line]]
+    - [[#join-following-line][Join following line]]
+    - [[#string-manipulations][String manipulations]]
+  - [[#shortcuts-longcuts-miscellaneous-configs][Shortcuts, Longcuts, Miscellaneous Configs]]
+    - [[#clipboard-copy-from-terminal-emacs-to-the-x-clipboard][Clipboard. Copy from terminal emacs to the X clipboard.]]
+    - [[#simplify-yesno-prompts][Simplify Yes/No Prompts]]
+    - [[#but-make-it-hard-to-accidentally-exit][But make it hard to accidentally exit]]
+    - [[#utf-8-coding-system][UTF-8 Coding System]]
+    - [[#shut-up-the-bell][Shut up the bell]]
+    - [[#disabled-commands][Disabled Commands]]
+    - [[#always-kill-the-buffer][Always kill the buffer]]
+    - [[#visit-systemhaltedorg][Visit systemhalted.org]]
+    - [[#reload-config][Reload Config]]
+    - [[#exile-the-backup-files][Exile the backup files]]
+    - [[#set-process-connection-type-to-nil][Set process-connection-type to nil]]
+    - [[#try-emacs-packages][Try Emacs Packages]]
+  - [[#windows-management][Windows Management]]
+  - [[#directory-and-file-retrieval-bookmarks-search][Directory and File Retrieval, Bookmarks, Search]]
+    - [[#emacs-helm][Emacs-Helm]]
+    - [[#ibuffer][iBuffer]]
+    - [[#treemacs][Treemacs]]
+  - [[#make-emacs-helpful][Make Emacs Helpful]]
+  - [[#reading-and-writing][Reading and Writing]]
+    - [[#distraction-free-writing][Distraction free writing]]
+    - [[#markdown-mode][Markdown mode]]
+    - [[#yaml-mode][YAML mode]]
+    - [[#nov-mode][Nov Mode]]
+    - [[#define-word][define-word]]
+    - [[#idle-highlight][Idle Highlight]]
+    - [[#pdf][Pdf]]
+      - [[#pdf-tools][Pdf Tools]]
+      - [[#pdf-latex][Pdf Latex]]
+      - [[#docview-continuous-view][DocView continuous view]]
+  - [[#org][Org]]
+      - [[#org-agenda-and-todo-setup][Org Agenda and Todo Setup]]
+      - [[#setup-org-look-and-feel-and-other-hooks-definitions][Setup Org Look and Feel and other Hooks definitions]]
+      - [[#org-setup][Org Setup]]
+      - [[#org-bullets][Org Bullets]]
+      - [[#org-tempo][Org Tempo]]
+      - [[#code-editing-in-same-window][Code editing in same window]]
+      - [[#toc-org][Toc-org]]
+      - [[#org-sidebar][Org-sidebar]]
+      - [[#git-auto-commit-for-org-files][Git Auto commit for Org files]]
+      - [[#htmlize][HTMLIZE]]
+      - [[#org-babel-languages][Org Babel Languages]]
+  - [[#programming][Programming]]
+    - [[#version-control-git-github][Version Control, Git, Github]]
+      - [[#magit][Magit]]
+      - [[#forge][Forge]]
+      - [[#magit-todos][magit-todos]]
+    - [[#projectile][Projectile]]
+    - [[#templates][Templates]]
+      - [[#yasnippet][yasnippet]]
+      - [[#easy-to-add-emacs-lisp-template][Easy-to-add emacs-lisp template]]
+    - [[#productivity][Productivity]]
+      - [[#company-mode][Company mode]]
+      - [[#syntax-checking-flycheck][Syntax checking flycheck]]
+      - [[#dumb-jump][Dumb Jump]]
+    - [[#lsp][LSP]]
+      - [[#lsp-mode][LSP Mode]]
+      - [[#lsp-ui][LSP UI]]
+      - [[#dap][DAP]]
+    - [[#languages][Languages]]
+      - [[#cc][C/C++]]
+      - [[#haskell][Haskell]]
+      - [[#common-lispslime][Common Lisp/Slime]]
+      - [[#rust][Rust]]
+      - [[#lsp-java][LSP Java]]
+      - [[#javascript-mode][Javascript Mode]]
+      - [[#typescript][Typescript]]
+      - [[#markdown-mode-1][Markdown mode]]
+      - [[#yaml-mode-1][YAML mode]]
+    - [[#editing-pleasure][Editing Pleasure]]
+      - [[#electric][Electric]]
+      - [[#show--parens][Show  Parens]]
+      - [[#font-lock][Font-lock]]
+      - [[#rainbow-delimiters][Rainbow Delimiters]]
+    - [[#references][References]]
+      - [[#http][Http]]
+  - [[#runtime-performance][Runtime Performance]]
+
+* Why Emacs?
+
+I started using Emacs in 2010 and my relationship with it has been on and off. I mostly use Jetbrains IntelliJ IDEA
+for my work. But the idea of Emacs - everything inside is awesome. You can configure IDEA to an extent but after that it just gives up. Checking emails, managing schedule, and taking notes - few things that are lacking in IDEA. Emacs on the other hand is an Operating System in itself. You can configure it the way you want and for your comfort and there is a huge community to help, guide and support you.
+
+* About
+This is my personal Emacs configuration. Over past few years, I had been using Emacs configuration by others.
+I used to modify few things here and there in my old configuration but not before spending several hours and without understanding what is going on. So, after reading ~r/emacs~ discussions, I decided that I will get rid of all the Emacs configurations and start it at the very beginning. I have not used Emacs for any coding purposes. I code in Java and IntelliJ IDEA is the best IDE for that. Therefore, I decided that in the beginning, I do not need many configurations. Since the discussion on the ~r/emacs~ was all about Literate Programming and how ~org-mode~ facilitates that, I decided to start with setting up org-mode first
+  
+* Configurations
+** About this file 
+*** Org File Tweaks
+There are a few tweaks included in this org file that make it a little easier to
+work with.
+
+**** Automatically Tangle
+First there is a property defined on the file:
+
+#+BEGIN_SRC :tangle no
+         header-args :tangle yes
+#+END_SRC
+
+This tells emacs to automatically tangle (include) all code blocks in this file when
+generating the code for the config, unless the code block explicitly includes
+=:tangle no= as the above code block does.
+
+You will notice that I explicitly use =:tangle= property in all source blocks. It is a temporary thing as I am still trying to test out my configuration by turning on and off the source code blocks from auto tangle. 
+
+**** Visibility Settings
+Next we have a property that defines the visibility for org to show it's direct children on startup. This way a clean outline of all sub headings under Configuration is shown each time this file is opened in org-mode.
+
+#+BEGIN_SRC :tangle no
+      :PROPERTIES:
+          :VISIBILITY: children
+      :END:
+#+END_SRC
+
+**** Table of Contents
+Finally, there is a [[Table of Contents][Table of Contents]] heading that includes the tag: =:TOC_5_gh:=. This
+tells an org-mode package =toc-org= to generate a table of contents under this heading
+that has a max depth of 3 and is created using Github-style hrefs. This table of contents
+is updated everytime the file is saved and makes for a functional table of contents that
+works property directly on github.
+
+**** Org Babel
+
+This file is loaded using ~org-babel~. Create ~init.el~ file in ~/.emacs.d/~ folder and put following code
+ 
+#+INCLUDE: "~/.emacs.d/init.el" src emacs-lisp :range-begin "OrgBabel" :range-end "-OrgBabel" :lines "10-11"
+
+** Startup Performance
+
+Make startup faster by reducing the frequency of garbage collection and then use a hook to measure Emacs startup time.
+
+#+begin_src emacs-lisp
+
+;; The default is 800 kilobytes.  Measured in bytes.
+(setq gc-cons-threshold (* 50 1000 1000))
+
+;; Profile emacs startup
+(add-hook 'emacs-startup-hook
+          (lambda ()
+            (message "*** Emacs loaded in %s with %d garbage collections."
+                     (format "%.2f seconds"
+                             (float-time
+                              (time-subtract after-init-time before-init-time)))
+                     gcs-done)))
+
+#+end_src
+
+** Global Settings
+*** Load Customizations from folder
+
+I put some scripts in /customizations/ folder. Lets load this folder.
+
+#+INCLUDE: "~/.emacs.d/init.el" src emacs-lisp :range-begin "Customizations" :range-end "-Customizations" :lines "4-5"
+
+*** Setup Proxy
+I use Emacs on my work laptop and there is a firewall that I need to pass through. Proxy settings allow me to do that. Save the below code under ~customizations~ and call it ~setup-proxy.el~
+#+INCLUDE: "~/.emacs.d/customizations/setup-proxy-template.el" src emacs-lisp :range-begin "HttpProxy" :range-end "-HttpProxy" :lines "4-13"
+
+*** Custom File
+
+Emacs has an [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Easy-Customization.html][Easy Customization]] Interface, which can be invoked by =M-x customize=. When you use it, it puts the =custom-set-variables= in ~init.el~. But I hardly use it as I have all my configurations as part of this config file. Thus, I want Emacs to use a different file to put these configurations. And since Emacs is Emacs, [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Saving-Customizations.html#Saving-Customizations][it does not mind]]. 
+
+#+begin_src emacs-lisp
+  (setq custom-file "~/.emacs.d/emacs-custom.el")
+  (load custom-file)  
+#+end_src
+
+Here we are asking Emacs to use a different file ~emacs-custom.el~ to store these customizations and are loading this file so that in case anything is there, it can be loaded for next session.
+
+*** Package Configuration
+
+Emacs is an ecosystem of packages, which are important to make Emacs your home. Traditionally, Elpa was the repository of choice for Emacs but lately more modern repositories have started flourishing. If you type command =M-x list-packages= in the Emacs without loading this config file, you will see a list of packages from ELPA. Here we will define the repositories to let Emacs know where to go and fetch the packages from. 
+
+#+BEGIN_SRC emacs-lisp
+  (require 'package)
+  (setq-default
+   load-prefer-newer t
+   package-enable-at-startup nil)
+  (add-to-list 'package-archives
+               '("gnu" . "https://elpa.gnu.org/packages/") t)
+  (add-to-list 'package-archives
+               '("marmalade" . "http://marmalade-repo.org/packages/") t)
+  (add-to-list 'package-archives
+               '("tromey" . "http://tromey.com/elpa/") t)
+  (add-to-list 'package-archives
+               '("org" . "http://orgmode.org/elpa/") t)
+  (add-to-list 'package-archives
+               '("melpa" . "http://melpa.org/packages/") t)
+  (add-to-list 'package-archives
+               '("melpa-stable" . "http://stable.melpa.org/packages/") t)
+  (package-initialize)
+#+END_SRC
+
+Here, we asked Emacs to load a package called ~package~, which is the package manager that comes with Emacs out of the box. Also, we defined a list of package-archives. In the end we initialized and ask Emacs to refresh it’s package list.
+
+*** Install and Configure use-package
+
+We will be using a few packages that don’t ship with Emacs. We’ll be using ~use-package~ to define the configurations. We could have continued using the built-in package manager, but use-package makes the configuration file look neat and clean. In itself it is not a package manager but an efficient way to load packages. It is easy to use. In case you need a tutorial on few of its keywords, [[https://jwiegley.github.io/use-package/keywords/#preface-init-config][read this]].
+
+#+BEGIN_SRC emacs-lisp
+  (unless (package-installed-p 'use-package)
+    (package-refresh-contents)
+    (package-install 'use-package t))
+  (setq-default use-package-always-defer t
+                use-package-always-ensure t)
+#+END_SRC
+
+We are setting two properties, viz., =:defer= and =:ensure= to always be =true= when using ~use-package~. In other words we are setting this globally for all the packages. Setting =:defer= to =true= means, that we are expecting another package to do something to load a particular package by say, =:bind=. The =:ensure= settings tell the package manager to install the package automatically if it is not already present. 
+
+** Custom Functions
+**** SpeedTest
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (load "setup-speedtest.el")
+#+END_SRC
+** UI Customization
+
+Some of these settings were copied from Sergei Nosov's [[https://github.com/snosov1/dot-emacs#ui-customization][configurations.]]
+
+*** Lean and mean
+Emacs doesn’t need a lot of UI elements - it should be lean and mean. Well, and clean. 
+**** Disable startup/splash screen
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq inhibit-startup-screen t)
+#+END_SRC
+
+**** Setup initial major mode to Org-mode
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq-default initial-major-mode (quote org-mode))
+#+END_SRC
+
+**** Remove scratch message 
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq-default initial-scratch-message nil)
+#+END_SRC
+
+**** Disable Unnecessary Interface
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (menu-bar-mode -1)
+  (tool-bar-mode -1)
+  (unless (and (display-graphic-p) (eq system-type 'darwin))
+    (push '(menu-bar-lines . 0) default-frame-alist))
+  (push '(tool-bar-lines . 0) default-frame-alist)
+  (push '(vertical-scroll-bars) default-frame-alist)
+#+END_SRC
+**** Reduce the delay echoing the keystrokes
+When you press C-x, for example, and hesitate with a next character, C-x will be displayed in the echo-area after some time. But I don’t see any reason why you should wait for it.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq echo-keystrokes 0.00111)
+#+END_SRC
+
+**** Full Screen
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (toggle-frame-fullscreen)
+  (add-to-list 'default-frame-alist '(fullscreen . fullboth))
+  ;;(add-hook 'window-setup-hook 'toggle-frame-maximized t).
+#+END_SRC
+**** Display Line Numbers on the side
+
+#+begin_src emacs-lisp :tangle yes
+  (global-display-line-numbers-mode t)
+#+end_src
+
+**** But disable line numbers for certain modes
+
+#+begin_src emacs-lisp :tangle yes
+  (dolist (mode '(org-mode-hook
+                  term-mode-hook
+                  shell-mode-hook
+                  eshell-mode-hook
+                  eww-mode
+                  term-mode
+                  ))
+    (add-hook mode (lambda() (display-line-numbers-mode 0))))
+
+#+end_src
+     
+*** Fonts, Theme and Modeline
+
+**** Font
+#+begin_src emacs-lisp
+  (defvar systemhalted/default-font-size 140)
+  (set-face-attribute 'default nil
+                      :font "Fira Code"
+                      :height systemhalted/default-font-size)
+
+  ;; Set the fixed pitch face
+  (set-face-attribute 'fixed-pitch nil :font "Fira Code" :height 160)
+
+  ;; Set the variable pitch face
+  (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 160 :weight 'regular)
+#+end_src
+
+**** Theme
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package nord-theme
+    :init (load-theme 'nord t)) 
+#+end_src
+    
+**** Modeline 
+***** Time and Battery
+#+begin_src emacs-lisp :tangle yes
+  (display-time-mode 1)
+  (display-battery-mode 1)
+#+end_src
+
+***** Doom Modeline
+#+begin_src emacs-lisp :tangle yes
+  (use-package all-the-icons)     
+
+  (use-package doom-modeline
+    :init (doom-modeline-mode 1)
+    :custom (doom-modeline-height 10))
+
+#+end_src
+    
+***** Cursor Position
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq line-number-mode t)
+  (setq column-number-mode t)
+#+END_SRC
+*** Which Key?
+As a newbie (and also as an experienced) [[https://irreal.org/blog/?p=6026][Emacser]], it is difficult to remember all the keybindings. And I do not think that anyone needs to remember all of them. Here is where [[https://github.com/justbur/emacs-which-key][which-key]] package comes into picture. It is an [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Minor-Modes.html][Emacs Minor Mode]], that displays the key bindings following your currently entered incomplete command (a prefix).
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package which-key				   
+    :init						   
+    (which-key-mode)					   
+    :config						   
+    (which-key-setup-side-window-bottom)		   
+    (setq which-key-sort-order 'which-key-key-order-alpha 
+          ;; which-key-side-window-max-width 0.33		   
+          which-key-idle-delay 0.05)			   
+    :diminish which-key-mode)				  
+#+END_SRC
+
+** Text Manipulation
+*** Move text
+Most of the time, I need to move a the text up an down a bit. There is a /transpose-line/ command that maps to /C-x C-t/, which is cumbersome and most of the time it messes-up with my flow. So, here we will map it to /M-n/ and /M-p/ following the convention of movement keys. 
+Note: If you need to move the text to some pretty distant place, then, of course, it’s easier to kill and yank it.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (eval-after-load "move-text-autoloads"
+    '(progn
+       (if (require 'move-text nil t)
+           (progn
+             (define-key global-map (kbd "M-n") 'move-text-down)
+             (define-key global-map (kbd "M-p") 'move-text-up))
+         (message "WARNING: move-text not found"))))
+#+END_SRC
+
+*** Duplicate the current line
+Equivalent of Ctrl+d (Command+d on Mac) in IntelliJ IDEA
+Source: https://www.emacswiki.org/emacs/CopyingWholeLines#toc12
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (define-key global-map (kbd "C-c k")
+    (defun systemhalted/duplicate-line-or-region (&optional n)
+      "Duplicate current line, or region if active.
+      With argument N, make N copies.
+      With negative N, comment out original line and use the absolute value."
+      (interactive "*p")
+      (let ((use-region (use-region-p)))
+        (save-excursion
+          (let ((text (if use-region        ;Get region if active, otherwise line
+                          (buffer-substring (region-beginning) (region-end))
+                        (prog1 (thing-at-point 'line)
+                          (end-of-line)
+                          (if (< 0 (forward-line 1)) ;Go to beginning of next line, or make a new one
+                              (newline))))))
+            (dotimes (i (abs (or n 1)))     ;Insert N times, or once if not specified
+              (insert text))))
+        (if use-region nil                  ;Only if we're working with a line (not a region)
+          (let ((pos (- (point) (line-beginning-position)))) ;Save column
+            (if (> 0 n)                             ;Comment out original with negative arg
+                (comment-region (line-beginning-position) (line-end-position)))
+            (forward-line 1)
+            (forward-char pos))))))
+#+END_SRC
+
+*** Join following line
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (define-key global-map (kbd "C-c j")
+    (defun systemhalted/join-following-line (arg)
+      "Joins the following line or the whole selected region"
+      (interactive "P")
+      (if (use-region-p)
+          (let ((fill-column (point-max)))
+            (fill-region (region-beginning) (region-end)))
+        (join-line -1))))
+#+END_SRC
+
+*** String manipulations
+Emacs 24.4 came with a subr-x library with routines for string manipulations, like string-trim, string-join and etc. It’s better to always have these at hand.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (require 'subr-x nil t)
+#+END_SRC
+
+** Shortcuts, Longcuts, Miscellaneous Configs
+*** Clipboard. Copy from terminal emacs to the X clipboard.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package xclip
+    :config
+    (xclip-mode 1))
+
+#+END_SRC
+*** Simplify Yes/No Prompts
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (fset 'yes-or-no-p 'y-or-n-p)
+#+END_SRC
+
+*** But make it hard to accidentally exit
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq-default confirm-kill-emacs (quote y-or-n-p))
+#+END_SRC
+
+*** UTF-8 Coding System
+Use UTF-8 as much as possible
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (set-language-environment 'utf-8)                                                           
+  (setq locale-coding-system 'utf-8)                                                          
+
+  ;; set the default encoding system                                                          
+  (prefer-coding-system 'utf-8)                                                               
+  (setq default-file-name-coding-system 'utf-8)                                               
+  (set-default-coding-systems 'utf-8)                                                         
+  (set-terminal-coding-system 'utf-8)                                                         
+  (set-keyboard-coding-system 'utf-8)                                                         
+
+  ;; Treat clipboard input as UTF-8 string first; compound text next, etc.                    
+  (setq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)) 
+#+END_SRC
+*** Shut up the bell
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq ring-bell-function 'ignore) 
+#+END_SRC
+
+*** Disabled Commands
+Change nil to t to disable the command. 
+Note: currently not using it. But this is the way to do it
+#+BEGIN_SRC emacs-lisp :tangle no
+  (put 'upcase-region 'disabled nil) 
+#+END_SRC
+
+*** Always kill the buffer 
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun kill-current-buffer ()
+    "Kills the current buffer."
+    (interactive)
+    (kill-buffer (current-buffer)))
+  (global-set-key (kbd "C-x k") 'kill-current-buffer)
+#+END_SRC
+*** Visit systemhalted.org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun systemhalted/config-visit ()
+    (interactive)
+    (find-file "~/.emacs.d/systemhalted.org"))
+  (global-set-key (kbd "C-c e") 'systemhalted/config-visit)
+#+END_SRC
+*** Reload Config
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun systemhalted/config-reload ()
+    "Reloads ~/.emacs.d/systemhalted.org at runtime"
+    (interactive)
+    (org-babel-load-file (expand-file-name "~/.emacs.d/systemhalted.org")))
+  (global-set-key (kbd "C-c r") 'systemhalted/config-reload)
+#+END_SRC
+
+*** Exile the backup files
+
+Backup files are insanely irritating if you expect clean ls output and don't want to filter out irrelevant junk. The right thing is to exile them to a dedicated directory:
+
+Reference: Somehwhere on Reddit (find the post and link here)
+    
+#+begin_src emacs-lisp :tangle yes
+  (setq backup-by-copying t
+        backup-directory-alist `(("." . ,(concat user-emacs-directory "backups")))
+        tramp-backup-directory-alist backup-directory-alist
+        delete-old-versions t
+        kept-new-versions 3
+        kept-old-versions 2
+        version-control t
+        vc-cvs-stay-local nil)
+#+end_src
+
+*** Set process-connection-type to nil
+
+I don't know why but ~xdg-open~ does not work from inside Emacs if this is not set to nil. It might cause issue with org-plot/gnuplot. But till time being this works for me as I do not use org-plot yet.
+
+#+begin_src emacs-lisp
+  (setq process-connection-type nil)
+#+end_src
+
+*** Try Emacs Packages
+Try is a package that allows you to try out Emacs packages without installing them. 
+#+begin_src emacs-lisp
+
+  (use-package try)
+
+#+end_src
+** Windows Management
+Emacs comes with ~windmove~ library, which allows move from one window to another using ~shift~ and ~arrow~ keys. Let's activate it here.
+
+#+begin_src emacs-lisp :tangle yes
+  (when (fboundp 'windmove-default-keybindings)
+    (windmove-default-keybindings))
+#+end_src
+** Directory and File Retrieval, Bookmarks, Search
+*** Emacs-Helm
+
+[[https://emacs-helm.github.io/helm/][Helm]] is a framework for incremental completion and selection written for Emacs. It helps to rapidly complete file names, buffer names, or any other Emacs interactions requiring selecting an item from a list of possible choices. I am still learning it. I will update this as and when I get  more knowledge on this package. 
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package helm 
+    :bind
+    ("C-x C-f" . 'helm-find-files)
+    ("C-x C-b" . 'helm-buffers-list)
+    ("C-c b" . 'helm-mini)
+    ("M-x" . 'helm-M-x)
+    ("C-x f" . 'helm-recentf)
+    ("C-x r b" .   'helm-filtered-bookmarks)
+    ("C-c h" . 'helm-command-prefix) ;;remapped as C-x c is almost same as C-x C-x, which asks to exit Emacs
+    ("M-y" . 'helm-show-kill-ring) ;;rather than popping, show the kill-ring
+    ("C-c o" . 'helm-occur)
+    :config
+    (setq helm-autoresize-max-height 0
+          helm-autoresize-min-height 40
+          helm-candidate-number-limit 40
+          helm-M-x-fuzzy-match t
+          ;;helm-buffers-fuzzy-matching t
+          ;; helm-recentf-fuzzy-match t
+          ;;helm-semantic-fuzzy-match t
+          ;; helm-imenu-fuzzy-match t
+          helm-mode-fuzzy-match t  ;;global fuzzy match
+          helm-completion-in-region-fuzzy-match t 
+          helm-split-window-in-side-p nil
+          helm-move-to-line-cycle-in-source nil
+          helm-ff-search-library-in-sexp t
+          helm-scroll-amount 8 
+          helm-echo-input-in-header-line t)
+
+    :init
+    (helm-mode 1))
+
+  (require 'helm-config)    
+  (helm-autoresize-mode 1)
+  (define-key helm-find-files-map (kbd "C-l") 'helm-find-files-up-one-level)
+  (define-key helm-find-files-map (kbd "C-f") 'helm-execute-persistent-action)
+
+#+END_SRC
+
+*** iBuffer
+Before iPhone, there was iBuffer. 
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (global-set-key (kbd "C-x b") 'ibuffer)
+  (setq ibuffer-expert t)
+#+END_SRC 
+
+*** Treemacs
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package treemacs 
+    :init
+    (add-hook 'treemacs-mode-hook
+              (lambda () (treemacs-resize-icons 15))))
+
+#+END_SRC
+** Make Emacs Helpful
+
+#+begin_src emacs-lisp
+  (use-package helpful
+    :bind
+    ("C-h f" . 'helpful-callable)
+    ("C-h v" . 'helpful-variable)
+    ("C-h k" . 'helpful-key)
+    ("C-h F" . 'helpful-function)
+    ("C-h C" . 'helpful-command)
+    ("C-h M-d" . 'helpful-at-point))
+
+#+end_src
+** Reading and Writing
+*** Distraction free writing
+#+begin_src emacs-lisp
+
+   (use-package darkroom
+      :commands darkroom-mode
+      :config
+      (setq darkroom-text-scale-increase 0))
+
+    (defun systemhalted/enter-focus-mode ()
+      (interactive)
+      (darkroom-mode 1)
+      (display-line-numbers-mode 0))
+
+    (defun systemhalted/leave-focus-mode ()
+      (interactive)
+      (darkroom-mode 0)
+      (display-line-numbers-mode 1))
+
+    (defun systemhalted/toggle-focus-mode ()
+      (interactive)
+      (if (symbol-value darkroom-mode)
+        (systemhalted/leave-focus-mode)
+        (systemhalted/enter-focus-mode)))
+
+
+#+end_src
+
+*** Markdown mode
+
+#+begin_src emacs-lisp
+  (use-package markdown-mode
+    :commands (markdown-mode gfm-mode)
+    :mode (("README\\.md\\'" . gfm-mode)
+           ("\\.md\\'" . markdown-mode)
+           ("\\.markdown\\'" . markdown-mode))
+    :init (setq markdown-command "/usr/local/bin/multimarkdown"))
+#+end_src
+
+*** YAML mode
+
+#+begin_src emacs-lisp
+  (use-package yaml-mode
+    :mode (("\\.yml\\'" . yaml-mode)
+           ("Bogiefile" . yaml-mode))
+    :init
+    (add-hook 'yaml-mode-hook
+              '(lambda ()
+                 (define-key yaml-mode-map "\C-m" 'newline-and-indent))))
+
+#+end_src
+
+*** Nov Mode 
+I prefer reading EPUB books on Emacs. Nov Mode allows me do that
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package nov 
+    :demand t)
+
+  (add-to-list 'auto-mode-alist '("\\.epub\\'" . nov-mode))
+
+  ;; set unzip
+  (setq nov-unzip-program "/usr/bin/unzip") ;;nov needs to know the location of unzip package
+#+END_SRC
+
+*** define-word
+Word and their meanings and what better way to have this information at point. 
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package define-word
+    :defer t
+    :init (global-set-key (kbd "C-c d") 'define-word-at-point)
+    (global-set-key (kbd "C-c D") 'define-word))
+
+#+END_SRC
+
+*** Idle Highlight
+Idle highlight mode sets an idle timer that highlights all occurences in the buffer of the word under the point.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package idle-highlight)
+#+END_SRC
+
+*** Pdf
+**** Pdf Tools
+
+PDF Tools is, among other things, a replacement of DocView for PDF files. The key difference is that pages are not pre-rendered by e.g. ghostscript and stored in the file-system, but rather created on-demand and stored in memory.
+
+Read the prerequisite: https://github.com/politza/pdf-tools
+
+#+begin_src emacs-lisp
+
+  (use-package pdf-tools
+    :ensure t)
+  (pdf-tools-install)
+
+#+end_src
+
+**** Pdf Latex
+
+#+begin_src emacs-lisp
+
+  (setenv "PATH" (concat (getenv "PATH") ":/Library/TeX/texbin/pdflatex"))
+
+#+end_src
+
+**** DocView continuous view
+In DocView mode, by default, C-p and C-n stop scrolling at the beginning and the end of the current page, respectively. That means if you are at the beginning of the page, C-p won't do anything. Most of the time, I want to go back to the previous page. Similarly for C-n. To get this behavior let's set =doc-view-continuous= variable to non-=nill= value.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq doc-view-continuous t)
+#+END_SRC
+
+** Org
+       
+**** Org Agenda and Todo Setup
+Let's include a newer version of org-mode than the one that is built in. We're going to manually remove the org directories from the load path, to ensure the version we  want is prioritized instead.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun systemhalted/org-agenda-setup ()
+    (setq org-log-done 'time
+          org-log-done 'note
+          org-ellipsis " ▾"
+          org-agenda-files (list "~/org/inbox.org"
+                                 "~/org/gtd.org" 
+                                 "~/org/tickler.org"
+                                 "~/org/references.org")
+          org-capture-templates '(("t" "Todo [inbox]" entry
+                                   (file+headline "~/org/inbox.org" "Tasks")
+                                   "* TODO %i%?")
+                                  ("T" "Tickler" entry
+                                   (file+headline "~/org/tickler.org" "Tickler")
+                                   "* %i%? \n %U"))
+          org-todo-keywords '((sequence "TODO(t)" "START(s)" "WAIT(w)" "|" "DONE(d)" "CANCEL(c)" "HOLD(h)" "DELEGATE(g)"))))
+
+
+  (setq org-refile-targets '((org-agenda-files :maxlevel . 4)
+                             ("~/org/someday.org" :maxlevel . 1)
+                             ("~/org/archive.org" :maxlevel . 4)
+                             ))
+
+#+END_SRC 
+
+**** Setup Org Look and Feel and other Hooks definitions
+#+begin_src emacs-lisp
+
+  (defun systemhalted/org-mode-look-feel ()
+    (org-indent-mode)
+    (variable-pitch-mode 1)
+    (visual-line-mode 1))
+
+  (defun systemhalted/org-mode-visual-fill ()
+    (setq visual-fill-column-width 120
+          visual-fill-column-center-text t)
+    (visual-fill-column-mode 1))
+
+  (use-package visual-fill-column
+    :hook (org-mode . systemhalted/org-mode-visual-fill)
+    :hook (yaml-mode . systemhalted/org-mode-visual-fill))
+
+  (defun systemhalted/org-font-setup ()
+    ;; Replace list hyphen with dot
+    (font-lock-add-keywords 'org-mode
+                            '(("^ *\\([-]\\) "
+                               (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
+
+    ;; Set faces for heading levels
+    (dolist (face '((org-level-1 . 1.2)
+                    (org-level-2 . 1.1)
+                    (org-level-3 . 1.05)
+                    (org-level-4 . 1.0)
+                    (org-level-5 . 1.1)
+                    (org-level-6 . 1.1)
+                    (org-level-7 . 1.1)
+                    (org-level-8 . 1.1)))
+      (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
+
+    ;; Ensure that anything that should be fixed-pitch in Org files appears that way
+    (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+    (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
+    (set-face-attribute 'org-table nil   :inherit '(shadow fixed-pitch))
+    (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
+    (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
+    (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
+    (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch))
+
+  (defun systemhalted/org-shift-support-windmove()
+    ;; Make windmove work in Org mode:
+    (add-hook 'org-shiftup-final-hook 'windmove-up)
+    (add-hook 'org-shiftleft-final-hook 'windmove-left)
+    (add-hook 'org-shiftdown-final-hook 'windmove-down)
+    (add-hook 'org-shiftright-final-hook 'windmove-right)
+
+    (setq org-support-shift-select 'always)
+    )
+#+end_src
+     
+**** Org Setup
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org
+    :ensure org-plus-contrib
+    :pin org
+    :defer t
+    :hook (org-mode . systemhalted/org-mode-look-feel)
+    :config (systemhalted/org-agenda-setup)
+    (systemhalted/org-font-setup)
+    :init 
+    (define-key global-map (kbd "C-c l") 'org-store-link)
+    (define-key global-map (kbd "C-c a") 'org-agenda)
+    (define-key global-map (kbd "C-c c") 'org-capture)
+    ;;https://orgmode.org/manual/Conflicts.html
+    (systemhalted/org-shift-support-windmove))
+
+#+END_SRC
+          
+**** Org Bullets
+Makes it all look a bit nicer, I hate looking at asterisks.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org-bullets
+    :hook
+    (( org-mode ) . org-bullets-mode))
+#+END_SRC
+     
+**** Org Tempo
+#+begin_src emacs-lisp :tangle yes
+  (require 'org-tempo)
+#+end_src
+**** Code editing in same window
+#+begin_src emacs-lisp :tangle yes
+  (setq org-src-window-setup 'current-window)
+#+end_src
+**** Toc-org
+Let's install and load the =toc-org= package after org mode is loaded. This is the
+package that automatically generates an up to date table of contents for us.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package toc-org
+    :after org
+    :hook (org-mode . toc-org-mode))
+#+END_SRC
+
+**** Org-sidebar
+When I write, I need a map of the document or the table of content on the side. Org-sidebar helps with that:
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org-sidebar
+    :custom (org-sidebar-tree-side 'left))
+#+END_SRC
+
+**** Git Auto commit for Org files
+#+begin_src emacs-lisp :tangle yes
+  (use-package git-auto-commit-mode)
+#+end_src
+
+**** HTMLIZE
+Org-mode supports HTML export natively but syntax highlighting is added through htmlize.el.  
+#+begin_src emacs-lisp :tangle yes
+  (use-package htmlize
+    :config
+    (setq org-src-fontify-natively t))
+#+end_src
+
+**** Org Babel Languages
+#+begin_src emacs-lisp
+
+  (use-package ob-kotlin)
+
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((java . t)
+     (groovy . t)
+     (kotlin . t)
+     (python . t)))
+
+#+end_src
+** Communication :noexport:
+**** Slack 
+TBD
+
+
+** Programming
+*** Version Control, Git, Github
+**** Magit
+The magical git client. 
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+
+  (use-package magit
+    :if (executable-find "git")
+    :bind
+    (("C-x g" . magit-status)
+     (:map magit-status-mode-map
+           ("M-RET" . magit-diff-visit-file-other-window)))
+    :config
+    (defun magit-log-follow-current-file ()
+      "A wrapper around `magit-log-buffer-file' with `--follow' argument."
+      (interactive)
+      (magit-log-buffer-file t)))
+
+#+END_SRC
+**** Forge
+Forge uses access to Github and provides a way to interact with PRs, Issues, etc. 
+
+#+begin_src emacs-lisp :tangle no
+  (use-package forge)
+
+#+end_src
+**** magit-todos
+Extension for magit which shows a TODOs section in Git status buffer containing all line with TODO in files within the repo. More information at [[https://github.com/alphapapa/magit-todos][Github repo]].
+
+#+begin_src emacs-lisp
+
+  (use-package magit-todos
+    :defer t)
+#+end_src
+
+*** Projectile
+Projectile is a quick and easy project management package that "just works". We're
+going to install it and make sure it's loaded immediately.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package projectile
+    :diminish projectile-mode
+    :custom ((projectile-completion-system 'helm))
+    :bind-keymap
+    ("C-c p" . projectile-command-map)
+    :config
+    (projectile-mode)
+    :init
+    (when (file-directory-p "~/Workspace")
+      (setq projectile-project-search-path '("~/Workspace")))
+    (setq projectile-switch-project-action 'helm-projectile)
+    (setq projectile-indexing-method 'alien))
+
+  (use-package helm-projectile
+    :config (helm-projectile-on))
+
+
+#+END_SRC
+
+*** Templates
+**** yasnippet
+#+BEGIN_SRC emacs-lisp  :tangle yes
+  (use-package yasnippet
+    :config
+    (use-package yasnippet-snippets)
+    (yas-reload-all))
+#+END_SRC
+
+**** Easy-to-add emacs-lisp template
+Hitting tab after an "<el" in an org-mode file will create a template for elisp insertion.
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (add-to-list 'org-structure-template-alist
+               '("el" .  "src emacs-lisp\n"))
+#+END_SRC
+*** Productivity
+**** Company mode
+I set the delay for company mode to kick in to half a second, I also make sure that
+it starts doing its magic after typing in only 2 characters.
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package company
+    :config
+    (setq company-idle-delay 0)
+    (setq company-minimum-prefix-length 3))
+
+  (with-eval-after-load 'company
+    (define-key company-active-map (kbd "M-n") nil)
+    (define-key company-active-map (kbd "M-p") nil)
+    (define-key company-active-map (kbd "C-n") #'company-select-next)
+    (define-key company-active-map (kbd "C-p") #'company-select-previous)
+    (define-key company-active-map (kbd "SPC") #'company-abort))
+#+END_SRC
+
+**** Syntax checking flycheck
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package flycheck
+    :ensure t
+    :init (global-flycheck-mode))
+#+END_SRC
+
+**** Dumb Jump
+
+#+begin_src emacs-lisp
+
+  (use-package dumb-jump
+    :bind
+    (:map prog-mode-map
+          (("C-c C-o" . dumb-jump-go-other-window)
+           ("C-c C-j" . dumb-jump-go)
+           ("C-c C-i" . dumb-jump-go-prompt)))
+    :custom (dumb-jump-selector 'ivy))
+#+end_src
+
+*** LSP
+**** LSP Mode
+
+#+begin_src emacs-lisp
+  (use-package lsp-mode
+    :defer t
+    :commands lsp
+    :custom
+    (lsp-auto-guess-root nil)
+    (lsp-prefer-flymake nil) ; Use flycheck instead of flymake
+    (lsp-file-watch-threshold 2000)
+    (read-process-output-max (* 1024 1024))
+    (lsp-eldoc-hook nil)
+    :bind (:map lsp-mode-map ("C-c C-f" . lsp-format-buffer))
+    :hook ((java-mode 
+            js-mode js2-mode typescript-mode web-mode) . lsp))
+
+
+#+end_src
+
+**** LSP UI
+#+begin_src emacs-lisp
+  (use-package lsp-ui
+    :after lsp-mode
+    :diminish
+    :commands lsp-ui-mode
+    :custom-face
+    (lsp-ui-doc-background ((t (:background nil))))
+    (lsp-ui-doc-header ((t (:inherit (font-lock-string-face italic)))))
+    :bind
+    (:map lsp-ui-mode-map
+          ([remap xref-find-definitions] . lsp-ui-peek-find-definitions)
+          ([remap xref-find-references] . lsp-ui-peek-find-references)
+          ("C-c u" . lsp-ui-imenu)
+          ("M-i" . lsp-ui-doc-focus-frame))
+    (:map lsp-mode-map
+          ("M-n" . forward-paragraph)
+          ("M-p" . backward-paragraph))
+    :custom
+    (lsp-ui-doc-header t)
+    (lsp-ui-doc-include-signature t)
+    (lsp-ui-doc-border (face-foreground 'default))
+    (lsp-ui-sideline-enable nil)
+    (lsp-ui-sideline-ignore-duplicate t)
+    (lsp-ui-sideline-show-code-actions nil)
+    :config
+    ;; Use lsp-ui-doc-webkit only in GUI
+    (if (display-graphic-p)
+        (setq lsp-ui-doc-use-webkit t))
+    ;; WORKAROUND Hide mode-line of the lsp-ui-imenu buffer
+    ;; https://github.com/emacs-lsp/lsp-ui/issues/243
+    (defadvice lsp-ui-imenu (after hide-lsp-ui-imenu-mode-line activate)
+      (setq mode-line-format nil)))
+
+#+end_src
+
+**** DAP
+Debug Adapter Protocol Mode, a client/library for the Debug Adapter Protocol.
+
+#+begin_src emacs-lisp
+  (use-package dap-mode
+    :diminish
+    :bind
+    (:map dap-mode-map
+          (("<f12>" . dap-debug)
+           ("<f8>" . dap-continue)
+           ("<f9>" . dap-next)
+           ("<M-f11>" . dap-step-in)
+           ("C-M-<f11>" . dap-step-out)
+           ("<f7>" . dap-breakpoint-toggle))))
+
+#+end_src
+
+*** Languages
+**** C/C++
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (add-hook 'c++-mode-hook 'yas-minor-mode)
+  (add-hook 'c-mode-hook 'yas-minor-mode)
+
+  (use-package flycheck-clang-analyzer
+    :config
+    (with-eval-after-load 'flycheck
+      (require 'flycheck-clang-analyzer)
+      (flycheck-clang-analyzer-setup)))
+
+  (with-eval-after-load 'company
+    (add-hook 'c++-mode-hook 'company-mode)
+    (add-hook 'c-mode-hook 'company-mode))
+
+  (use-package company-c-headers)
+
+  (use-package company-irony
+    :config
+    (setq company-backends '((company-c-headers
+                              company-dabbrev-code
+                              company-irony))))
+
+  (use-package irony
+    :config
+    (add-hook 'c++-mode-hook 'irony-mode)
+    (add-hook 'c-mode-hook 'irony-mode)
+    (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options))
+#+END_SRC
+
+**** Haskell
+
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package haskell-mode
+    :defer t
+    :init
+    (progn
+      (add-hook 'haskell-mode-hook #'haskell-indentation-mode)
+      (add-hook 'haskell-mode-hook #'turn-on-haskell-doc-mode)
+      (add-hook 'haskell-mode-hook #'subword-mode))
+    :config
+    (progn
+      (let ((my-cabal-path (expand-file-name "~/.cabal/bin")))
+        (setenv "PATH" (concat my-cabal-path ":" (getenv "PATH")))
+        (add-to-list 'exec-path my-cabal-path))
+      (custom-set-variables '(haskell-tags-on-save t))
+
+      (custom-set-variables
+       '(haskell-process-suggest-remove-import-lines t)
+       '(haskell-process-auto-import-loaded-modules t)
+       '(haskell-process-log t))
+      (define-key haskell-mode-map (kbd "C-c C-l")
+        'haskell-process-load-or-reload)
+      (define-key haskell-mode-map (kbd "C-c C-z")
+
+
+        (eval-after-load 'haskell-cabal
+          '(progn
+             (define-key haskell-cabal-mode-map (kbd "C-c C-z")
+               'haskell-interactive-switch)
+             (define-key haskell-cabal-mode-map (kbd "C-c C-k")
+               'haskell-interactive-mode-clear)
+             (define-key haskell-cabal-mode-map (kbd "C-c C-c")
+               'haskell-process-cabal-build)
+             (define-key haskell-cabal-mode-map (kbd "C-c c")
+               'haskell-process-cabal)))
+
+        (custom-set-variables '(haskell-process-type 'cabal-repl))
+
+        (autoload 'ghc-init "ghc" nil t)
+        (autoload 'ghc-debug "ghc" nil t)
+        (add-hook 'haskell-mode-hook (lambda () (ghc-init)))))
+#+END_SRC
+
+**** Common Lisp/Slime
+
+Slime stands for Superior Lisp Interaction Mode for Emacs. For a quick intro, [[http://gigamonkeys.com/book/lather-rinse-repeat-a-tour-of-the-repl.html][read this]].
+#+BEGIN_SRC emacs-lisp
+  (use-package slime
+    :config
+    (setq inferior-lisp-program "/usr/local/bin/sbcl"))
+
+  (slime-setup '(slime-fancy))
+#+END_SRC
+
+**** Rust
+
+#+begin_src emacs-lisp
+
+    (use-package rust-mode
+      :bind (:map rust-mode-map
+                  (("C-c C-t" . racer-describe)
+                   ([?\t] . company-indent-or-complete-common)
+                   ("C-c <tab>" . rust-format-buffer))))
+    (use-package flycheck-rust)
+
+    (use-package cargo
+      :hook (rust-mode . cargo-minor-mode)
+      :bind ("C-c C-c C-n" . cargo-process-new))
+
+    (use-package racer
+      :hook (rust-mode . racer-mode)
+      :config
+      (progn
+        (defun systemhalted/racer-mode-hook ()
+          (set (make-local-variable 'company-backends)
+               '((company-capf company-files)))
+          (setq company-minimum-prefix-length 1)
+          (setq indent-tabs-mode nil))
+        (add-hook 'racer-mode-hook 'systemhalted/racer-mode-hook)
+        (add-hook 'racer-mode-hook #'company-mode)
+        (add-hook 'racer-mode-hook #'eldoc-mode)))
+
+
+
+    (add-hook 'rust-mode-hook 'flycheck-mode)
+    (add-hook 'flycheck-mode-hook 'flycheck-rust-setup)
+
+    (add-hook 'before-save-hook (lambda ()
+                                  (when (eq major-mode 'rust-mode)
+                                    (rust-format-buffer))))
+
+
+
+
+#+end_src
+
+**** LSP Java
+
+#+begin_src emacs-lisp
+    (use-package lsp-java
+      :after lsp-mode
+      :if (executable-find "mvn")
+      :init
+      (use-package request :defer t)
+      :custom
+      (lsp-java-server-install-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/server/"))
+      (lsp-java-workspace-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/workspace/")))
+
+#+end_src
+
+**** Javascript Mode
+#+begin_src emacs-lisp :tangle no
+  (use-package js2-mode
+    :mode "\\.js\\'"
+    :interpreter "node")
+#+end_src
+
+**** Typescript
+
+#+begin_src emacs-lisp
+  (use-package tide
+    :mode "\\.ts\\'"
+    :ensure t
+    :after (typescript-mode company flycheck)
+    :hook ((typescript-mode . tide-setup)
+           (typescript-mode . tide-hl-identifier-mode)
+           (before-save . tide-format-before-save)))
+#+end_src
+
+**** Markdown mode
+
+#+begin_src emacs-lisp
+  (use-package markdown-mode
+    :commands (markdown-mode gfm-mode)
+    :mode (("README\\.md\\'" . gfm-mode)
+           ("\\.md\\'" . markdown-mode)
+           ("\\.markdown\\'" . markdown-mode))
+    :init (setq markdown-command "/usr/local/bin/multimarkdown"))
+#+end_src
+
+**** YAML mode
+
+#+begin_src emacs-lisp
+  (use-package yaml-mode
+    :mode (("\\.yml\\'" . yaml-mode)
+           ("Bogiefile" . yaml-mode))
+    :init
+    (add-hook 'yaml-mode-hook
+              '(lambda ()
+                 (define-key yaml-mode-map "\C-m" 'newline-and-indent))))
+
+#+end_src
+
+*** Editing Pleasure
+**** Electric
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq electric-pair-pairs '(
+                              (?\{ . ?\})
+                              (?\( . ?\))
+                              (?\[ . ?\])
+                              (?\" . ?\")
+                              ))
+
+  (electric-pair-mode t)
+#+END_SRC
+**** Show  Parens
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (show-paren-mode 1)
+#+END_SRC
+
+**** Font-lock
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (require 'font-lock)
+#+END_SRC
+
+**** Rainbow Delimiters
+#+begin_src emacs-lisp :tangle yes
+  (use-package rainbow-delimiters
+    :hook (prog-mode . rainbow-delimiters-mode))
+#+end_src
+    
+*** References
+**** Http
+#+begin_src emacs-lisp
+
+  (use-package know-your-http-well
+    :defer t)
+
+#+end_src
+
+** Runtime Performance
+
+Dial the GC threshold back down so that garbage collection happens more frequently but in less time.
+
+#+begin_src emacs-lisp
+
+;; Make gc pauses faster by decreasing the threshold.
+(setq gc-cons-threshold (* 2 1000 1000))
+
+#+end_src
