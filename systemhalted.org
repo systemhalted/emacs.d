@@ -225,26 +225,27 @@ Here we are asking Emacs to use a different file ~emacs-custom.el~ to store thes
 
 *** Package Configuration
 
-Emacs is an ecosystem of packages, which are important to make Emacs your home. Traditionally, Elpa was the repository of choice for Emacs but lately more modern repositories have started flourishing. If you type command =M-x list-packages= in the Emacs without loading this config file, you will see a list of packages from ELPA. Here we will define the repositories to let Emacs know where to go and fetch the packages from. 
+Emacs is an ecosystem of packages, which are important to make Emacs your home. Traditionally, Elpa was the repository of choice for Emacs but lately more modern repositories have started flourishing. If you type command =M-x list-packages= in the Emacs without loading this config file, you will see a list of packages from ELPA. Here we will define the repositories to let Emacs know where to go and fetch the packages from.
 
-#+BEGIN_SRC emacs-lisp
-  (require 'package)
-  (setq-default
-   load-prefer-newer t
-   package-enable-at-startup nil)
-  (add-to-list 'package-archives
-               '("gnu" . "https://elpa.gnu.org/packages/") t)
-  (add-to-list 'package-archives
-               '("marmalade" . "http://marmalade-repo.org/packages/") t)
-  (add-to-list 'package-archives
-               '("tromey" . "http://tromey.com/elpa/") t)
-  (add-to-list 'package-archives
-               '("org" . "http://orgmode.org/elpa/") t)
-  (add-to-list 'package-archives
-               '("melpa" . "http://melpa.org/packages/") t)
-  (add-to-list 'package-archives
-               '("melpa-stable" . "http://stable.melpa.org/packages/") t)
-  (package-initialize)
+
+  #+BEGIN_SRC emacs-lisp
+    (require 'package)
+    (setq-default
+     load-prefer-newer t
+     package-enable-at-startup nil)
+    (add-to-list 'package-archives
+                 '("gnu" . "https://elpa.gnu.org/packages/") t)
+    (add-to-list 'package-archives
+                 '("marmalade" . "http://marmalade-repo.org/packages/") t)
+    (add-to-list 'package-archives
+                 '("tromey" . "http://tromey.com/elpa/") t)
+    (add-to-list 'package-archives
+                 '("org" . "http://orgmode.org/elpa/") t)
+    (add-to-list 'package-archives
+                 '("melpa" . "http://melpa.org/packages/") t)
+    (add-to-list 'package-archives
+                 '("melpa-stable" . "http://stable.melpa.org/packages/") t)
+    (package-initialize)
 #+END_SRC
 
 Here, we asked Emacs to load a package called ~package~, which is the package manager that comes with Emacs out of the box. Also, we defined a list of package-archives. In the end we initialized and ask Emacs to refresh it’s package list.
@@ -754,27 +755,35 @@ In DocView mode, by default, C-p and C-n stop scrolling at the beginning and the
 Let's include a newer version of org-mode than the one that is built in. We're going to manually remove the org directories from the load path, to ensure the version we  want is prioritized instead.
 
 #+BEGIN_SRC emacs-lisp :tangle yes
-  (defun systemhalted/org-agenda-setup ()
-    (setq org-log-done 'time
-          org-log-done 'note
-          org-ellipsis " ▾"
-          org-agenda-files (list "~/org/inbox.org"
-                                 "~/org/gtd.org" 
-                                 "~/org/tickler.org"
-                                 "~/org/references.org")
-          org-capture-templates '(("t" "Todo [inbox]" entry
-                                   (file+headline "~/org/inbox.org" "Tasks")
-                                   "* TODO %i%?")
-                                  ("T" "Tickler" entry
-                                   (file+headline "~/org/tickler.org" "Tickler")
+      (defun systemhalted/org-agenda-setup ()
+        (setq org-log-done 'time
+              org-log-done 'note
+              org-ellipsis " ▾"
+                 org-agenda-skip-scheduled-if-deadline-is-shown 'repeated-after-deadline
+              org-agenda-files (list "~/org/inbox.org"
+                                     "~/org/gtd.org" 
+                                     "~/org/tickler.org"
+                                     "~/org/references.org")
+              org-capture-templates '(("t" "Todo [inbox]" entry
+                                       (file+headline "~/org/inbox.org" "Tasks")
+                                       "* TODO %i%?")
+                                      ("T" "Tickler" entry
+                                       (file+headline "~/org/tickler.org" "Tickler")
+                                       "* %i%? \n %U")
+                                       ("B" "Birthday" entry
+                                     (file+headline "~/org/tickler.org" "Birthdays")
+                                     "* %i%? \n %U")
+                                        ("A" "Anniversary" entry
+                                   (file+headline "~/org/tickler.org" "Anniversaries")
                                    "* %i%? \n %U"))
-          org-todo-keywords '((sequence "TODO(t)" "START(s)" "WAIT(w)" "|" "DONE(d)" "CANCEL(c)" "HOLD(h)" "DELEGATE(g)"))))
+
+              org-todo-keywords '((sequence "TODO(t)" "START(s)" "WAIT(w)" "|" "DONE(d)" "CANCEL(c)" "HOLD(h)" "DELEGATE(g)"))))
 
 
-  (setq org-refile-targets '((org-agenda-files :maxlevel . 4)
-                             ("~/org/someday.org" :maxlevel . 1)
-                             ("~/org/archive.org" :maxlevel . 4)
-                             ))
+      (setq org-refile-targets '((org-agenda-files :maxlevel . 4)
+                                 ("~/org/someday.org" :maxlevel . 1)
+                                 ("~/org/archive.org" :maxlevel . 4)
+                                 ))
 
 #+END_SRC 
 
@@ -914,7 +923,6 @@ Org-mode supports HTML export natively but syntax highlighting is added through 
 ** Communication :noexport:
 **** Slack 
 TBD
-
 
 ** Programming
 *** Version Control, Git, Github
@@ -1136,7 +1144,7 @@ Debug Adapter Protocol Mode, a client/library for the Debug Adapter Protocol.
 
 **** Haskell
 
-#+BEGIN_SRC emacs-lisp :tangle no
+#+BEGIN_SRC emacs-lisp :tangle yes
   (use-package haskell-mode
     :defer t
     :init
@@ -1175,7 +1183,7 @@ Debug Adapter Protocol Mode, a client/library for the Debug Adapter Protocol.
 
         (autoload 'ghc-init "ghc" nil t)
         (autoload 'ghc-debug "ghc" nil t)
-        (add-hook 'haskell-mode-hook (lambda () (ghc-init)))))
+        (add-hook 'haskell-mode-hook (lambda () (ghc-init))))))
 #+END_SRC
 
 **** Common Lisp/Slime
