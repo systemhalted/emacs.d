@@ -118,6 +118,7 @@
       - [[#common-lispslime][Common Lisp/Slime]]
       - [[#rust][Rust]]
       - [[#lsp-java][LSP Java]]
+      - [[#standard-ml-of-new-jersey-smlnj][Standard ML of New Jersey (SML/NJ)]]
       - [[#javascript-mode][Javascript Mode]]
       - [[#typescript][Typescript]]
       - [[#markdown-mode-1][Markdown mode]]
@@ -1251,6 +1252,12 @@ Slime stands for Superior Lisp Interaction Mode for Emacs. For a quick intro, [[
       (lsp-java-server-install-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/server/"))
       (lsp-java-workspace-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/workspace/")))
 
+#+end_src
+
+**** Standard ML of New Jersey (SML/NJ)
+
+#+begin_src emacs-lisp
+   (use-package sml-mode)
 #+end_src
 
 **** Javascript Mode
