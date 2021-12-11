@@ -117,12 +117,20 @@
       - [[#haskell][Haskell]]
       - [[#common-lispslime][Common Lisp/Slime]]
       - [[#rust][Rust]]
+        - [[#rust-mode][Rust Mode]]
+        - [[#flycheck-rust][Flycheck Rust]]
+        - [[#cargo][Cargo]]
+        - [[#racer][Racer]]
+        - [[#hooks][Hooks]]
       - [[#lsp-java][LSP Java]]
       - [[#standard-ml-of-new-jersey-smlnj][Standard ML of New Jersey (SML/NJ)]]
       - [[#javascript-mode][Javascript Mode]]
       - [[#typescript][Typescript]]
       - [[#markdown-mode-1][Markdown mode]]
       - [[#yaml-mode-1][YAML mode]]
+      - [[#python][Python]]
+        - [[#elpy][ELPY]]
+        - [[#jupyter-notebook][Jupyter Notebook]]
     - [[#editing-pleasure][Editing Pleasure]]
       - [[#electric][Electric]]
       - [[#show--parens][Show  Parens]]
@@ -230,23 +238,27 @@ Emacs is an ecosystem of packages, which are important to make Emacs your home. 
 
 
   #+BEGIN_SRC emacs-lisp
-    (require 'package)
-    (setq-default
-     load-prefer-newer t
-     package-enable-at-startup nil)
-    (add-to-list 'package-archives
-                 '("gnu" . "https://elpa.gnu.org/packages/") t)
-    (add-to-list 'package-archives
-                 '("marmalade" . "http://marmalade-repo.org/packages/") t)
-    (add-to-list 'package-archives
-                 '("tromey" . "http://tromey.com/elpa/") t)
-    (add-to-list 'package-archives
-                 '("org" . "http://orgmode.org/elpa/") t)
-    (add-to-list 'package-archives
-                 '("melpa" . "http://melpa.org/packages/") t)
-    (add-to-list 'package-archives
-                 '("melpa-stable" . "http://stable.melpa.org/packages/") t)
-    (package-initialize)
+      (require 'package)
+      (setq-default
+       load-prefer-newer t
+       package-enable-at-startup nil)
+      (add-to-list 'package-archives
+		   '("gnu" . "https://elpa.gnu.org/packages/") t)
+      (add-to-list 'package-archives
+		   '("marmalade" . "http://marmalade-repo.org/packages/") t)
+      (add-to-list 'package-archives
+		   '("tromey" . "http://tromey.com/elpa/") t)
+      (add-to-list 'package-archives
+		   '("org" . "http://orgmode.org/elpa/") t)
+      (add-to-list 'package-archives
+		   '("melpa" . "http://melpa.org/packages/") t)
+      (add-to-list 'package-archives
+		   '("melpa-stable" . "http://stable.melpa.org/packages/") t)
+      (package-initialize)
+      (unless package-archive-contents     ; Unless a package archive already exists,
+	(package-refresh-contents))        ; Refresh package contents so that Emacs knows which packages to load
+
+
 #+END_SRC
 
 Here, we asked Emacs to load a package called ~package~, which is the package manager that comes with Emacs out of the box. Also, we defined a list of package-archives. In the end we initialized and ask Emacs to refresh it’s package list.
@@ -256,11 +268,12 @@ Here, we asked Emacs to load a package called ~package~, which is the package ma
 We will be using a few packages that don’t ship with Emacs. We’ll be using ~use-package~ to define the configurations. We could have continued using the built-in package manager, but use-package makes the configuration file look neat and clean. In itself it is not a package manager but an efficient way to load packages. It is easy to use. In case you need a tutorial on few of its keywords, [[https://jwiegley.github.io/use-package/keywords/#preface-init-config][read this]].
 
 #+BEGIN_SRC emacs-lisp
-  (unless (package-installed-p 'use-package)
-    (package-refresh-contents)
-    (package-install 'use-package t))
-  (setq-default use-package-always-defer t
-                use-package-always-ensure t)
+   (unless (package-installed-p 'use-package)
+     (package-install 'use-package t))
+   (require 'use-package)
+   (setq-default use-package-always-defer t
+		 use-package-always-ensure t)
+
 #+END_SRC
 
 We are setting two properties, viz., =:defer= and =:ensure= to always be =true= when using ~use-package~. In other words we are setting this globally for all the packages. Setting =:defer= to =true= means, that we are expecting another package to do something to load a particular package by say, =:bind=. The =:ensure= settings tell the package manager to install the package automatically if it is not already present. 
@@ -1200,45 +1213,58 @@ Slime stands for Superior Lisp Interaction Mode for Emacs. For a quick intro, [[
 
 **** Rust
 
+***** Rust Mode
+
 #+begin_src emacs-lisp
 
-    (use-package rust-mode
-      :bind (:map rust-mode-map
-                  (("C-c C-t" . racer-describe)
-                   ([?\t] . company-indent-or-complete-common)
-                   ("C-c <tab>" . rust-format-buffer))))
-    (use-package flycheck-rust)
-
-    (use-package cargo
-      :hook (rust-mode . cargo-minor-mode)
-      :bind ("C-c C-c C-n" . cargo-process-new))
-
-    (use-package racer
-      :hook (rust-mode . racer-mode)
-      :config
-      (progn
-        (defun systemhalted/racer-mode-hook ()
-          (set (make-local-variable 'company-backends)
-               '((company-capf company-files)))
-          (setq company-minimum-prefix-length 1)
-          (setq indent-tabs-mode nil))
-        (add-hook 'racer-mode-hook 'systemhalted/racer-mode-hook)
-        (add-hook 'racer-mode-hook #'company-mode)
-        (add-hook 'racer-mode-hook #'eldoc-mode)))
-
-
-
-    (add-hook 'rust-mode-hook 'flycheck-mode)
-    (add-hook 'flycheck-mode-hook 'flycheck-rust-setup)
-
-    (add-hook 'before-save-hook (lambda ()
-                                  (when (eq major-mode 'rust-mode)
-                                    (rust-format-buffer))))
-
-
-
-
+  (use-package rust-mode
+    :bind (:map rust-mode-map
+                (("C-c C-t" . racer-describe)
+                 ([?\t] . company-indent-or-complete-common)
+                 ("C-c <tab>" . rust-format-buffer))))
 #+end_src
+***** Flycheck Rust
+
+#+begin_src emacs-lisp
+  (use-package flycheck-rust)
+#+end_src
+
+***** Cargo 
+
+#+begin_src emacs-lisp
+  (use-package cargo
+    :hook (rust-mode . cargo-minor-mode)
+    :bind ("C-c C-c C-n" . cargo-process-new))
+#+end_src
+
+***** Racer
+
+#+begin_src emacs-lisp
+  (use-package racer
+    :hook (rust-mode . racer-mode)
+    :config
+    (progn
+      (defun systemhalted/racer-mode-hook ()
+        (set (make-local-variable 'company-backends)
+             '((company-capf company-files)))
+        (setq company-minimum-prefix-length 1)
+        (setq indent-tabs-mode nil))
+      (add-hook 'racer-mode-hook 'systemhalted/racer-mode-hook)
+      (add-hook 'racer-mode-hook #'company-mode)
+      (add-hook 'racer-mode-hook #'eldoc-mode)))
+#+end_src
+
+
+***** Hooks
+#+begin_src emacs-lisp
+  (add-hook 'rust-mode-hook 'flycheck-mode)
+  (add-hook 'flycheck-mode-hook 'flycheck-rust-setup)
+
+  (add-hook 'before-save-hook (lambda ()
+                                (when (eq major-mode 'rust-mode)
+                                  (rust-format-buffer))))
+#+end_src
+
 
 **** LSP Java
 
@@ -1301,6 +1327,32 @@ Slime stands for Superior Lisp Interaction Mode for Emacs. For a quick intro, [[
               '(lambda ()
                  (define-key yaml-mode-map "\C-m" 'newline-and-indent))))
 
+#+end_src
+
+**** Python
+***** ELPY
+               #+begin_src emacs-lisp :tangle yes
+                 (use-package elpy
+                 :bind
+                   (:map elpy-mode-map
+                       ("C-M-n" . elpy-nav-forward-block)
+                       ("C-M-p" . elpy-nav-backward-block))
+                   :hook ((elpy-mode . flycheck-mode)
+                        (elpy-mode . (lambda ()
+                                       (set (make-local-variable 'company-backends)
+                                            '((elpy-company-backend :with company-yasnippet))))))
+                 :init
+                 (elpy-enable)
+                 :config
+                 (setq elpy-modules (delq 'elpy-module-flymake elpy-modules))
+                 ; fix for MacOS, see https://github.com/jorgenschaefer/elpy/issues/1550
+                 (setq elpy-shell-echo-output nil)
+                 (setq elpy-rpc-python-command "python3")
+                 (setq elpy-rpc-timeout 2))
+              #+end_src
+***** Jupyter Notebook
+#+begin_src emacs-lisp :tangle yes
+  (use-package jupyter)
 #+end_src
 
 *** Editing Pleasure
