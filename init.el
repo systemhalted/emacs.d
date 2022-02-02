@@ -3,7 +3,7 @@
 ;; Customizations
 (add-to-list 'load-path "~/.emacs.d/customizations")
 ;; -Customizations
-;;(load "setup-proxy.el")
+(load "setup-proxy.el")
 
 (add-to-list 'load-path "~/.emacs.d/vendor")
 (load "setup-vm.el")
@@ -11,7 +11,6 @@
 ;; OrgBabel
 (org-babel-load-file "~/.emacs.d/systemhalted.org")
 ;; -OrgBabel
-
+(put 'downcase-region 'disabled nil)
 (provide 'init);;;init.el ends here
 
-(put 'downcase-region 'disabled nil)
