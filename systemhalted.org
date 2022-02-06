@@ -1287,10 +1287,18 @@ Slime stands for Superior Lisp Interaction Mode for Emacs. For a quick intro, [[
 #+end_src
 
 **** Javascript Mode
-#+begin_src emacs-lisp :tangle no
-  (use-package js2-mode
-    :mode "\\.js\\'"
-    :interpreter "node")
+#+begin_src emacs-lisp :tangle yes
+(use-package rjsx-mode
+  :mode ("\\.js\\'"
+         "\\.jsx\\'")
+  :config
+  (setq js2-mode-show-parse-errors nil
+        js2-mode-show-strict-warnings nil
+        js2-basic-offset 2
+        js-indent-level 2)
+  (setq-local flycheck-disabled-checkers (cl-union flycheck-disabled-checkers
+                                                   '(javascript-jshint))) ; jshint doesn't work for JSX
+  (electric-pair-mode 1))            
 #+end_src
 
 **** Typescript

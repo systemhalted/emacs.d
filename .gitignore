@@ -26,7 +26,6 @@ cider
 .DS_Store
 *~
 semanticdb
-customizations/setup-proxy.el
 #init.el#
 eshell
 transient
