@@ -705,6 +705,15 @@ HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
 A short usage tutorial for both LSP and DAP lives at the end of this section,
 under =Using LSP and DAP=.
 
+Note on =lsp-completion-provider=: it is set to =:none=, not =:capf=, even
+though completion is very much wanted. =lsp-completion-mode= always registers
+=lsp-completion-at-point= on =completion-at-point-functions= regardless of
+this setting; the provider option only controls whether =lsp-mode= tries to
+auto-enable =company-mode=. Since this configuration uses Corfu (capf-based)
+and intentionally does not install company, =:capf= falls through to the
+company branch and emits *"Unable to autoconfigure company-mode."* once per
+LSP buffer. =:none= skips that branch while leaving the capf wired up.
+
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
 
@@ -733,7 +742,14 @@ under =Using LSP and DAP=.
         ("C-c C-f" . lsp-format-buffer))
   :custom
   (lsp-keymap-prefix "C-c l")
-  (lsp-completion-provider :capf)
+  ;; :none is the Corfu-correct value despite the name. lsp-completion-mode
+  ;; registers `lsp-completion-at-point' on `completion-at-point-functions'
+  ;; unconditionally; the provider setting only controls whether lsp-mode
+  ;; tries to auto-enable company-mode. With Corfu we don't have company,
+  ;; so :capf still takes the company branch and warns "Unable to
+  ;; autoconfigure company-mode." :none skips that branch entirely while
+  ;; leaving capf wired up — which is what Corfu consumes.
+  (lsp-completion-provider :none)
   (lsp-file-watch-threshold 2000)
   (lsp-headerline-breadcrumb-enable nil)
   (lsp-enable-snippet t))
