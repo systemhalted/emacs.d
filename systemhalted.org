@@ -714,8 +714,29 @@ and intentionally does not install company, =:capf= falls through to the
 company branch and emits *"Unable to autoconfigure company-mode."* once per
 LSP buffer. =:none= skips that branch while leaving the capf wired up.
 
+JDK locations are *not* hard-coded here. macOS GUI Emacs does not inherit the
+shell's environment, so things like =JAVA_HOME= and SDKMAN/Homebrew/asdf
+=PATH= entries are missing from the Emacs process unless we copy them in.
+=exec-path-from-shell= does exactly that: it spawns a login shell, reads the
+named environment variables, and pushes them into Emacs at startup. With
+=JAVA_HOME= imported this way, =lsp-java= / JDT LS picks up whichever JDK
+SDKMAN currently considers default — no =lsp-java-configuration-runtimes=
+needed, and switching JDKs is a matter of =sdk use java <version>= followed
+by an Emacs restart.
+
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
+
+(use-package exec-path-from-shell
+  :ensure t
+  :if (or (daemonp) (memq window-system '(mac ns x)))
+  :init
+  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "JAVA_HOME"))
+  ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
+  ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
+  (setq exec-path-from-shell-arguments '("-l" "-i"))
+  :config
+  (exec-path-from-shell-initialize))
 
 (use-package flycheck
   :ensure t
