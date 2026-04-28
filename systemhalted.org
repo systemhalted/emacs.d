@@ -291,6 +291,17 @@ If it is something you might consume or explore, capture backlog:
 C-c c b
 #+end_example
 
+This opens a sub-menu so the item is filed by kind instead of dumped into one
+bucket. Pick one:
+
+#+begin_example
+a -> Article
+b -> Book
+i -> Idea
+v -> Video
+c -> Course
+#+end_example
+
 Backlog entries are plain headings, not tasks. The file is organized as passive
 categories:
 
@@ -303,6 +314,12 @@ categories:
 
 * Ideas
 ** Event Gateway abstraction
+
+* Videos
+** Jepsen talk on consistency
+
+* Courses
+** MIT 6.824 Distributed Systems
 #+end_example
 
 Do not add =TODO=, =SCHEDULED=, or =DEADLINE= in backlog. If an item becomes real
@@ -461,7 +478,7 @@ opt-in prevents normal Org startup from carrying notebook server state.
   "Seed an empty backlog with passive categories."
   (when (and (systemhalted/org-buffer-file-p "backlog.org")
              (= (buffer-size) 0))
-    (insert "* Articles\n\n* Books\n\n* Ideas\n")))
+    (insert "* Articles\n\n* Books\n\n* Ideas\n\n* Videos\n\n* Courses\n")))
 
 (defun systemhalted/apply-org-file-constraints ()
   "Attach file-local guards for the minimal Org workflow."
@@ -506,12 +523,28 @@ opt-in prevents normal Org startup from carrying notebook server state.
         `(("t" "Todo" entry
            (file+headline ,(systemhalted/org-file "todo.org") "Tasks")
            "* TODO %?\n%U")
-          ("b" "Backlog" entry
+          ;; Backlog is split by kind so passive intake routes into the right
+          ;; bucket instead of defaulting everything to Ideas. C-c c b shows the
+          ;; sub-menu; pick a, b, i, v, or c.
+          ("b" "Backlog")
+          ("ba" "Article" entry
+           (file+headline ,(systemhalted/org-file "backlog.org") "Articles")
+           "* %?\n")
+          ("bb" "Book" entry
+           (file+headline ,(systemhalted/org-file "backlog.org") "Books")
+           "* %?\n")
+          ("bi" "Idea" entry
            (file+headline ,(systemhalted/org-file "backlog.org") "Ideas")
-           "* %?\n%U")
+           "* %?\n")
+          ("bv" "Video" entry
+           (file+headline ,(systemhalted/org-file "backlog.org") "Videos")
+           "* %?\n")
+          ("bc" "Course" entry
+           (file+headline ,(systemhalted/org-file "backlog.org") "Courses")
+           "* %?\n")
           ("n" "Note" entry
            (file+headline ,(systemhalted/org-file "notes.org") "Notes")
-           "* %?\n%U"))
+           "* %?\n"))
         ;; One high-signal view: current work first, then intentional todo items.
         org-agenda-custom-commands
         '(("n" "Now"
