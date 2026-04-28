@@ -773,7 +773,12 @@ by an Emacs restart.
   (lsp-completion-provider :none)
   (lsp-file-watch-threshold 2000)
   (lsp-headerline-breadcrumb-enable nil)
-  (lsp-enable-snippet t))
+  (lsp-enable-snippet t)
+  ;; Default is 10s. JDT LS's textDocument/codeAction on a freshly-imported
+  ;; project — especially one with parse errors — routinely needs longer
+  ;; than that, which surfaces as `C-c l a a' "timing out" (the request is
+  ;; cancelled by post-command-hook before the server replies).
+  (lsp-response-timeout 30))
 
 (use-package lsp-ui
   :ensure t
