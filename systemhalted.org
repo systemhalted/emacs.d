@@ -340,12 +340,31 @@ note:
 C-c c n
 #+end_example
 
-Notes are not tasks. Write them as durable headings:
+Capture behavior is source-aware:
+
+- If you launch =C-c c n= while point is on a heading in =backlog.org= (or any
+  other Org file with a heading), the note is filed under a top-level heading
+  in =notes.org= dedicated to that source. The source heading gains an =:ID:=
+  property the first time, and the notes heading gains a matching =:SOURCE_ID:=.
+  Every future note captured from the same item joins the same subtree, even if
+  the source is later renamed in =backlog.org=.
+- If you launch =C-c c n= from a non-Org buffer (or from inside =notes.org=
+  itself), the note falls back under the flat top-level =* Notes= heading.
+
+Notes are not tasks. The captured body also contains a backlink (=%a=) so
+=C-c C-o= on it jumps back to the originating backlog item.
 
 #+begin_example
-* Notes
+* Designing Data-Intensive Applications
+  :PROPERTIES:
+  :SOURCE_ID: 7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a
+  :END:
 ** Kafka delivery guarantees
    Exactly-once is a coordination property, not just a producer setting.
+   [[id:7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a][Designing Data-Intensive Applications]]
+
+* Notes
+** A standalone thought captured from a code buffer
 #+end_example
 
 Use agenda only for execution:
@@ -491,6 +510,44 @@ opt-in prevents normal Org startup from carrying notebook server state.
     (setq-local org-todo-keywords nil)
     (add-hook 'before-save-hook #'systemhalted/validate-notes nil t))))
 
+(defun systemhalted/org-notes-target ()
+  "Position point in notes.org for a `file+function' capture target.
+When capture is launched from an Org heading outside notes.org, ensure that
+heading has an :ID: and file the new note under a top-level heading in
+notes.org keyed by :SOURCE_ID:.  This groups every note about the same source
+under one subtree even after the source is renamed.  When capture is launched
+from anywhere else, fall back to the flat `* Notes' heading."
+  (let* ((src-buf (org-capture-get :original-buffer))
+         (src-info
+          (when (and src-buf (buffer-live-p src-buf))
+            (with-current-buffer src-buf
+              (when (and (derived-mode-p 'org-mode)
+                         buffer-file-name
+                         (not (systemhalted/org-buffer-file-p "notes.org"))
+                         (ignore-errors (org-back-to-heading t) t))
+                (cons (org-get-heading t t t t)
+                      (org-id-get-create)))))))
+    (goto-char (point-min))
+    (cond
+     (src-info
+      (let ((title (car src-info))
+            (id (cdr src-info)))
+        (if (re-search-forward
+             (format "^[ \t]*:SOURCE_ID:[ \t]+%s[ \t]*$" (regexp-quote id))
+             nil t)
+            (progn
+              (org-back-to-heading t)
+              (org-end-of-subtree t t)
+              (unless (bolp) (insert "\n")))
+          (goto-char (point-max))
+          (unless (bolp) (insert "\n"))
+          (insert "* " title "\n"
+                  "  :PROPERTIES:\n"
+                  "  :SOURCE_ID: " id "\n"
+                  "  :END:\n"))))
+     (t
+      (systemhalted/org-goto-or-create-heading "Notes")))))
+
 (use-package org
   :ensure nil
   :bind
@@ -512,6 +569,12 @@ opt-in prevents normal Org startup from carrying notebook server state.
    '((sequence "TODO" "IN-PROGRESS" "|" "DONE")))
   :config
   (require 'org-tempo)
+  ;; Stable IDs let notes link back to a backlog item that is later renamed or
+  ;; reordered. `create-if-interactive' means `org-store-link' and the %a capture
+  ;; escape lazily attach an :ID: property the first time an item is linked.
+  (require 'org-id)
+  (setq org-id-link-to-org-use-id 'create-if-interactive
+        org-id-locations-file (expand-file-name ".org-id-locations" user-emacs-directory))
   ;; Agenda is only for execution. Backlog and notes stay out of the task view.
   (setq org-agenda-files
         (list (systemhalted/org-file "todo.org"))
@@ -542,9 +605,13 @@ opt-in prevents normal Org startup from carrying notebook server state.
           ("bc" "Course" entry
            (file+headline ,(systemhalted/org-file "backlog.org") "Courses")
            "* %?\n")
+          ;; Notes are routed through a function so each backlog item linked-to
+          ;; gets its own subtree in notes.org, keyed by :SOURCE_ID:.  %a
+          ;; embeds an inline backlink for one-keystroke navigation back.
           ("n" "Note" entry
-           (file+headline ,(systemhalted/org-file "notes.org") "Notes")
-           "* %?\n"))
+           (file+function ,(systemhalted/org-file "notes.org")
+                          systemhalted/org-notes-target)
+           "* %?\n%a"))
         ;; One high-signal view: current work first, then intentional todo items.
         org-agenda-custom-commands
         '(("n" "Now"

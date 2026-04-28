@@ -8,6 +8,7 @@ systemhalted.el
 .cache/
 .dap-breakpoints
 .lsp-session-v1
+.org-id-locations
 .recentf
 .recentf~
 /.mc-lists.el
