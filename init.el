@@ -1,16 +1,10 @@
-;;; init.el --- -*- lexical-binding: t -*-,.
+;;; init.el --- Personal Emacs entry point -*- lexical-binding: t; -*-
+;;; Commentary:
 
-;; Customizations
-(add-to-list 'load-path "~/.emacs.d/customizations")
-;; -Customizations
-(load "setup-proxy.el")
-
-(add-to-list 'load-path "~/.emacs.d/vendor")
-(load "setup-vm.el")
-
+;;; Code:
 ;; OrgBabel
 (org-babel-load-file "~/.emacs.d/systemhalted.org")
 ;; -OrgBabel
 (put 'downcase-region 'disabled nil)
-(provide 'init);;;init.el ends here
-
+(provide 'init)
+;;; init.el ends here
