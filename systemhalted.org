@@ -690,7 +690,10 @@ Programming support is centered on LSP because Java, Python, and web projects
 all benefit from language-server features: diagnostics, jump-to-definition,
 rename, completion metadata, and formatting. =lsp-mode= owns the protocol,
 =lsp-ui= adds lightweight UI affordances, =lsp-java= configures JDT LS, and
-=lsp-pyright= provides Python analysis through Pyright.
+=lsp-pyright= provides Python analysis through Pyright. Debugging is layered on
+top through =dap-mode=, the Emacs front-end for the Debug Adapter Protocol;
+=dap-java= reuses the JDT LS that =lsp-java= already installs, so Java gets
+breakpoints and stepping with no extra server.
 
 This replaces older language-specific stacks such as Elpy/Tide/company-centered
 configuration. The goal is fewer parallel systems: Flycheck reports diagnostics,
@@ -698,6 +701,9 @@ Yasnippet provides snippets, Corfu handles completion UI, and LSP supplies
 language intelligence. Web editing is split by file type: =web-mode= for
 HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
 =css-mode= for CSS.
+
+A short usage tutorial for both LSP and DAP lives at the end of this section,
+under =Using LSP and DAP=.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
@@ -750,6 +756,20 @@ HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
   :custom
   (lsp-java-server-install-dir (expand-file-name "eclipse.jdt.ls/server/" user-emacs-directory))
   (lsp-java-workspace-dir (expand-file-name "eclipse.jdt.ls/workspace/" user-emacs-directory)))
+
+(use-package dap-mode
+  :ensure t
+  :after lsp-java
+  :hook
+  ((lsp-mode . dap-mode)
+   (lsp-mode . dap-ui-mode))
+  :bind
+  (:map lsp-mode-map
+        ("C-c l d" . dap-hydra))
+  :custom
+  (dap-auto-configure-features '(sessions locals controls tooltip))
+  :config
+  (require 'dap-java))
 
 (use-package lsp-pyright
   :ensure t
@@ -806,3 +826,102 @@ HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
 
 ;;; systemhalted.el ends here
 #+end_src
+
+** Using LSP and DAP
+
+This sub-section is documentation, not configuration; nothing here tangles
+into =systemhalted.el=. It captures the day-to-day workflow for the LSP and
+DAP stacks set up above so the keys and commands live next to the code that
+binds them.
+
+*** LSP — everyday code intelligence
+
+LSP attaches automatically to =java-mode=, =python-mode=, =js-mode=,
+=rjsx-mode=, =typescript-mode=, =web-mode=, and =css-mode= via the
+=lsp-deferred= hook on =lsp-mode=. The mode line shows =LSP[<server>]= once
+the server is up (=jdtls= for Java, =pyright= for Python, etc.). If it does
+not appear, the server probably failed to start — check =*lsp-log*=.
+
+The LSP prefix is =C-c l=. The most-used commands:
+
+| Keys        | Command                  | What it does                          |
+|-------------+--------------------------+---------------------------------------|
+| =C-c l g g= | =lsp-find-definition=    | jump to definition                    |
+| =C-c l g r= | =lsp-find-references=    | list references                       |
+| =C-c l g i= | =lsp-find-implementation=| jump to implementation                |
+| =C-c l r r= | =lsp-rename=             | rename symbol across the workspace    |
+| =C-c l a a= | =lsp-execute-code-action=| quick fixes, imports, refactors       |
+| =C-c l h h= | =lsp-describe-thing-at-point= | hover docs                       |
+| =C-c C-f=   | =lsp-format-buffer=      | format the buffer                     |
+
+Companion behaviors that are not LSP commands but feel like them:
+
+- =lsp-ui-doc= shows a hover tooltip with signature and docs.
+- Flycheck owns diagnostics: =C-c ! n= / =C-c ! p= step through errors,
+  =C-c ! l= lists them.
+- Corfu handles in-buffer completion: =TAB= accepts, =M-n= / =M-p= cycle.
+- Yasnippet expands snippets at point with =TAB=.
+
+When something is off, the two recovery commands worth memorizing:
+
+- =M-x lsp-workspace-restart= — restart the server for the current project.
+- =M-x lsp-describe-session= — see which servers are running and where.
+
+For Java specifically, JDT LS imports the project on first open. Wait for
+=LSP[jdtls]= in the mode line before invoking refactors or debugging — code
+actions and =dap-java-debug-*= require the project model to be ready.
+
+*** DAP — debugging Java
+
+DAP turns =lsp-mode= buffers into debugger front-ends. =C-c l d= opens
+=dap-hydra=, the transient menu that exposes every debug command without
+having to memorize bindings.
+
+A typical first session in a Java project:
+
+1. Open a source file. Wait for =LSP[jdtls]= in the mode line.
+2. Move point to the line you want to pause on and run
+   =M-x dap-breakpoint-toggle= (or =b t= from the hydra). A red dot appears
+   in the fringe.
+3. Launch one of:
+   - =M-x dap-java-debug= — debug a class with a =main= method.
+   - =M-x dap-java-debug-test-method= — debug the JUnit test at point.
+   - =M-x dap-java-debug-test-class= — debug every test in the current class.
+4. Execution stops at the breakpoint. The /Locals/, /Sessions/, and
+   /Controls/ side windows open automatically (from
+   =dap-auto-configure-features=).
+
+Stepping through, mostly via =dap-hydra=:
+
+| Hydra key | Command           | What it does           |
+|-----------+-------------------+------------------------|
+| =n=       | =dap-next=        | step over              |
+| =i=       | =dap-step-in=     | step into              |
+| =o=       | =dap-step-out=    | step out               |
+| =c=       | =dap-continue=    | continue               |
+| =r=       | =dap-restart-frame= | restart current frame |
+| =q=       | =dap-disconnect=  | end the session        |
+
+Other commands worth knowing:
+
+- =M-x dap-ui-inspect-thing-at-point= — inspect the value at point. Hovering
+  also shows a tooltip.
+- =M-x dap-breakpoint-condition= — turn the breakpoint on the current line
+  into a conditional one (Java boolean expression).
+- =M-x dap-breakpoint-log-message= — make a breakpoint log instead of
+  pause; useful for temporary tracing without recompiling.
+- =M-x dap-debug-last= — re-run the most recent launch configuration.
+
+Breakpoints persist per project in =.dap-breakpoints=, which is already
+gitignored.
+
+*** Common failure modes
+
+- /JDT LS does not start./ Check =*lsp-log*=. If
+  =eclipse.jdt.ls/server/= under =~/.emacs.d/= is empty, run
+  =M-x lsp-install-server RET jdtls=.
+- /=dap-java-debug-*= cannot find a main class or test./ The project has
+  not finished importing. Open a source file, wait for =LSP[jdtls]=, then
+  retry.
+- /Stale state after a dependency change./ =M-x lsp-workspace-restart=,
+  then re-launch the debug session.
