@@ -18,6 +18,8 @@ backups/
 bookmarks
 cider/
 cider-history
+nov-places
+smex-items
 eshell/
 history
 ido.last
