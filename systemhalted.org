@@ -70,8 +70,7 @@ reload/visit commands make this literate file easy to edit from inside Emacs.
 
 Nord is the preferred theme. Theme loading disables previously enabled themes
 first because repeated config reloads should not stack faces or leave stale theme
-state behind. =which-key= stays because it documents keymaps at the point of use
-without changing the editing model.
+state behind.
 
 #+begin_src emacs-lisp
 (setq inhibit-startup-screen t
@@ -154,12 +153,6 @@ without changing the editing model.
   :ensure t
   :config
   (systemhalted/load-theme))
-
-(use-package which-key
-  :ensure t
-  :config
-  (which-key-mode 1)
-  (setq which-key-idle-delay 0.4))
 #+end_src
 
 * Completion and Navigation
@@ -174,6 +167,8 @@ piece has one job:
 - =Consult= supplies jump-and-search commands that feed the minibuffer.
 - =Corfu= renders /in-buffer/ completion (the popup while typing code).
 - =Projectile= adds project-scoped commands (find file in project, etc.).
+- =ibuffer= manages buffers in bulk (mark, filter, kill) at =C-x C-b=.
+- =which-key= pops up keymap continuations after any prefix key.
 
 Two surfaces, two UIs: minibuffer completion (Vertico) is intentionally
 separate from at-point completion (Corfu). Both reuse the same matching style
@@ -372,6 +367,28 @@ tools, no overlap.
 (use-package ibuffer
   :ensure nil
   :bind ("C-x C-b" . ibuffer))
+#+end_src
+
+** which-key — keymap discovery
+
+[[https://github.com/justbur/emacs-which-key][which-key]] is a passive
+keymap aid. Press a prefix key — =C-c=, =C-x=, =C-h=, =C-x 4=, =C-c P= for
+Projectile — and after a short idle delay a popup lists every continuation
+bound under that prefix together with the command it runs. This makes the
+rest of this section's bindings self-documenting: typing =C-c= and waiting
+reveals =C-c b=, =C-c s=, =C-c P=, =C-c r=, =C-c c=, =C-c a=, etc., without
+having to remember or look them up.
+
+=which-key-idle-delay 0.4= is the wait before the popup appears. Short
+enough that it surfaces during a hesitation, long enough that it stays out
+of the way during fluent typing of a known chord.
+
+#+begin_src emacs-lisp
+(use-package which-key
+  :ensure t
+  :config
+  (which-key-mode 1)
+  (setq which-key-idle-delay 0.4))
 #+end_src
 
 * Org Mode
