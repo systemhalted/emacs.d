@@ -15,6 +15,7 @@ systemhalted.el
 archive-contents
 auto-save-list/
 backups/
+bookmarks
 cider/
 cider-history
 eshell/
@@ -33,6 +34,11 @@ transient/
 url/
 var/
 workspace/
+
+# Credentials and personal config — never commit
+.authinfo
+.authinfo.gpg
+.gnus
 
 # Old local state from removed packages
 elfeed/
