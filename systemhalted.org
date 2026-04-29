@@ -164,20 +164,36 @@ without changing the editing model.
 
 * Completion and Navigation
 
-The completion stack moved to small packages that cooperate through Emacs'
-standard completion system:
+The completion stack is built from small packages that cooperate through
+Emacs' standard completion system rather than a single large framework. Each
+piece has one job:
 
-- =Vertico= provides the minibuffer UI.
-- =Orderless= handles flexible matching without requiring exact prefixes.
-- =Marginalia= adds annotations so candidates carry useful context.
-- =Consult= supplies focused commands for line, buffer, and project search.
-- =Corfu= provides in-buffer completion through completion-at-point.
+- =Orderless= decides /what counts as a match/ for a typed query.
+- =Vertico= renders /minibuffer/ candidates (file pickers, =M-x=, prompts).
+- =Marginalia= annotates those minibuffer candidates with extra context.
+- =Consult= supplies jump-and-search commands that feed the minibuffer.
+- =Corfu= renders /in-buffer/ completion (the popup while typing code).
+- =Projectile= adds project-scoped commands (find file in project, etc.).
 
-This replaces the older habit of using a larger completion framework for
-everything. The new stack has clearer responsibilities: minibuffer completion is
-separate from code completion, and each package can be adjusted or removed
-independently. Projectile remains for project awareness, but its prefix is
-=C-c P= because =C-c p= now has a workflow meaning in Org: promote to todo.
+Two surfaces, two UIs: minibuffer completion (Vertico) is intentionally
+separate from at-point completion (Corfu). Both reuse the same matching style
+through Orderless. Any one piece can be swapped or removed without disturbing
+the others.
+
+** Orderless — flexible matching style
+
+[[https://github.com/oantolin/orderless][Orderless]] is a completion /style/, not a UI. It changes how the typed
+input is matched against candidates: whitespace-separated components match
+in any order, anywhere in the candidate. Typing =kafka proj= can match
+=src/projects/kafka-bridge.clj= even though those tokens are not adjacent
+and not in that order. Every minibuffer command (Vertico) and every at-point
+popup (Corfu) inherits this behavior because they both ask Emacs' generic
+completion machinery to filter, and that machinery consults
+=completion-styles=.
+
+The =basic= fallback is kept for cases like TRAMP paths where strict prefix
+matching is required, and =partial-completion= is added for file names so
+=/u/s/l= still expands to =/usr/share/local=.
 
 #+begin_src emacs-lisp
 (use-package orderless
@@ -186,27 +202,101 @@ independently. Projectile remains for project awareness, but its prefix is
   (completion-styles '(orderless basic))
   (completion-category-defaults nil)
   (completion-category-overrides '((file (styles basic partial-completion)))))
+#+end_src
 
+** Vertico — minibuffer UI
+
+[[https://github.com/minad/vertico][Vertico]] is what shows up whenever Emacs reads something interactively:
+=C-x C-f= (find file), =C-x b= (switch buffer), =M-x= (run command),
+=C-h f= (describe function), capture template selection, yes/no prompts,
+and so on. Candidates appear as a vertical list under the prompt; =C-n= /
+=C-p= move the selection, =RET= accepts, =TAB= completes the common prefix.
+=vertico-cycle t= lets the selection wrap around at the ends of the list.
+
+Vertico does not decide /which/ candidates match — Orderless does that.
+Vertico just displays the filtered set and tracks the current choice.
+
+#+begin_src emacs-lisp
 (use-package vertico
   :ensure t
   :custom
   (vertico-cycle t)
   :config
   (vertico-mode 1))
+#+end_src
 
+** Marginalia — annotations in the minibuffer
+
+[[https://github.com/minad/marginalia][Marginalia]] adds a right-aligned annotation column to Vertico's candidates.
+The annotation depends on the candidate type: commands show their docstring
+summary and key binding, files show mode/size/mtime, buffers show their
+major mode and file path, variables show their current value. This turns
+=M-x= and =describe-variable= into a passive reference — you can browse
+without committing to a selection.
+
+It loads after Vertico because the annotation hook is only useful once a
+minibuffer UI is active.
+
+#+begin_src emacs-lisp
 (use-package marginalia
   :ensure t
   :after vertico
   :config
   (marginalia-mode 1))
+#+end_src
 
+** Consult — focused search and navigation commands
+
+[[https://github.com/minad/consult][Consult]] is a collection of commands purpose-built to feed the
+Vertico-style minibuffer. They take something Emacs already knows about
+(buffer lines, open buffers, project files, recent files, bookmarks, the
+kill ring, marks, …) and expose it as a narrowable, previewable list.
+
+The daily bindings here:
+
+- =C-s= runs =consult-line= — incremental search across the current
+  buffer's lines, but each candidate is a full line so Orderless tokens
+  apply. Better than =isearch= when the goal is /jump to/ rather than
+  /step through/.
+- =C-x b= and =C-c b= run =consult-buffer= — a unified picker over open
+  buffers, recent files, and bookmarks. Type the narrowing key (=b=, =f=,
+  =m=, =p=, …) at the start to restrict the source.
+- =C-c s= runs =consult-ripgrep= — streams =rg= results into the
+  minibuffer with live preview. The de facto project search.
+
+Both =C-x b= and =C-c b= bind the same command on purpose: =C-x b= matches
+Emacs muscle memory, =C-c b= sits in the user prefix range alongside the
+other =C-c= shortcuts.
+
+#+begin_src emacs-lisp
 (use-package consult
   :ensure t
   :bind
   (("C-s" . consult-line)
    ("C-x b" . consult-buffer)
    ("C-c s" . consult-ripgrep)))
+#+end_src
 
+** Corfu — in-buffer completion popup
+
+[[https://github.com/minad/corfu][Corfu]] is the popup that appears /inside/ a buffer while typing code:
+function names, local variables, LSP suggestions, snippet keys, dabbrev
+matches. It is the in-buffer counterpart to Vertico, and it consumes
+candidates from =completion-at-point-functions= (capf) — the same hook
+that =lsp-mode=, =yasnippet=, and the Emacs builtins write to. Whatever
+the active mode contributes to capf, Corfu shows.
+
+With =corfu-auto t= the popup appears automatically after =corfu-auto-delay=
+(=0.1s=) once the typed prefix is at least =corfu-auto-prefix= characters
+(=2=). =TAB= accepts the selection, =M-n= / =M-p= cycle, =corfu-cycle t=
+wraps at the ends, =corfu-preselect 'prompt= keeps your typed prefix
+selected so =RET= inserts what you typed rather than the first suggestion.
+=global-corfu-mode= turns it on in every buffer.
+
+Corfu replaces =company= from the older config; see the Programming section
+for how =lsp-mode= is configured to feed Corfu through capf.
+
+#+begin_src emacs-lisp
 (use-package corfu
   :ensure t
   :custom
@@ -219,7 +309,38 @@ independently. Projectile remains for project awareness, but its prefix is
   (global-corfu-mode 1))
 
 (global-set-key (kbd "C-c b") #'consult-buffer)
+#+end_src
 
+** Projectile — project-scoped commands
+
+[[https://github.com/bbatsov/projectile][Projectile]] knows what a /project/ is — any directory containing a =.git=,
+a recognized build file, or a =.projectile= marker — and exposes commands
+that operate over that scope as a unit: switch project, find file in
+project, kill project buffers, run the project's tests, search/replace
+across the project, etc. The full keymap lives under =C-c P= (note the
+capital). The conventional default is =C-c p=, but that prefix is bound
+to =systemhalted/promote-to-todo= in the Org workflow, so Projectile was
+intentionally moved one shift up.
+
+=projectile-completion-system 'default= keeps Projectile's prompts going
+through Emacs' standard completion — meaning Vertico + Orderless +
+Marginalia all apply to project pickers too. =projectile-indexing-method
+'alien= delegates the file listing to external tools (=git ls-files=,
+=find=) instead of Emacs traversing directories itself; on large
+repositories this is the difference between instant and seconds-long
+listings. =projectile-project-search-path= seeds project discovery from
+=~/Workspace= so =C-c P p= shows known projects without first having to
+visit a file inside each one.
+
+Common entry points (all under =C-c P=):
+
+- =C-c P p= — switch project.
+- =C-c P f= — find file in current project.
+- =C-c P b= — switch buffer within current project.
+- =C-c P s g= — grep across the project (or use =C-c s= for ripgrep via
+  Consult, which is usually faster).
+
+#+begin_src emacs-lisp
 (use-package projectile
   :ensure t
   :bind-keymap
@@ -231,6 +352,26 @@ independently. Projectile remains for project awareness, but its prefix is
   (projectile-mode 1)
   (when (file-directory-p "~/Workspace")
     (setq projectile-project-search-path '("~/Workspace"))))
+#+end_src
+
+** ibuffer — buffer management
+
+=ibuffer= ships with Emacs, so this is a built-in (=:ensure nil=). It
+replaces the basic =list-buffers= menu on =C-x C-b= with a full
+major-mode listing where buffers can be marked, filtered (by mode, file
+name, size, project), killed or saved in bulk, and grouped. Think of it
+as =dired= for buffers.
+
+It complements rather than replaces =consult-buffer=. Daily switching
+stays on =C-x b= / =C-c b= via Consult — one prompt, one selection, go.
+ibuffer is for the periodic cleanup pass: "kill every Help and Magit
+buffer left over from yesterday." Two different jobs, two different
+tools, no overlap.
+
+#+begin_src emacs-lisp
+(use-package ibuffer
+  :ensure nil
+  :bind ("C-x C-b" . ibuffer))
 #+end_src
 
 * Org Mode
