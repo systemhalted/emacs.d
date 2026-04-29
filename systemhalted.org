@@ -164,6 +164,20 @@ state behind.
   (systemhalted/load-theme))
 #+end_src
 
+** Text Manipulation
+*** Move text
+Most of the time, I need to move a text up and down a bit. Here, I am mapping M-n and M-p to move text down and move text up respectively.
+
+#+begin_src emacs-lisp
+ (use-package move-text
+  :ensure t
+  :bind (("M-n" . move-text-down)
+         ("M-p" . move-text-up))
+  :config
+  (message "move-text loaded successfully"))
+#+end_src
+
+
 * Completion and Navigation
 
 The completion stack is built from small packages that cooperate through
