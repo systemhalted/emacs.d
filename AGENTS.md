@@ -27,11 +27,11 @@ The Org setup enforces a three-file model and will signal errors if violated:
 - `~/org/backlog.org` — passive intake. A `before-save-hook` rejects any TODO/IN-PROGRESS/DONE heading or `SCHEDULED:`/`DEADLINE:` line.
 - `~/org/notes.org` — durable thinking. `org-todo-keywords` is set to nil locally; a save hook rejects task headings.
 
-Promotion from backlog → todo is intentionally manual via `C-c p` (`systemhalted/promote-to-todo`). Do not widen `org-agenda-files`, add task keywords to `backlog.org`/`notes.org`, or add capture templates that route tasks anywhere except `todo.org`.
+Promotion from backlog → todo is intentionally manual via `C-c P` (`systemhalted/promote-to-todo`). Do not widen `org-agenda-files`, add task keywords to `backlog.org`/`notes.org`, or add capture templates that route tasks anywhere except `todo.org`.
 
 ## Keybinding Conventions
 
-`C-c p` is bound to `systemhalted/promote-to-todo` (Org workflow). Projectile's prefix was moved to `C-c P` (capital P). Keep this convention when binding anything new.
+`C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` lives at `C-c P` (capital P). Keep this convention — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
 
 Notable bindings: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` LSP prefix, `C-c j` enable Jupyter, `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status.
 
