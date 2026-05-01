@@ -117,7 +117,6 @@ state behind.
 (display-time-mode 1)
 (electric-pair-mode 1)
 (show-paren-mode 1)
-(savehist-mode 1)
 (save-place-mode 1)
 (recentf-mode 1)
 (global-auto-revert-mode 1)
@@ -178,7 +177,6 @@ Most of the time, I need to move a text up and down a bit. Here, I am mapping M-
   (message "move-text loaded successfully"))
 #+end_src
 
-
 * Completion and Navigation
 
 The completion stack is built from small packages that cooperate through
@@ -199,6 +197,24 @@ separate from at-point completion (Corfu). Both reuse the same matching style
 through Orderless. Any one piece can be swapped or removed without disturbing
 the others.
 
+** Savehist — persist minibuffer history
+
+[[https://www.gnu.org/software/emacs/manual/html_node/emacs/Minibuffer-History.html][Savehist]] persists minibuffer history across restarts. It is the substrate
+the rest of this section sits on: =vertico= sorts candidates by recency,
+=consult-yank-pop= reads =kill-ring=, and =corfu-history= persists itself
+through =savehist-additional-variables=. Bumping =history-length= to 200
+keeps enough recent entries to be useful without bloating =history=.
+
+#+begin_src emacs-lisp
+(use-package savehist
+  :ensure nil
+  :custom
+  (savehist-additional-variables '(search-ring regexp-search-ring kill-ring))
+  (history-length 200)
+  :init
+  (savehist-mode 1))
+#+end_src
+
 ** Orderless — flexible matching style
 
 [[https://github.com/oantolin/orderless][Orderless]] is a completion /style/, not a UI. It changes how the typed
@@ -214,13 +230,53 @@ The =basic= fallback is kept for cases like TRAMP paths where strict prefix
 matching is required, and =partial-completion= is added for file names so
 =/u/s/l= still expands to =/usr/share/local=.
 
+=orderless-matching-styles= adds =orderless-prefixes= to the default chain.
+That style splits a single token on =-= or =_= and matches each piece as a
+prefix anywhere in the candidate, so =M-x desc-fun= finds
+=describe-function=, =sql-co-bu= finds =sql-connect-buffer=, etc. — the
+behavior most people expect when typing a hyphenated symbol from memory.
+=orderless-literal= still wins when the token contains characters that
+would not parse as a regexp, and =orderless-regexp= remains as the final
+fallback.
+
 #+begin_src emacs-lisp
 (use-package orderless
   :ensure t
   :custom
   (completion-styles '(orderless basic))
+  (orderless-matching-styles '(orderless-literal
+                               orderless-prefixes
+                               orderless-regexp))
   (completion-category-defaults nil)
   (completion-category-overrides '((file (styles basic partial-completion)))))
+#+end_src
+
+** Built-in completion defaults
+
+A few built-in switches make the small-package stack feel polished without
+adding any new package. =completion-ignore-case= and its file/buffer
+counterparts let Orderless tokens match regardless of case: =M-x desc-fun=
+finds =describe-function=. =enable-recursive-minibuffers= allows nested
+prompts (=M-:= from inside =find-file=, or any Embark action that opens a
+new minibuffer); =minibuffer-depth-indicate-mode= pairs with it so the
+prompt shows a =[2]=, =[3]= prefix when nested — without that, =C-g= can
+look like it "exits completely" when really it just dropped one level.
+The =minibuffer-prompt-properties= addition plus =cursor-intangible-mode=
+prevents the cursor from accidentally landing inside the prompt text.
+
+#+begin_src emacs-lisp
+(use-package emacs
+  :ensure nil
+  :custom
+  (completion-ignore-case t)
+  (read-buffer-completion-ignore-case t)
+  (read-file-name-completion-ignore-case t)
+  (enable-recursive-minibuffers t)
+  (minibuffer-prompt-properties
+   '(read-only t cursor-intangible-mode t face minibuffer-prompt))
+  :hook (minibuffer-setup . cursor-intangible-mode)
+  :init
+  (minibuffer-depth-indicate-mode 1))
 #+end_src
 
 ** Vertico — minibuffer UI
@@ -244,6 +300,114 @@ Vertico just displays the filtered set and tracks the current choice.
   (vertico-mode 1))
 #+end_src
 
+** Vertico-Directory — Ivy-style file path navigation
+
+[[https://github.com/minad/vertico/blob/main/extensions/vertico-directory.el][Vertico-Directory]] is an extension that ships with Vertico. It rebinds three
+keys inside =vertico-map= so the minibuffer behaves like a file browser when
+the prompt holds a path:
+
+- =RET= on a directory candidate /descends into/ that directory and lists
+  its contents, instead of selecting it as a literal value. Pair with =M-RET=
+  (Vertico default) when you really do want the literal path.
+- =C-l= moves /up/ one directory regardless of where point sits in the
+  prompt — the Ivy =counsel-find-file= reflex.
+- =DEL= at the end of =~/.emacs.d/foo/= deletes the trailing path component
+  back to =~/.emacs.d/=, the way Ivy's =counsel-find-file= behaved. Outside
+  that context it is an ordinary backspace.
+- =M-DEL= deletes a word inside the path.
+
+The =rfn-eshadow-update-overlay= hook installs =vertico-directory-tidy= so
+shadowed prefixes collapse cleanly: typing =/etc= after =~/foo/= shows
+=/etc=, not =~/foo//etc=. The extension lives inside the installed Vertico
+package, so =:ensure nil :after vertico= is correct — no separate install.
+
+#+begin_src emacs-lisp
+(use-package vertico-directory
+  :ensure nil
+  :after vertico
+  :bind (:map vertico-map
+              ("RET"   . vertico-directory-enter)
+              ("C-l"   . vertico-directory-up)
+              ("DEL"   . vertico-directory-delete-char)
+              ("M-DEL" . vertico-directory-delete-word))
+  :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
+#+end_src
+
+** Hidden file toggle in file prompts
+
+Pressing =M-h= inside any file prompt flips visibility of dotfiles for the
+current and subsequent prompts. The implementation is small:
+=systemhalted-vertico-show-hidden-files= is a global flag (defaults to =t=
+to match plain =read-file-name= behavior — show everything). An =:around=
+advice on =read-file-name= installs a wrapping predicate that drops dotfiles
+when the flag is nil, /except/ when the basename being typed in the prompt
+already starts with =.= — that escape hatch lets you reach a hidden file
+without first hitting the toggle.
+
+The toggle command flips the flag and forces Vertico to re-filter the
+current candidate set in place by invalidating its input cache and calling
+=vertico--exhibit=, so you don't have to abort and re-prompt to see the
+effect. =M-h= is bound in =vertico-map=, not in
+=minibuffer-local-filename-completion-map=, because Vertico's setup hook
+replaces the local map outright (=use-local-map vertico-map=); the latter
+map is never consulted during a Vertico-driven file prompt. The command
+guards itself with =minibuffer-completing-file-name= so pressing =M-h= in a
+buffer / command / variable prompt is a clear no-op rather than a surprise.
+
+#+begin_src emacs-lisp
+(defvar systemhalted-vertico-show-hidden-files t
+  "When non-nil, file-name completion shows hidden files (dotfiles).
+Toggle with `systemhalted/vertico-toggle-hidden-files' inside a file prompt.")
+
+(defun systemhalted--file-name-hidden-p (file)
+  "Return non-nil if FILE's basename is a dotfile (excluding `.' and `..')."
+  (let ((name (file-name-nondirectory (directory-file-name file))))
+    (and (string-prefix-p "." name)
+         (not (member name '("." ".."))))))
+
+(defun systemhalted--read-file-name-with-hidden-filter
+    (orig prompt &optional dir default-filename mustmatch initial predicate)
+  "Around-advice for `read-file-name' that hides dotfiles per the toggle."
+  (let ((merged
+         (lambda (f)
+           (and (or systemhalted-vertico-show-hidden-files
+                    (string-prefix-p
+                     "."
+                     (file-name-nondirectory
+                      (or (and (minibufferp)
+                               (minibuffer-contents-no-properties))
+                          "")))
+                    (not (systemhalted--file-name-hidden-p f)))
+                (or (null predicate) (funcall predicate f))))))
+    (funcall orig prompt dir default-filename mustmatch initial merged)))
+
+(advice-add 'read-file-name :around
+            #'systemhalted--read-file-name-with-hidden-filter)
+
+(defun systemhalted/vertico-toggle-hidden-files ()
+  "Toggle visibility of hidden files in the current minibuffer file prompt.
+Flips `systemhalted-vertico-show-hidden-files' and refreshes Vertico in
+place when called from inside an active file prompt. No-op on non-file
+prompts so the keybinding does not surprise in `M-x' or buffer prompts."
+  (interactive)
+  (cond
+   ((and (minibufferp) (not minibuffer-completing-file-name))
+    (message "Hidden-file toggle only applies to file prompts"))
+   (t
+    (setq systemhalted-vertico-show-hidden-files
+          (not systemhalted-vertico-show-hidden-files))
+    (when (and (minibufferp) (boundp 'vertico--input))
+      (setq vertico--input t)
+      (when (fboundp 'vertico--exhibit)
+        (vertico--exhibit)))
+    (message "Hidden files: %s"
+             (if systemhalted-vertico-show-hidden-files "shown" "hidden")))))
+
+(with-eval-after-load 'vertico
+  (define-key vertico-map (kbd "M-h")
+              #'systemhalted/vertico-toggle-hidden-files))
+#+end_src
+
 ** Marginalia — annotations in the minibuffer
 
 [[https://github.com/minad/marginalia][Marginalia]] adds a right-aligned annotation column to Vertico's candidates.
@@ -254,13 +418,19 @@ major mode and file path, variables show their current value. This turns
 without committing to a selection.
 
 It loads after Vertico because the annotation hook is only useful once a
-minibuffer UI is active.
+minibuffer UI is active. The default =marginalia-annotators= registry
+already lists the rich annotator first for each candidate category, so
+full annotations show on the first prompt — no override required. =M-A=
+inside the minibuffer cycles each category to its lighter variants
+(=builtin=, =none=) when the default annotation feels too long.
 
 #+begin_src emacs-lisp
 (use-package marginalia
   :ensure t
   :after vertico
-  :config
+  :bind (:map minibuffer-local-map
+              ("M-A" . marginalia-cycle))
+  :init
   (marginalia-mode 1))
 #+end_src
 
@@ -282,18 +452,80 @@ The daily bindings here:
   =m=, =p=, …) at the start to restrict the source.
 - =C-c s= runs =consult-ripgrep= — streams =rg= results into the
   minibuffer with live preview. The de facto project search.
+- =M-y= runs =consult-yank-pop= — pick from the kill ring as a previewable
+  list instead of cycling blindly. Persisted across restarts because
+  =savehist-additional-variables= keeps =kill-ring=.
+- =M-g g= and =M-g M-g= remap to =consult-goto-line=, which previews the
+  destination line as you type the number.
 
 Both =C-x b= and =C-c b= bind the same command on purpose: =C-x b= matches
 Emacs muscle memory, =C-c b= sits in the user prefix range alongside the
 other =C-c= shortcuts.
 
+=consult-narrow-key= is set to =<= so a leading =<= followed by a narrowing
+character restricts the source (e.g. =< b= for buffers in =consult-buffer=).
+The =xref-show-*-function= hooks route =M-.= and =xref-find-references=
+through Consult, so =Vertico= replaces the legacy =*xref*= buffer when
+multiple candidates exist. Previews are debounced via =consult-customize=:
+buffers/recent files preview after 0.2s of stillness, ripgrep/grep/line
+previews wait 0.4s, which keeps large repos from churning the display while
+you scroll candidates.
+
 #+begin_src emacs-lisp
 (use-package consult
   :ensure t
   :bind
-  (("C-s" . consult-line)
+  (("C-s"   . consult-line)
    ("C-x b" . consult-buffer)
-   ("C-c s" . consult-ripgrep)))
+   ("C-c b" . consult-buffer)
+   ("C-c s" . consult-ripgrep)
+   ("M-y"   . consult-yank-pop)
+   ([remap goto-line] . consult-goto-line))
+  :custom
+  (consult-narrow-key "<")
+  (xref-show-xrefs-function       #'consult-xref)
+  (xref-show-definitions-function #'consult-xref)
+  :config
+  (consult-customize
+   consult-buffer consult-recent-file
+   :preview-key '(:debounce 0.2 any)
+   consult-ripgrep consult-grep consult-line
+   :preview-key '(:debounce 0.4 any)))
+#+end_src
+
+** Embark — act on minibuffer candidates
+
+[[https://github.com/oantolin/embark][Embark]] adds the verb that the rest of this stack was missing. With a
+candidate selected in any minibuffer prompt, =C-.= opens a context-sensitive
+action menu: open in another window, copy path, kill the buffer, browse the
+URL, run grep on the directory, describe the symbol, etc. =C-;= is
+=embark-dwim=, which runs the most likely action without showing the menu.
+=C-h B= lists every action bound for the current candidate type, which is
+how to discover what's available without leaving the prompt.
+
+Setting =prefix-help-command= to =embark-prefix-help-command= replaces the
+default =C-h-after-prefix= help with a Vertico-rendered prompt: pressing
+=C-h= after =C-x= shows every =C-x= binding as a searchable list.
+
+=embark-consult= bridges the two packages: =embark-export= from a
+=consult-line= or =consult-ripgrep= result produces an editable grep-mode
+buffer, and =consult-preview-at-point-mode= previews the underlying
+location as you move through an =embark-collect= buffer.
+
+#+begin_src emacs-lisp
+(use-package embark
+  :ensure t
+  :bind
+  (("C-."   . embark-act)
+   ("C-;"   . embark-dwim)
+   ("C-h B" . embark-bindings))
+  :custom
+  (prefix-help-command #'embark-prefix-help-command))
+
+(use-package embark-consult
+  :ensure t
+  :after (embark consult)
+  :hook (embark-collect-mode . consult-preview-at-point-mode))
 #+end_src
 
 ** Corfu — in-buffer completion popup
@@ -326,8 +558,43 @@ for how =lsp-mode= is configured to feed Corfu through capf.
   (corfu-preselect 'prompt)
   :config
   (global-corfu-mode 1))
+#+end_src
 
-(global-set-key (kbd "C-c b") #'consult-buffer)
+** Corfu-Popupinfo — docs panel beside the candidate list
+
+[[https://github.com/minad/corfu/blob/main/extensions/corfu-popupinfo.el][Corfu-Popupinfo]] is a Corfu extension that shows the docstring or signature
+of the currently selected candidate in a side popup. It answers "what does
+this function take, again?" without leaving the in-buffer popup. The cons
+=(0.4 . 0.2)= sets the delays: 0.4s before the doc panel first appears,
+0.2s when stepping between candidates. Like =vertico-directory=, this file
+ships inside the installed Corfu package, so =:ensure nil :after corfu= is
+the right recipe.
+
+#+begin_src emacs-lisp
+(use-package corfu-popupinfo
+  :ensure nil
+  :after corfu
+  :hook (corfu-mode . corfu-popupinfo-mode)
+  :custom
+  (corfu-popupinfo-delay '(0.4 . 0.2)))
+#+end_src
+
+** Corfu-History — frecency-sorted candidates
+
+[[https://github.com/minad/corfu/blob/main/extensions/corfu-history.el][Corfu-History]] is the in-buffer counterpart to Vertico's recency sort. It
+remembers which candidates were chosen recently and floats them to the top
+of the list. Adding =corfu-history= to =savehist-additional-variables=
+persists the table across restarts, so the history is useful from the very
+first completion of a session.
+
+#+begin_src emacs-lisp
+(use-package corfu-history
+  :ensure nil
+  :after (corfu savehist)
+  :init
+  (corfu-history-mode 1)
+  :config
+  (add-to-list 'savehist-additional-variables 'corfu-history))
 #+end_src
 
 ** Projectile — project-scoped commands
@@ -455,10 +722,10 @@ This creates a =TODO= under =* Tasks= in =todo.org=. Use this only for work that
 belongs in the agenda. Keep the wording executable, for example:
 
 #+begin_example
-* Tasks
-** TODO Review Kafka notes and decide next experiment
-** IN-PROGRESS Implement retry handling
-** DONE Update project README
+,* Tasks
+*,* TODO Review Kafka notes and decide next experiment
+*,* IN-PROGRESS Implement retry handling
+*,* DONE Update project README
 #+end_example
 
 Use =C-c C-t= on a task to move it through the only allowed lifecycle:
@@ -488,20 +755,20 @@ Backlog entries are plain headings, not tasks. The file is organized as passive
 categories:
 
 #+begin_example
-* Articles
-** Kafka exactly-once semantics
+,* Articles
+*,* Kafka exactly-once semantics
 
-* Books
-** Designing Data-Intensive Applications
+,* Books
+*,* Designing Data-Intensive Applications
 
-* Ideas
-** Event Gateway abstraction
+,* Ideas
+*,* Event Gateway abstraction
 
-* Videos
-** Jepsen talk on consistency
+,* Videos
+*,* Jepsen talk on consistency
 
-* Courses
-** MIT 6.824 Distributed Systems
+,* Courses
+*,* MIT 6.824 Distributed Systems
 #+end_example
 
 Do not add =TODO=, =SCHEDULED=, or =DEADLINE= in backlog. If an item becomes real
