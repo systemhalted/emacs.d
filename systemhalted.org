@@ -603,10 +603,10 @@ first completion of a session.
 a recognized build file, or a =.projectile= marker — and exposes commands
 that operate over that scope as a unit: switch project, find file in
 project, kill project buffers, run the project's tests, search/replace
-across the project, etc. The full keymap lives under =C-c P= (note the
-capital). The conventional default is =C-c p=, but that prefix is bound
-to =systemhalted/promote-to-todo= in the Org workflow, so Projectile was
-intentionally moved one shift up.
+across the project, etc. The full keymap lives under the conventional
+=C-c p= prefix. =systemhalted/promote-to-todo= takes =C-c P= (capital)
+because day-to-day project work happens far more often than backlog
+promotion, so the more frequent operation gets the easier chord.
 
 =projectile-completion-system 'default= keeps Projectile's prompts going
 through Emacs' standard completion — meaning Vertico + Orderless +
@@ -615,22 +615,22 @@ Marginalia all apply to project pickers too. =projectile-indexing-method
 =find=) instead of Emacs traversing directories itself; on large
 repositories this is the difference between instant and seconds-long
 listings. =projectile-project-search-path= seeds project discovery from
-=~/Workspace= so =C-c P p= shows known projects without first having to
+=~/Workspace= so =C-c p p= shows known projects without first having to
 visit a file inside each one.
 
-Common entry points (all under =C-c P=):
+Common entry points (all under =C-c p=):
 
-- =C-c P p= — switch project.
-- =C-c P f= — find file in current project.
-- =C-c P b= — switch buffer within current project.
-- =C-c P s g= — grep across the project (or use =C-c s= for ripgrep via
+- =C-c p p= — switch project.
+- =C-c p f= — find file in current project.
+- =C-c p b= — switch buffer within current project.
+- =C-c p s g= — grep across the project (or use =C-c s= for ripgrep via
   Consult, which is usually faster).
 
 #+begin_src emacs-lisp
 (use-package projectile
   :ensure t
   :bind-keymap
-  ("C-c P" . projectile-command-map)
+  ("C-c p" . projectile-command-map)
   :custom
   (projectile-completion-system 'default)
   (projectile-indexing-method 'alien)
@@ -663,11 +663,11 @@ tools, no overlap.
 ** which-key — keymap discovery
 
 [[https://github.com/justbur/emacs-which-key][which-key]] is a passive
-keymap aid. Press a prefix key — =C-c=, =C-x=, =C-h=, =C-x 4=, =C-c P= for
+keymap aid. Press a prefix key — =C-c=, =C-x=, =C-h=, =C-x 4=, =C-c p= for
 Projectile — and after a short idle delay a popup lists every continuation
 bound under that prefix together with the command it runs. This makes the
 rest of this section's bindings self-documenting: typing =C-c= and waiting
-reveals =C-c b=, =C-c s=, =C-c P=, =C-c r=, =C-c c=, =C-c a=, etc., without
+reveals =C-c b=, =C-c s=, =C-c p=, =C-c r=, =C-c c=, =C-c a=, etc., without
 having to remember or look them up.
 
 =which-key-idle-delay 0.4= is the wait before the popup appears. Short
@@ -695,7 +695,7 @@ NOTES   -> thinking and writing output
 That separation replaced the old GTD-heavy setup. Agenda views are useful only
 when they show actionable work, so =todo.org= is the only agenda file. Backlog
 and notes are protected from TODO drift with file-local validation. Promotion is
-manual through =C-c p= to force intent before something becomes work.
+manual through =C-c P= to force intent before something becomes work.
 
 Jupyter support is opt-in. Normal Org startup should stay light and quiet; when a
 notebook workflow is needed, =C-c j= enables the Jupyter Babel integration for
@@ -775,7 +775,7 @@ Do not add =TODO=, =SCHEDULED=, or =DEADLINE= in backlog. If an item becomes rea
 work, open the backlog item, place point inside its subtree, and promote it:
 
 #+begin_example
-C-c p
+C-c P
 #+end_example
 
 Promotion moves the subtree into =todo.org= under =* Tasks= and marks it =TODO=.
@@ -843,7 +843,7 @@ In practice:
 
 The guardrails are part of the workflow. If saving =backlog.org= errors because a
 TODO or scheduled item exists, either remove the task keyword/planning line or
-promote the item with =C-c p=. If saving =notes.org= errors because a TODO exists,
+promote the item with =C-c P=. If saving =notes.org= errors because a TODO exists,
 move that work to =todo.org= or rewrite it as a plain note.
 
 For code and notebooks, Org Babel loads Emacs Lisp, Java, Python, and shell by
@@ -883,7 +883,7 @@ opt-in prevents normal Org startup from carrying notebook server state.
 (defun systemhalted/validate-backlog ()
   "Ensure backlog remains passive and never contains task entries."
   (when (systemhalted/org-buffer-has-task-heading-p)
-    (error "Backlog must not contain TODO items; promote intentionally with C-c p"))
+    (error "Backlog must not contain TODO items; promote intentionally with C-c P"))
   (save-excursion
     (goto-char (point-min))
     (when (re-search-forward "^[ \t]*\\(?:SCHEDULED\\|DEADLINE\\):" nil t)
@@ -1072,7 +1072,7 @@ from anywhere else, fall back to the flat `* Notes' heading."
   (add-hook 'find-file-hook #'systemhalted/ensure-backlog-structure)
   (add-hook 'after-init-hook #'systemhalted/assert-agenda-scope)
   (systemhalted/assert-agenda-scope)
-  (global-set-key (kbd "C-c p") #'systemhalted/promote-to-todo)
+  (global-set-key (kbd "C-c P") #'systemhalted/promote-to-todo)
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((emacs-lisp . t)

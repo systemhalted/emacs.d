@@ -36,13 +36,13 @@ The Org setup enforces a three-file model and will *signal errors* if you violat
 - `~/org/backlog.org` — passive intake. A `before-save-hook` rejects any TODO/IN-PROGRESS/DONE heading or `SCHEDULED:`/`DEADLINE:` line.
 - `~/org/notes.org` — durable thinking. `org-todo-keywords` is set to nil locally; a save hook rejects task headings.
 
-Promotion from backlog → todo is intentionally manual via `C-c p` (`systemhalted/promote-to-todo`). An `org-after-todo-state-change-hook` reverts and errors on any TODO state change outside `todo.org`. `systemhalted/assert-agenda-scope` runs at startup and errors if anything else creeps into `org-agenda-files`.
+Promotion from backlog → todo is intentionally manual via `C-c P` (`systemhalted/promote-to-todo`). An `org-after-todo-state-change-hook` reverts and errors on any TODO state change outside `todo.org`. `systemhalted/assert-agenda-scope` runs at startup and errors if anything else creeps into `org-agenda-files`.
 
 If you add Org features, preserve these invariants. In particular: do not widen `org-agenda-files`, do not add task keywords to `backlog.org`/`notes.org`, and do not add capture templates that route tasks anywhere except `todo.org`'s `* Tasks` heading.
 
 ## Keybinding collision to remember
 
-`C-c p` is bound to `systemhalted/promote-to-todo` (Org workflow). Projectile's prefix was therefore moved to **`C-c P`** (capital P). Keep this convention if you bind anything new under `C-c p*`.
+`C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` was moved to **`C-c P`** (capital P) because day-to-day project work happens far more often than backlog promotion. Keep this convention if you bind anything new — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
 
 Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status.
 
