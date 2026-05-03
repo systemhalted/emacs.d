@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Personal Emacs configuration. The repo *is* `~/.emacs.d`, so changes here directly affect the user's running Emacs.
 
+This config runs on macOS, Fedora, and Ubuntu — all three are first-class targets. Guard platform-specific code with `(eq system-type 'darwin)` (or equivalent), and when documenting external-tool installation, cover MacPorts and Homebrew for macOS plus `dnf` (Fedora) and `apt` (Ubuntu/Debian). Don't introduce paths like `/Library/...` without a Linux counterpart.
+
 ## Source of truth: edit the Org file, not the `.el`
 
 `init.el` is a 3-line shim that calls `(org-babel-load-file "~/.emacs.d/systemhalted.org")`. All real configuration lives in `systemhalted.org` as literate Emacs Lisp blocks. `systemhalted.el` is **generated output** (gitignored) — never edit it by hand; edits will be overwritten on the next reload/tangle.

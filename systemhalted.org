@@ -119,7 +119,11 @@ state behind.
 (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
 
 (when (display-graphic-p)
-  (setq ns-use-native-fullscreen t))
+  ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
+  ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
+  ;; the portable bit that handles X11/PGTK.
+  (when (eq system-type 'darwin)
+    (setq ns-use-native-fullscreen t)))
 (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
 (add-to-list 'default-frame-alist '(fullscreen . fullboth))
 
@@ -1207,8 +1211,14 @@ Flycheck routes diagnostics through =shellcheck= when it is on =PATH=. Both
 are external binaries; install them once before opening a shell file:
 
 #+begin_src sh
+# bash-language-server (npm, all platforms):
 npm install -g bash-language-server
-brew install shellcheck
+
+# shellcheck:
+# macOS, MacPorts:   sudo port install shellcheck
+# macOS, Homebrew:   brew install shellcheck
+# Fedora:            sudo dnf install ShellCheck
+# Ubuntu / Debian:   sudo apt install shellcheck
 #+end_src
 
 A small hook, =systemhalted/sh-pick-shell=, sets =sh-shell= to =zsh= for
@@ -1229,22 +1239,25 @@ and intentionally does not install company, =:capf= falls through to the
 company branch and emits *"Unable to autoconfigure company-mode."* once per
 LSP buffer. =:none= skips that branch while leaving the capf wired up.
 
-JDK locations are *not* hard-coded here. macOS GUI Emacs does not inherit the
-shell's environment, so things like =JAVA_HOME= and SDKMAN/Homebrew/asdf
-=PATH= entries are missing from the Emacs process unless we copy them in.
-=exec-path-from-shell= does exactly that: it spawns a login shell, reads the
-named environment variables, and pushes them into Emacs at startup. With
+JDK locations are *not* hard-coded here. GUI Emacs --- on macOS, on Linux
+Wayland (PGTK), and on Linux X11 launched outside a terminal --- does not
+inherit the user's interactive shell environment, so things like =JAVA_HOME=
+and SDKMAN / Homebrew / MacPorts / asdf / distro-package =PATH= entries are
+missing from the Emacs process unless we copy them in. =exec-path-from-shell=
+does exactly that: it spawns a login + interactive shell, reads the named
+environment variables, and pushes them into Emacs at startup. With
 =JAVA_HOME= imported this way, =lsp-java= / JDT LS picks up whichever JDK
-SDKMAN currently considers default — no =lsp-java-configuration-runtimes=
-needed, and switching JDKs is a matter of =sdk use java <version>= followed
-by an Emacs restart.
+SDKMAN (or the distro's =update-alternatives=) currently considers default ---
+no =lsp-java-configuration-runtimes= needed, and switching JDKs is a matter
+of =sdk use java <version>= (or the distro equivalent) followed by an Emacs
+restart.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
 
 (use-package exec-path-from-shell
   :ensure t
-  :if (or (daemonp) (memq window-system '(mac ns x)))
+  :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
   :init
   (setq exec-path-from-shell-variables '("PATH" "MANPATH" "JAVA_HOME"))
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
