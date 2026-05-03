@@ -158,7 +158,8 @@ state behind.
 
 (defvar systemhalted/tutorials
   '(("Minimal Org workflow" . "Tutorial: Using the Minimal Org Workflow")
-    ("LSP and DAP"          . "Using LSP and DAP"))
+    ("LSP and DAP"          . "Using LSP and DAP")
+    ("LaTeX"                . "Tutorial: Using LaTeX"))
   "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
 
 (defun systemhalted/tutorial ()
@@ -1536,3 +1537,183 @@ gitignored.
   with =npm install -g bash-language-server= and =brew install shellcheck=,
   then reopen the buffer (or =M-x lsp-workspace-restart=). =*lsp-log*= will
   name =bash-ls= explicitly when the language server is the missing piece.
+
+* LaTeX
+
+LaTeX support is split across three layers: AUCTeX for editing and
+compilation, =preview-latex= (bundled with AUCTeX) for inline math and
+figure previews inside the source buffer, and =latexmk= as the build
+driver so reruns for cross-references and bibliographies happen
+automatically. RefTeX is enabled on top for label, reference, and
+citation completion --- it is built in and integrates with AUCTeX
+without extra configuration.
+
+The compiled PDF opens in the OS's default PDF viewer: =Preview.app= on
+macOS via =open -a=, and whatever is registered for =application/pdf= on
+Linux via =xdg-open= (Evince on GNOME, Okular on KDE, Atril on MATE, etc.).
+This avoids the =pdf-tools= build chain (poppler + epdfinfo compile) and
+is enough for the edit -> compile -> read -> save workflow. =pdf-tools=
+can be turned on later for in-Emacs viewing and bidirectional SyncTeX;
+the commented build dependencies below show the exact swap.
+
+Org's PDF export is rerouted through =latexmk= so =C-c C-e l p= in any
+=.org= file gets the same robust build behavior as =.tex= files
+(handles =\ref=, =\cite=, and TOC reruns automatically).
+
+External binaries: a TeX distribution providing =pdflatex= / =xelatex=
+/ =latexmk= is required. Install per platform; the full distribution
+(~4 GB) is preferred so missing-package chasing never blocks a build.
+
+#+begin_src sh
+# TeX Live (full distribution + latexmk):
+# macOS, MacPorts:   sudo port install texlive +full
+# macOS, Homebrew:   brew install --cask mactex-no-gui
+# Fedora:            sudo dnf install texlive-scheme-full latexmk
+# Ubuntu / Debian:   sudo apt install texlive-full latexmk
+
+# Optional later: pdf-tools for in-Emacs PDF viewing with SyncTeX.
+# macOS, MacPorts:   sudo port install poppler automake
+# macOS, Homebrew:   brew install poppler automake
+# Fedora:            sudo dnf install poppler-glib-devel automake
+# Ubuntu / Debian:   sudo apt install libpoppler-glib-dev automake
+# Then in Emacs: M-x pdf-tools-install
+#+end_src
+
+After installation, the TeX Live =bin= directory must be on the shell
+=PATH= that Emacs inherits (via =exec-path-from-shell=, configured in
+the Programming section). On macOS the installer adds =/Library/TeX/texbin=
+to =/etc/paths.d/=, which login shells pick up automatically. On Linux
+the distro package installs into =/usr/bin= so it is already on =PATH=
+without extra setup. If =M-x executable-find RET latexmk= returns =nil=
+after install, restart the shell (or Emacs) so the new =PATH= entry is
+visible.
+
+#+begin_src emacs-lisp
+(use-package tex
+  :ensure auctex
+  :hook
+  ((LaTeX-mode . turn-on-reftex)
+   (LaTeX-mode . LaTeX-math-mode)
+   (LaTeX-mode . TeX-source-correlate-mode))
+  :custom
+  (TeX-auto-save t)
+  (TeX-parse-self t)
+  (TeX-master nil)
+  (TeX-PDF-mode t)
+  (TeX-source-correlate-method 'synctex)
+  (TeX-source-correlate-start-server t)
+  ;; latexmk handles reruns for refs/bib/TOC; auctex-latexmk registers it.
+  (TeX-command-default "LatexMk")
+  :config
+  ;; Open the compiled PDF in the OS's default viewer.
+  ;; macOS:        `open -a Preview.app' launches Preview.
+  ;; Linux/BSD:    `xdg-open' dispatches to Evince/Okular/Atril/etc.
+  ;; To switch to in-Emacs viewing later, install pdf-tools (see shell
+  ;; block above) and change the selection to '((output-pdf "PDF Tools")).
+  (if (eq system-type 'darwin)
+      (setq TeX-view-program-selection '((output-pdf "Preview"))
+            TeX-view-program-list      '(("Preview" "open -a Preview.app %o")))
+    (setq TeX-view-program-selection '((output-pdf "xdg-open"))
+          TeX-view-program-list      '(("xdg-open" "xdg-open %o")))))
+
+(use-package auctex-latexmk
+  :ensure t
+  :after tex
+  :config
+  (auctex-latexmk-setup))
+
+(use-package reftex
+  :ensure nil
+  :custom
+  (reftex-plug-into-AUCTeX t)
+  (reftex-default-bibliography nil))
+
+;; Route Org's PDF export through latexmk so cross-refs and citations
+;; resolve in one C-c C-e l p, matching the AUCTeX build above.
+(with-eval-after-load 'ox-latex
+  (setq org-latex-pdf-process
+        '("latexmk -pdf -interaction=nonstopmode -output-directory=%o %f")))
+#+end_src
+
+** Tutorial: Using LaTeX
+
+This tutorial is reachable from anywhere with =C-h T= -> /LaTeX/. It
+covers the full edit -> preview -> PDF loop assuming TeX Live and the
+Emacs blocks above are already installed.
+
+Open or create a =.tex= file. The mode line should show =LaTeX/P= ---
+that is AUCTeX's =LaTeX-mode= with =TeX-PDF-mode= active. If it shows
+plain =LaTeX= without the =/P=, =TeX-PDF-mode= is off and builds will
+target DVI; check the =:custom= block above.
+
+Day-to-day workflow inside a =.tex= buffer:
+
+| Keys              | Command                     | What it does                                |
+|-------------------+-----------------------------+---------------------------------------------|
+| =C-c C-c=         | =TeX-command-master=        | run the default command (LatexMk -> PDF)    |
+| =C-c C-a=         | =TeX-command-run-all=       | build, then view, in one step               |
+| =C-c C-v=         | =TeX-view=                  | open the compiled PDF (forward SyncTeX)     |
+| =C-c C-p C-p=     | =preview-at-point=          | inline-render the math/figure at point      |
+| =C-c C-p C-d=     | =preview-document=          | inline-render every preview in the file     |
+| =C-c C-p C-c C-p= | =preview-clearout-at-point= | remove the inline preview at point          |
+| =C-c (=           | =reftex-label=              | insert a label                              |
+| =C-c )=           | =reftex-reference=          | pick from existing labels and insert =\ref= |
+| =C-c [=           | =reftex-citation=           | pick from .bib entries and insert =\cite=   |
+| =C-c ==           | =reftex-toc=                | navigable table of contents                 |
+
+*Producing a PDF.* Press =C-c C-c=. AUCTeX prompts with =LatexMk= as
+the default command --- accept with =RET=. The =*compilation*= window
+shows latexmk's output; on success, =C-c C-v= opens the resulting PDF
+in the OS's default viewer (Preview.app on macOS; whatever GNOME / KDE
+/ etc. has registered for =application/pdf= on Linux --- typically
+Evince, Okular, or Atril). The PDF lives next to the =.tex= source (or
+under the directory set in a =% !TeX output-directory= magic comment,
+if any). Save-a-copy keys differ per app: =Cmd-S= in Preview, =Ctrl-S=
+in Evince / Okular / Atril --- that is "downloading" the PDF.
+
+*Inline previews of math.* Place point inside any math environment
+(e.g., between the =$= delimiters of =$x^2 + y^2 = z^2$=) and press
+=C-c C-p C-p=. The TeX source is replaced visually by a rendered
+image; the source restores itself the moment you edit the underlying
+TeX. =C-c C-p C-d= renders every previewable region in the file ---
+useful for skimming a long document. =C-c C-p C-c C-p= removes the
+preview at point and goes back to source view explicitly.
+
+*Cross-references and citations via RefTeX.* =C-c (= inserts a label
+at the current location (RefTeX picks a sensible prefix like =eq:= or
+=sec:= based on context). =C-c )= opens a picker over every label in
+the document and inserts the matching =\ref{...}=. =C-c [= opens a
+picker over the entries in any =\bibliography= file and inserts
+=\cite{...}=. =C-c == shows a navigable table of contents in a side
+buffer.
+
+*Org -> PDF.* Inside any =.org= file, =C-c C-e l p= exports to PDF
+using the =org-latex-pdf-process= override above. Same latexmk
+invocation as =.tex= builds, so =\ref= / =\cite= / TOC reruns happen
+in one shot.
+
+*** Common failure modes
+
+- /=C-c C-c= says "Searching for program... No such file or directory,
+  latexmk"./ The TeX distribution is not on Emacs's =PATH=. Confirm
+  with =M-x executable-find RET latexmk=. If =nil=, install per the
+  shell block at the top of this section and restart Emacs so
+  =exec-path-from-shell= picks up the new =bin= directory
+  (=/Library/TeX/texbin= on macOS, =/usr/bin= on Linux when installed
+  via the distro package).
+- /Compile fails with "File `foo.sty' not found"./ Unlikely with
+  =texlive +full= / =texlive-scheme-full= / =texlive-full=, but if it
+  happens, install the specific collection the LaTeX error names
+  (=sudo port install texlive-<collection>= on macOS / MacPorts;
+  =sudo dnf install texlive-<collection>= on Fedora; =sudo apt install
+  texlive-<collection>= on Ubuntu).
+- /SyncTeX forward-search opens the PDF but does not jump to a
+  location./ Expected with system viewers --- Preview.app and most
+  Linux PDF readers (Evince, Atril, Okular under default settings)
+  don't honour SyncTeX forward-search reliably. Install =pdf-tools=
+  and switch =TeX-view-program-selection= to =PDF Tools= for true
+  bidirectional SyncTeX.
+- /Inline preview =C-c C-p C-p= renders nothing or a blank box./
+  =preview-latex= shells out to =dvipng= or =gs=. Both ship inside
+  =texlive +full=; if previews come up empty, check
+  =M-x executable-find RET gs=.
