@@ -34,10 +34,20 @@ fingerprints, such as trusted theme hashes, can remain in ignored Custom state;
 readable preferences, such as the =lsp-ui= face overrides below, belong in the
 literate config.
 
+Native compilation runs asynchronously for installed packages, and several
+upstream packages (=dap-mode=, =lsp-java=, =posframe=, =lsp-treemacs=) emit
+"function not known to be defined" warnings because cross-package references are
+visible to the byte compiler before their =declare-function= forms load. The
+warnings are benign — every symbol resolves at runtime via autoloads — so the
+Warnings buffer is silenced. Messages are still written to the
+=*Native-compile-Log*= buffer if a real failure ever needs investigation.
+
 #+begin_src emacs-lisp
 ;;; systemhalted.el --- Personal Emacs configuration -*- lexical-binding: t; -*-
 
 (setq gc-cons-threshold (* 50 1000 1000))
+
+(setq native-comp-async-report-warnings-errors 'silent)
 
 (add-hook 'emacs-startup-hook
           (lambda ()
@@ -1151,6 +1161,22 @@ language intelligence. Web editing is split by file type: =web-mode= for
 HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
 =css-mode= for CSS.
 
+Shell scripts and shell dotfiles use the built-in =sh-mode=. =lsp-mode= ships a
+client for =bash-language-server= (no extra wrapper package needed), and
+Flycheck routes diagnostics through =shellcheck= when it is on =PATH=. Both
+are external binaries; install them once before opening a shell file:
+
+#+begin_src sh
+npm install -g bash-language-server
+brew install shellcheck
+#+end_src
+
+A small hook, =systemhalted/sh-pick-shell=, sets =sh-shell= to =zsh= for
+recognised zsh dotfiles (=.zshrc=, =.zshenv=, =.zprofile=, =.zlogin=,
+=.zlogout=, =*.zsh=) and to =bash= for =.bashrc= / =.bash_*= so font-lock
+matches the dialect. Ambiguous names like =.profile= are left to =sh-mode='s
+own detection (shebang or =$SHELL=).
+
 A short usage tutorial for both LSP and DAP lives at the end of this section,
 under =Using LSP and DAP=.
 
@@ -1323,6 +1349,30 @@ by an Emacs restart.
   :custom
   (css-indent-offset 2))
 
+(use-package sh-script
+  :ensure nil
+  :mode (("\\.zshrc\\'"    . sh-mode)
+         ("\\.zshenv\\'"   . sh-mode)
+         ("\\.zprofile\\'" . sh-mode)
+         ("\\.zlogin\\'"   . sh-mode)
+         ("\\.zlogout\\'"  . sh-mode))
+  :hook
+  (sh-mode . systemhalted/sh-pick-shell)
+  (sh-mode . lsp-deferred)
+  :config
+  (defun systemhalted/sh-pick-shell ()
+    "Set `sh-shell' for known shell dotfiles; leave the default alone otherwise.
+Matching only well-known names avoids clobbering `sh-mode''s own detection
+\(shebang, `$SHELL') for ambiguous files like `.profile' or `foo.zshrc'."
+    (when buffer-file-name
+      (let ((name (file-name-nondirectory buffer-file-name)))
+        (cond
+         ((or (string-match-p "\\`\\.?z\\(?:shrc\\|shenv\\|profile\\|login\\|logout\\)\\'" name)
+              (string-match-p "\\.zsh\\'" name))
+          (sh-set-shell "zsh" nil nil))
+         ((string-match-p "\\`\\.?bash\\(?:rc\\|_profile\\|_login\\|_logout\\|_aliases\\)\\'" name)
+          (sh-set-shell "bash" nil nil)))))))
+
 (when (fboundp 'js-json-mode)
   (add-to-list 'auto-mode-alist '("\\.json\\'" . js-json-mode))
   (add-hook 'js-json-mode-hook #'lsp-deferred))
@@ -1340,16 +1390,26 @@ binds them.
 *** LSP — everyday code intelligence
 
 LSP attaches automatically to =java-mode=, =python-mode=, =js-mode=,
-=rjsx-mode=, =typescript-mode=, =web-mode=, and =css-mode= via the
+=rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=, and =sh-mode= via the
 =lsp-deferred= hook on =lsp-mode=. The mode line shows =LSP[<server>]= once
 the server is up (=jdtls= for Java, =pyright= for Python, etc.). If it does
 not appear, the server probably failed to start — check =*lsp-log*=.
+
+Jumping to a definition (the most common move, e.g. from a Java method call
+to its declaration): place point on the symbol and press =M-.=. =lsp-mode=
+installs an =xref= backend when it attaches, so the standard Emacs key routes
+through the language server automatically — for Java, that is JDT LS. =M-,=
+returns to where you jumped from; the stack unwinds cleanly across repeated
+jumps. =C-c l g g= is the =lsp-mode=-native equivalent and is useful when you
+want LSP semantics specifically.
 
 The LSP prefix is =C-c l=. The most-used commands:
 
 | Keys        | Command                  | What it does                          |
 |-------------+--------------------------+---------------------------------------|
-| =C-c l g g= | =lsp-find-definition=    | jump to definition                    |
+| =M-.=       | =xref-find-definitions=  | jump to definition (routed via LSP)   |
+| =M-,=       | =xref-go-back=           | return to the previous location       |
+| =C-c l g g= | =lsp-find-definition=    | jump to definition (LSP-native)       |
 | =C-c l g r= | =lsp-find-references=    | list references                       |
 | =C-c l g i= | =lsp-find-implementation=| jump to implementation                |
 | =C-c l r r= | =lsp-rename=             | rename symbol across the workspace    |
@@ -1428,3 +1488,8 @@ gitignored.
   retry.
 - /Stale state after a dependency change./ =M-x lsp-workspace-restart=,
   then re-launch the debug session.
+- /No completions or diagnostics in a shell buffer./ The two binaries the
+  shell stack relies on are not bundled with =lsp-mode= or Flycheck. Install
+  with =npm install -g bash-language-server= and =brew install shellcheck=,
+  then reopen the buffer (or =M-x lsp-workspace-restart=). =*lsp-log*= will
+  name =bash-ls= explicitly when the language server is the missing piece.
