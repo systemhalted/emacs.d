@@ -44,7 +44,7 @@ If you add Org features, preserve these invariants. In particular: do not widen 
 
 `C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` was moved to **`C-c P`** (capital P) because day-to-day project work happens far more often than backlog promotion. Keep this convention if you bind anything new — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
 
-Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status.
+Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`).
 
 ## Programming stack
 
@@ -62,6 +62,11 @@ Web editing is split by file type and is intentional: `web-mode` for `.html`/`.t
 ## Completion stack
 
 The minibuffer/in-buffer completion is the small-package stack: `vertico` + `orderless` + `marginalia` + `consult` + `corfu`. Do not replace any one of these with a larger framework (Ivy/Helm/company) — the configuration assumes the responsibilities are split.
+
+
+## Tutorials
+
+All tutorials are managed through indirect-org buffer. `systemhalted/tutorials` maintains the list of tutorials available within the org file and `systemhalted/tutorial` renders the tutorial as a separate buffer. The heading of the tutorial must match the one in the `systemhalted/tutorials`. The tutorial is mapped to `C-h T`.
 
 ## What not to commit
 
