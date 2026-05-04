@@ -693,6 +693,36 @@ Common entry points (all under =C-c p=):
     (setq projectile-project-search-path '("~/Workspace"))))
 #+end_src
 
+** compile — multiple compilation buffers
+
+Projectile's run commands (=C-c P u=) use Emacs' built-in =compile=
+infrastructure. By default, all compilation commands share a single
+=*compilation*= buffer, which means running a long-lived process like
+=mvn spring-boot:run= blocks any subsequent =mvn test= invocation.
+
+Setting =compilation-buffer-name-function= to generate unique buffer names
+allows multiple compilation processes to run in parallel. Each buffer is
+named after the command that spawned it, making it easy to identify which
+process is which when switching buffers.
+
+#+begin_src emacs-lisp
+(use-package compile
+  :ensure nil
+  :custom
+  (compilation-scroll-output t)
+  :config
+  (defun systemhalted/compilation-buffer-name (mode)
+    "Generate a unique compilation buffer name based on the command.
+MODE is the major mode name passed by `compilation-start'."
+    (let* ((cmd (or compilation-arguments "compile"))
+           ;; Truncate long commands for readability
+           (short-cmd (if (> (length cmd) 40)
+                          (concat (substring cmd 0 37) "...")
+                        cmd)))
+      (generate-new-buffer-name (format "*%s: %s*" mode short-cmd))))
+  (setq compilation-buffer-name-function #'systemhalted/compilation-buffer-name))
+#+end_src
+
 ** ibuffer — buffer management
 
 =ibuffer= ships with Emacs, so this is a built-in (=:ensure nil=). It
