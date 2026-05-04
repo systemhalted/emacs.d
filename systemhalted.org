@@ -561,7 +561,7 @@ Setting =prefix-help-command= to =embark-prefix-help-command= replaces the
 default =C-h-after-prefix= help with a Vertico-rendered prompt: pressing
 =C-h= after =C-x= shows every =C-x= binding as a searchable list.
 
-=embark-consult= bridges the two packages: =embark-export= from a
+The integration with Consult is built into Embark: =embark-export= from a
 =consult-line= or =consult-ripgrep= result produces an editable grep-mode
 buffer, and =consult-preview-at-point-mode= previews the underlying
 location as you move through an =embark-collect= buffer.
@@ -574,12 +574,11 @@ location as you move through an =embark-collect= buffer.
    ("C-;"   . embark-dwim)
    ("C-h B" . embark-bindings))
   :custom
-  (prefix-help-command #'embark-prefix-help-command))
-
-(use-package embark-consult
-  :ensure t
-  :after (embark consult)
-  :hook (embark-collect-mode . consult-preview-at-point-mode))
+  (prefix-help-command #'embark-prefix-help-command)
+  :config
+  ;; Consult integration is built into embark; just enable the preview hook.
+  (with-eval-after-load 'consult
+    (add-hook 'embark-collect-mode-hook #'consult-preview-at-point-mode)))
 #+end_src
 
 ** Corfu — in-buffer completion popup
