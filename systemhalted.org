@@ -1462,6 +1462,21 @@ Matching only well-known names avoids clobbering `sh-mode''s own detection
 ;;; systemhalted.el ends here
 #+end_src
 
+**** Associate Java and related files with java-mode
+=lsp-java= caches JDK source content under filenames like
+=BlockingQueue.java(<java.util.concurrent(BlockingQueue.class)=.
+The literal trailing ')' keeps =`\\.java\\`= from matching, so teach
+=auto-mode-alist= about the parenthesized form explicitly.
+
+#+begin_src emacs-lisp
+  ;; lsp-java caches JDK source content under filenames like
+ ;;   BlockingQueue.java(<java.util.concurrent(BlockingQueue.class)
+ ;; The literal trailing `)' keeps `\\.java\\'' from matching, so
+ ;; teach `auto-mode-alist' about the parenthesized form explicitly.
+ (add-to-list 'auto-mode-alist '("\\.java([^)]*)\\'" . java-mode))
+
+#+end_src
+
 ** Using LSP and DAP
 
 This sub-section is documentation, not configuration; nothing here tangles
