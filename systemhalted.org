@@ -591,11 +591,14 @@ that =lsp-mode=, =yasnippet=, and the Emacs builtins write to. Whatever
 the active mode contributes to capf, Corfu shows.
 
 With =corfu-auto t= the popup appears automatically after =corfu-auto-delay=
-(=0.1s=) once the typed prefix is at least =corfu-auto-prefix= characters
-(=2=). =TAB= accepts the selection, =M-n= / =M-p= cycle, =corfu-cycle t=
-wraps at the ends, =corfu-preselect 'prompt= keeps your typed prefix
-selected so =RET= inserts what you typed rather than the first suggestion.
-=global-corfu-mode= turns it on in every buffer.
+(=0.35s=) once the typed prefix is at least =corfu-auto-prefix= characters
+(=3=). The slightly slower trigger is intentional: Java LSP completion can
+allocate a lot of Emacs-side JSON and candidate metadata, so completion waits
+until the prefix is specific enough to be useful. =TAB= accepts the selection,
+=M-n= / =M-p= cycle, =corfu-cycle t= wraps at the ends, and
+=corfu-preselect 'prompt= keeps your typed prefix selected so =RET= inserts
+what you typed rather than the first suggestion. =global-corfu-mode= turns it
+on in every buffer.
 
 Corfu replaces =company= from the older config; see the Programming section
 for how =lsp-mode= is configured to feed Corfu through capf.
@@ -605,8 +608,8 @@ for how =lsp-mode= is configured to feed Corfu through capf.
   :ensure t
   :custom
   (corfu-auto t)
-  (corfu-auto-delay 0.1)
-  (corfu-auto-prefix 2)
+  (corfu-auto-delay 0.35)
+  (corfu-auto-prefix 3)
   (corfu-cycle t)
   (corfu-preselect 'prompt)
   :config
@@ -616,18 +619,17 @@ for how =lsp-mode= is configured to feed Corfu through capf.
 ** Corfu-Popupinfo — docs panel beside the candidate list
 
 [[https://github.com/minad/corfu/blob/main/extensions/corfu-popupinfo.el][Corfu-Popupinfo]] is a Corfu extension that shows the docstring or signature
-of the currently selected candidate in a side popup. It answers "what does
-this function take, again?" without leaving the in-buffer popup. The cons
-=(0.4 . 0.2)= sets the delays: 0.4s before the doc panel first appears,
-0.2s when stepping between candidates. Like =vertico-directory=, this file
-ships inside the installed Corfu package, so =:ensure nil :after corfu= is
-the right recipe.
+of the currently selected candidate in a side popup. In LSP buffers that extra
+documentation can trigger language-server requests while typing, so the mode is
+available but not enabled automatically. Toggle it for the current buffer with
+=C-c l i= when you want completion-side docs. Like =vertico-directory=, this
+file ships inside the installed Corfu package, so =:ensure nil :after corfu=
+is the right recipe.
 
 #+begin_src emacs-lisp
 (use-package corfu-popupinfo
   :ensure nil
   :after corfu
-  :hook (corfu-mode . corfu-popupinfo-mode)
   :custom
   (corfu-popupinfo-delay '(0.4 . 0.2)))
 #+end_src
@@ -1234,6 +1236,14 @@ language intelligence. Web editing is split by file type: =web-mode= for
 HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
 =css-mode= for CSS.
 
+The LSP defaults below favor bounded memory over automatic UI richness. A Java
+editing session previously pushed the Emacs process above 50 GB of application
+memory; JDT LS itself is capped by =lsp-java-vmargs=, so the risk is Emacs
+retaining protocol messages, file watches, hover payloads, and completion
+metadata. Logs and IO history are capped, recursive file watchers are disabled,
+and workspaces shut down when their last buffer closes. Docs, code actions,
+project refreshes, and debugger UI remain available from explicit keybindings.
+
 Shell scripts and shell dotfiles use the built-in =sh-mode=. =lsp-mode= ships a
 client for =bash-language-server= (no extra wrapper package needed), and
 Flycheck routes diagnostics through =shellcheck= when it is on =PATH=. Both
@@ -1317,7 +1327,13 @@ restart.
   ((java-mode js-mode rjsx-mode typescript-mode web-mode css-mode) . lsp-deferred)
   :bind
   (:map lsp-mode-map
-        ("C-c C-f" . lsp-format-buffer))
+        ("C-c C-f" . lsp-format-buffer)
+        ("C-c l h h" . lsp-describe-thing-at-point)
+        ("C-c l i" . corfu-popupinfo-toggle)
+        ("C-c l H" . lsp-toggle-symbol-highlight)
+        ("C-c l F" . lsp-toggle-on-type-formatting)
+        ("C-c l R" . lsp-workspace-restart)
+        ("C-c l j u" . lsp-java-update-project-configuration))
   :custom
   (lsp-keymap-prefix "C-c l")
   ;; :none is the Corfu-correct value despite the name. lsp-completion-mode
@@ -1328,9 +1344,20 @@ restart.
   ;; autoconfigure company-mode." :none skips that branch entirely while
   ;; leaving capf wired up — which is what Corfu consumes.
   (lsp-completion-provider :none)
+  (lsp-completion-show-detail nil)
+  (lsp-completion-show-kind nil)
+  (lsp-enable-file-watchers nil)
+  (lsp-enable-symbol-highlighting nil)
+  (lsp-enable-on-type-formatting nil)
+  (lsp-idle-delay 1.0)
+  (lsp-io-messages-max 200)
+  (lsp-keep-workspace-alive nil)
+  (lsp-log-io nil)
+  (lsp-log-max 2000)
   (lsp-file-watch-threshold 2000)
   (lsp-headerline-breadcrumb-enable nil)
   (lsp-enable-snippet t)
+  (lsp-modeline-code-actions-enable nil)
   (lsp-response-timeout 30))
 
 (use-package lsp-ui
@@ -1340,8 +1367,9 @@ restart.
   :hook
   (lsp-mode . lsp-ui-mode)
   :custom
-  (lsp-ui-doc-enable t)
+  (lsp-ui-doc-enable nil)
   (lsp-ui-doc-include-signature t)
+  (lsp-ui-doc-show-with-mouse nil)
   (lsp-ui-sideline-enable nil)
   (lsp-ui-sideline-show-code-actions nil)
   :custom-face
@@ -1352,6 +1380,8 @@ restart.
   :ensure t
   :after lsp-mode
   :custom
+  (lsp-java-completion-guess-method-arguments nil)
+  (lsp-java-configuration-update-build-configuration "interactive")
   (lsp-java-server-install-dir (expand-file-name "eclipse.jdt.ls/server/" user-emacs-directory))
   (lsp-java-workspace-dir (expand-file-name "eclipse.jdt.ls/workspace/" user-emacs-directory)))
 
@@ -1366,9 +1396,6 @@ restart.
 (use-package dap-mode
   :ensure t
   :after lsp-java
-  :hook
-  ((lsp-mode . dap-mode)
-   (lsp-mode . dap-ui-mode))
   :bind
   (:map lsp-mode-map
         ("C-c l d" . dap-hydra))
@@ -1512,6 +1539,11 @@ The LSP prefix is =C-c l=. The most-used commands:
 | =C-c l r r= | =lsp-rename=             | rename symbol across the workspace    |
 | =C-c l a a= | =lsp-execute-code-action=| quick fixes, imports, refactors       |
 | =C-c l h h= | =lsp-describe-thing-at-point= | hover docs                       |
+| =C-c l i=   | =corfu-popupinfo-toggle= | toggle completion docs for buffer     |
+| =C-c l H=   | =lsp-toggle-symbol-highlight= | toggle symbol highlighting       |
+| =C-c l F=   | =lsp-toggle-on-type-formatting= | toggle on-type formatting       |
+| =C-c l R=   | =lsp-workspace-restart= | restart current LSP workspace          |
+| =C-c l j u= | =lsp-java-update-project-configuration= | refresh Java project model |
 | =C-c C-f=   | =lsp-format-buffer=      | format the buffer                     |
 
 =which-key= is enabled, so pressing =C-c l= and pausing pops up the full
@@ -1520,24 +1552,37 @@ it.
 
 Companion behaviors that are not LSP commands but feel like them:
 
-- =lsp-ui-doc= shows a hover tooltip with signature and docs.
+- Symbol documentation is manual, not hover-driven: =C-c l h h= asks the
+  language server about the symbol at point.
+- Completion documentation is manual: =C-c l i= toggles the Corfu docs panel
+  for the current buffer.
 - Flycheck owns diagnostics: =C-c ! n= / =C-c ! p= step through errors,
   =C-c ! l= lists them.
-- Corfu handles in-buffer completion: =TAB= accepts, =M-n= / =M-p= cycle.
+- Corfu handles in-buffer completion after three typed characters and a short
+  pause: =TAB= accepts, =M-n= / =M-p= cycle.
 - Yasnippet expands snippets at point with =TAB=.
+- Symbol highlighting and on-type formatting are off by default. Use
+  =C-c l H= to toggle symbol highlighting and =C-c l F= to toggle on-type
+  formatting when you want them temporarily. Full-buffer formatting remains
+  available at =C-c C-f=.
 
 When something is off, the two recovery commands worth memorizing:
 
-- =M-x lsp-workspace-restart= — restart the server for the current project.
+- =C-c l R= — restart the server for the current project.
 - =M-x lsp-describe-session= — see which servers are running and where.
 
 For Java specifically, JDT LS imports the project on first open. Wait for
 =LSP[jdtls]= in the mode line before invoking refactors or debugging — code
 actions and =dap-java-debug-*= require the project model to be ready.
+Automatic build-configuration updates are interactive; after changing
+=pom.xml=, =build.gradle=, or dependency state outside Emacs, use =C-c l j u=
+to ask JDT LS to refresh the project model.
 
 *** DAP — debugging Java
 
-DAP turns =lsp-mode= buffers into debugger front-ends. =C-c l d= opens
+DAP turns =lsp-mode= buffers into debugger front-ends, but it is not enabled
+for every LSP buffer at startup. That keeps normal Java editing lighter and
+avoids allocating debugger UI state until it is needed. =C-c l d= opens
 =dap-hydra=, the transient menu that exposes every debug command without
 having to memorize bindings.
 
@@ -1588,7 +1633,16 @@ gitignored.
   not finished importing. Open a source file, wait for =LSP[jdtls]=, then
   retry.
 - /Stale state after a dependency change./ =M-x lsp-workspace-restart=,
-  then re-launch the debug session.
+  or =C-c l R=, then re-launch the debug session. If the build file itself
+  changed, use =C-c l j u= first to refresh JDT LS project configuration.
+- /External file changes do not appear immediately./ Recursive LSP file
+  watchers are disabled to keep Emacs memory bounded. Restart the workspace
+  with =C-c l R= after large external changes.
+- /Emacs memory still grows without bound./ Keep =lsp-log-io= off and close
+  old project buffers so =lsp-keep-workspace-alive nil= can shut down idle
+  servers. If memory still climbs, the next deeper fix is enabling
+  =LSP_USE_PLISTS=true= before =lsp-mode= loads and recompiling/reinstalling
+  =lsp-mode=.
 - /No completions or diagnostics in a shell buffer./ The two binaries the
   shell stack relies on are not bundled with =lsp-mode= or Flycheck. Install
   with =npm install -g bash-language-server= and =brew install shellcheck=,
