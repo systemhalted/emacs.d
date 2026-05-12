@@ -281,16 +281,19 @@ Equivalent of =C-d= (=Cmd-d= on Mac) in Intellij Idea. Source: https://www.emacs
 #+end_src
 
 
-* Completion and Navigation
+* Completion, Navigation, and Help
 
 The completion stack is built from small packages that cooperate through
-Emacs' standard completion system rather than a single large framework. Each
-piece has one job:
+Emacs' standard completion system and adjacent help/navigation APIs rather than
+a single large framework. Each piece has one job:
 
+- =Savehist= persists minibuffer, search, kill-ring, and completion history.
 - =Orderless= decides /what counts as a match/ for a typed query.
 - =Vertico= renders /minibuffer/ candidates (file pickers, =M-x=, prompts).
 - =Marginalia= annotates those minibuffer candidates with extra context.
 - =Consult= supplies jump-and-search commands that feed the minibuffer.
+- =Embark= acts on the current candidate or symbol without leaving context.
+- =Helpful= renders richer reference buffers for commands, variables, keys, and symbols.
 - =Corfu= renders /in-buffer/ completion (the popup while typing code).
 - =Projectile= adds project-scoped commands (find file in project, etc.).
 - =ibuffer= manages buffers in bulk (mark, filter, kill) at =C-x C-b=.
@@ -298,7 +301,9 @@ piece has one job:
 
 Two surfaces, two UIs: minibuffer completion (Vertico) is intentionally
 separate from at-point completion (Corfu). Both reuse the same matching style
-through Orderless. Any one piece can be swapped or removed without disturbing
+through Orderless. Help and discovery sit beside those completion surfaces:
+Embark exposes available actions, Helpful explains Lisp objects, and which-key
+shows prefix maps. Any one piece can be swapped or removed without disturbing
 the others.
 
 ** Savehist — persist minibuffer history
@@ -631,6 +636,48 @@ location as you move through an =embark-collect= buffer.
     (add-hook 'embark-collect-mode-hook #'consult-preview-at-point-mode)))
 #+end_src
 
+** Helpful — richer describe buffers
+
+[[https://github.com/Wilfred/helpful][Helpful]] replaces the built-in
+=describe-*= buffers with richer Emacs Lisp reference pages. It does not
+participate in completion or navigation directly; Vertico, Consult, Embark,
+Corfu, Projectile, and Xref still own those jobs. Helpful is for the moment
+after a command, variable, key, or symbol has been found and you want better
+documentation: source links, aliases, callers, key bindings, plist details,
+and a more useful summary of what kind of Lisp object is being described.
+
+The standard help keys are remapped rather than duplicated, so =C-h f=,
+=C-h v=, and =C-h k= keep their muscle memory while opening Helpful buffers.
+=C-h f= goes to =helpful-callable= instead of =helpful-function= because a
+symbol at that prompt may be a function, macro, or special form. Direct
+bindings for =helpful-function= and =helpful-symbol= remain on =C-h F= and
+=C-h S= for cases where the narrower command is wanted.
+
+=C-h .= is intentionally reassigned from =display-local-help= to
+=helpful-at-point=. This configuration is maintained mostly by editing
+Emacs Lisp in =systemhalted.org=, so "describe the symbol under point" is
+more useful than showing button or widget =help-echo= text. The built-in
+local help command remains available on =C-h C-.= for the occasional UI
+button/widget case.
+
+Programming-language hover documentation stays under LSP: use =C-c l h h=
+for Java, Python, TypeScript, and other language-server buffers. Helpful is
+for Emacs Lisp symbols, commands, variables, faces, and keys.
+
+#+begin_src emacs-lisp
+(use-package helpful
+  :ensure t
+  :bind
+  (([remap describe-function] . helpful-callable)
+   ([remap describe-command]  . helpful-command)
+   ([remap describe-variable] . helpful-variable)
+   ([remap describe-key]      . helpful-key)
+   ("C-h ."                   . helpful-at-point)
+   ("C-h C-."                 . display-local-help)
+   ("C-h F"                   . helpful-function)
+   ("C-h S"                   . helpful-symbol)))
+#+end_src
+
 ** Corfu — in-buffer completion popup
 
 [[https://github.com/minad/corfu][Corfu]] is the popup that appears /inside/ a buffer while typing code:
@@ -810,11 +857,12 @@ enough that it surfaces during a hesitation, long enough that it stays out
 of the way during fluent typing of a known chord.
 
 #+begin_src emacs-lisp
-(use-package which-key
-  :ensure t
-  :config
-  (which-key-mode 1)
-  (setq which-key-idle-delay 0.4))
+  (use-package which-key
+    :ensure t
+    :config
+    (which-key-mode 1)
+    (setq which-key-idle-delay 0.4
+  	which-key-sort-order 'which-key-description-order))
 #+end_src
 
 * Org Mode
