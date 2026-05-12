@@ -95,132 +95,140 @@ first because repeated config reloads should not stack faces or leave stale them
 state behind.
 
 #+begin_src emacs-lisp
-(setq inhibit-startup-screen t
-      initial-scratch-message nil
-      initial-major-mode 'org-mode
-      ring-bell-function 'ignore
-      echo-keystrokes 0.01
-      confirm-kill-emacs #'yes-or-no-p
-      backup-by-copying t
-      backup-directory-alist `(("." . ,(expand-file-name "backups/" user-emacs-directory)))
-      auto-save-file-name-transforms `((".*" ,(expand-file-name "auto-save-list/" user-emacs-directory) t))
-      delete-old-versions t
-      kept-new-versions 3
-      kept-old-versions 2
-      version-control t)
+  (setq inhibit-startup-screen t
+        initial-scratch-message nil
+        initial-major-mode 'org-mode
+        ring-bell-function 'ignore
+        echo-keystrokes 0.01
+        confirm-kill-emacs #'yes-or-no-p
+        backup-by-copying t
+        backup-directory-alist `(("." . ,(expand-file-name "backups/" user-emacs-directory)))
+        auto-save-file-name-transforms `((".*" ,(expand-file-name "auto-save-list/" user-emacs-directory) t))
+        delete-old-versions t
+        kept-new-versions 3
+        kept-old-versions 2
+        version-control t)
 
-(fset 'yes-or-no-p #'y-or-n-p)
-(prefer-coding-system 'utf-8)
-(set-language-environment "UTF-8")
-(set-default-coding-systems 'utf-8)
+  (fset 'yes-or-no-p #'y-or-n-p)
+  (prefer-coding-system 'utf-8)
+  (set-language-environment 'utf-8)
+  (set-default-coding-systems 'utf-8)
 
-(when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
-(when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
-(when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
 
-(when (display-graphic-p)
-  ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
-  ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
-  ;; the portable bit that handles X11/PGTK.
-  (when (eq system-type 'darwin)
-    (setq ns-use-native-fullscreen t)))
-(add-to-list 'initial-frame-alist '(fullscreen . fullboth))
-(add-to-list 'default-frame-alist '(fullscreen . fullboth))
+  (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
+  (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
+  (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
 
-(global-display-line-numbers-mode 1)
-(dolist (hook '(org-mode-hook term-mode-hook shell-mode-hook eshell-mode-hook))
-  (add-hook hook (lambda () (display-line-numbers-mode -1))))
+  (when (display-graphic-p)
+    ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
+    ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
+    ;; the portable bit that handles X11/PGTK.
+    (when (eq system-type 'darwin)
+      (setq ns-use-native-fullscreen t)))
+  (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
+  (add-to-list 'default-frame-alist '(fullscreen . fullboth))
 
-(column-number-mode 1)
-(display-time-mode 1)
-(electric-pair-mode 1)
-(show-paren-mode 1)
-(save-place-mode 1)
-(recentf-mode 1)
-(global-auto-revert-mode 1)
+  (global-display-line-numbers-mode 1)
+  (dolist (hook '(org-mode-hook term-mode-hook shell-mode-hook eshell-mode-hook))
+    (add-hook hook (lambda () (display-line-numbers-mode -1))))
 
-(global-set-key (kbd "C-x k") #'kill-current-buffer)
+  (column-number-mode 1)
+  (display-time-mode 1)
+  (display-battery-mode 1)
+  (electric-pair-mode 1)
+  (show-paren-mode 1)
+  (save-place-mode 1)
+  (recentf-mode 1)
+  (global-auto-revert-mode 1)
 
-(defun systemhalted/config-visit ()
-  "Open the literate Emacs configuration."
-  (interactive)
-  (find-file (expand-file-name "systemhalted.org" user-emacs-directory)))
-(global-set-key (kbd "C-c e") #'systemhalted/config-visit)
+  (global-set-key (kbd "C-x k") #'kill-current-buffer)
 
-(defun systemhalted/config-reload ()
-  "Save and reload the literate Emacs configuration."
-  (interactive)
-  (let* ((config-file (expand-file-name "systemhalted.org" user-emacs-directory))
-         (config-buffer (get-file-buffer config-file)))
-    (when (and config-buffer (buffer-modified-p config-buffer))
-      (with-current-buffer config-buffer
-        (save-buffer)))
-    (message "Reloading Emacs configuration...")
-    (org-babel-load-file config-file)
-    (message "Reloaded Emacs configuration.")))
-(global-set-key (kbd "C-c r") #'systemhalted/config-reload)
+  ;;enable cua mode
+  (cua-mode 1)
 
-(defvar systemhalted/tutorials
-  '(("Minimal Org workflow" . "Tutorial: Using the Minimal Org Workflow")
-    ("LSP and DAP"          . "Using LSP and DAP")
-    ("LaTeX"                . "Tutorial: Using LaTeX"))
-  "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
+  ;; enable windmove, for easy navigation between open windows
+  (use-package windmove)
 
-(defun systemhalted/tutorial ()
-  "Pick a tutorial subtree from systemhalted.org and view it read-only.
-Mirrors `help-with-tutorial' (C-h t): a registry of named tutorials is
-offered via `completing-read', and the chosen subtree is shown as a
-narrowed, read-only indirect buffer over the literate config so edits
-to the source remain visible without losing place."
-  (interactive)
-  (let* ((choice (completing-read "Tutorial: "
-                                  (mapcar #'car systemhalted/tutorials)
-                                  nil t))
-         (heading (cdr (assoc choice systemhalted/tutorials)))
-         (buf-name (format "*Tutorial: %s*" choice)))
-    (if-let ((existing (get-buffer buf-name)))
-        (pop-to-buffer existing)
-      (let* ((org-file (expand-file-name "systemhalted.org" user-emacs-directory))
-             (base (find-file-noselect org-file))
-             (pos (with-current-buffer base
-                    (org-find-exact-headline-in-buffer heading))))
-        (unless pos
-          (user-error "Tutorial heading %S not found in %s" heading org-file))
-        (let ((indirect (make-indirect-buffer base buf-name t)))
-          (with-current-buffer indirect
-            (goto-char pos)
-            (org-narrow-to-subtree)
-            (org-show-subtree)
-            (goto-char (point-min))
-            (read-only-mode 1))
-          (pop-to-buffer indirect))))))
-(global-set-key (kbd "C-h T") #'systemhalted/tutorial)
+  (defun systemhalted/config-visit ()
+    "Open the literate Emacs configuration."
+    (interactive)
+    (find-file (expand-file-name "systemhalted.org" user-emacs-directory)))
+  (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
 
-(with-eval-after-load 'dired
-  (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
+  (defun systemhalted/config-reload ()
+    "Save and reload the literate Emacs configuration."
+    (interactive)
+    (let* ((config-file (expand-file-name "systemhalted.org" user-emacs-directory))
+           (config-buffer (get-file-buffer config-file)))
+      (when (and config-buffer (buffer-modified-p config-buffer))
+        (with-current-buffer config-buffer
+          (save-buffer)))
+      (message "Reloading Emacs configuration...")
+      (org-babel-load-file config-file)
+      (message "Reloaded Emacs configuration.")))
+  (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
 
-(when (display-graphic-p)
-  (when (find-font (font-spec :name "Fira Code"))
-    (set-face-attribute 'default nil :font "Fira Code" :height 150))
-  (when (find-font (font-spec :name "Cantarell"))
-    (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150)))
+  (defvar systemhalted/tutorials
+    '(("Minimal Org workflow" . "Tutorial: Using the Minimal Org Workflow")
+      ("LSP and DAP"          . "Using LSP and DAP")
+      ("LaTeX"                . "Tutorial: Using LaTeX"))
+    "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
 
-(defun systemhalted/load-theme ()
-  "Load the preferred theme without stacking themes on reload."
-  (mapc #'disable-theme custom-enabled-themes)
-  (load-theme 'nord t))
+  (defun systemhalted/tutorial ()
+    "Pick a tutorial subtree from systemhalted.org and view it read-only.
+  Mirrors `help-with-tutorial' (C-h t): a registry of named tutorials is
+  offered via `completing-read', and the chosen subtree is shown as a
+  narrowed, read-only indirect buffer over the literate config so edits
+  to the source remain visible without losing place."
+    (interactive)
+    (let* ((choice (completing-read "Tutorial: "
+                                    (mapcar #'car systemhalted/tutorials)
+                                    nil t))
+           (heading (cdr (assoc choice systemhalted/tutorials)))
+           (buf-name (format "*Tutorial: %s*" choice)))
+      (if-let ((existing (get-buffer buf-name)))
+          (pop-to-buffer existing)
+        (let* ((org-file (expand-file-name "systemhalted.org" user-emacs-directory))
+               (base (find-file-noselect org-file))
+               (pos (with-current-buffer base
+                      (org-find-exact-headline-in-buffer heading))))
+          (unless pos
+            (user-error "Tutorial heading %S not found in %s" heading org-file))
+          (let ((indirect (make-indirect-buffer base buf-name t)))
+            (with-current-buffer indirect
+              (goto-char pos)
+              (org-narrow-to-subtree)
+              (org-show-subtree)
+              (goto-char (point-min))
+              (read-only-mode 1))
+            (pop-to-buffer indirect))))))
+  (global-set-key (kbd "C-h T") #'systemhalted/tutorial)
 
-(use-package nord-theme
-  :ensure t
-  :custom
-  (nord-region-highlight "frost")
-  :config
-  (systemhalted/load-theme))
+  (with-eval-after-load 'dired
+    (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
+
+  (when (display-graphic-p)
+    (when (find-font (font-spec :name "Fira Code"))
+      (set-face-attribute 'default nil :font "Fira Code" :height 150))
+    (when (find-font (font-spec :name "Cantarell"))
+      (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150)))
+
+  (defun systemhalted/load-theme ()
+    "Load the preferred theme without stacking themes on reload."
+    (mapc #'disable-theme custom-enabled-themes)
+    (load-theme 'nord t))
+
+  (use-package nord-theme
+    :ensure t
+    :custom
+    (nord-region-highlight "frost")
+    :config
+    (systemhalted/load-theme))
 #+end_src
 
 ** Text Manipulation
 *** Move text
-Most of the time, I need to move a text up and down a bit. Here, I am mapping M-n and M-p to move text down and move text up respectively.
+Sometimes, I need to move a text up and down a bit. Here, I am mapping M-n and M-p to move text down and move text up respectively.
 
 #+begin_src emacs-lisp
  (use-package move-text
@@ -230,6 +238,48 @@ Most of the time, I need to move a text up and down a bit. Here, I am mapping M-
   :config
   (message "move-text loaded successfully"))
 #+end_src
+
+*** Duplicate the current line
+Equivalent of =C-d= (=Cmd-d= on Mac) in Intellij Idea. Source: https://www.emacswiki.org/emacs/CopyingWholeLines#toc12
+#+begin_src emacs-lisp
+     (define-key global-map (kbd "C-c d")
+  (defun systemhalted/duplicate-line-or-region (&optional n)
+    "Duplicate current line, or region if active.
+    With argument N, make N copies.
+    With negative N, comment out original line and use the absolute value."
+    (interactive "*p")
+    (let ((use-region (use-region-p)))
+      (save-excursion
+        (let ((text (if use-region        ;Get region if active, otherwise line
+                        (buffer-substring (region-beginning) (region-end))
+                      (prog1 (thing-at-point 'line)
+                        (end-of-line)
+                        (if (< 0 (forward-line 1)) ;Go to beginning of next line, or make a new one
+                            (newline))))))
+          (dotimes (i (abs (or n 1)))     ;Insert N times, or once if not specified
+            (insert text))))
+      (if use-region nil                  ;Only if we're working with a line (not a region)
+        (let ((pos (- (point) (line-beginning-position)))) ;Save column
+          (if (> 0 n)                             ;Comment out original with negative arg
+              (comment-region (line-beginning-position) (line-end-position)))
+          (forward-line 1)
+          (forward-char pos))))))
+
+#+end_src
+
+
+*** Join following line
+#+begin_src emacs-lisp
+  (define-key global-map (kbd "C-c k")
+  (defun systemhalted/join-following-line (arg)
+    "Joins the following line or the whole selected region"
+    (interactive "P")
+    (if (use-region-p)
+        (let ((fill-column (point-max)))
+          (fill-region (region-beginning) (region-end)))
+      (join-line -1))))
+#+end_src
+
 
 * Completion and Navigation
 
