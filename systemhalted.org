@@ -1426,15 +1426,24 @@ whichever JDK SDKMAN (or the distro's =update-alternatives=) currently
 considers default.
 
 Java buffers get one extra project-local layer before LSP starts. If a nearby
-=.sdkmanrc= contains =java=<version>=, the Java hook maps that version to
-=~/.sdkman/candidates/java/<version>=, sets buffer-local =JAVA_HOME= and
-=PATH= for subprocesses, points =lsp-java-java-path= at that JDK's
-=bin/java= so JDT LS itself launches with the project JDK, and sends the
-same JDK to JDT LS as the default =java.configuration.runtimes= entry. This
-keeps GUI Emacs startup generic while letting each Java project choose its own
-SDKMAN JDK. The Java language level still comes from the project model
-\(Maven/Gradle/Eclipse metadata such as =maven.compiler.release= or
-=maven.compiler.source=), not from =JAVA_HOME= alone.
+=.sdkmanrc= contains =java=<version>= (or =maven=…=, =gradle=…=, or any other
+SDKMAN candidate), =global-sdkman-mode= --- from the local =sdkman.el=
+package at =~/Workspace/Personal/setup/sdkman.el/= --- applies the project
+candidates to the buffer's =process-environment=, =exec-path=, and =PATH=, sets
+=JAVA_HOME= / =MAVEN_HOME= / =GRADLE_HOME= as appropriate, points
+=lsp-java-java-path= at that JDK's =bin/java= so JDT LS itself launches with
+the project JDK, and sends the same JDK to JDT LS as the default
+=java.configuration.runtimes= entry. This keeps GUI Emacs startup generic while
+letting each Java project choose its own SDKMAN JDK. The Java language level
+still comes from the project model (Maven/Gradle/Eclipse metadata such as
+=maven.compiler.release= or =maven.compiler.source=), not from =JAVA_HOME=
+alone.
+
+The =java-mode= hook below only gates =lsp-deferred= against generated JDT LS
+support directories (workspace cache and server source). =lsp-deferred= itself
+does not start LSP until the buffer becomes visible, so the buffer-local
+SDKMAN state applied by =global-sdkman-mode= via =after-change-major-mode-hook=
+is already in place by the time JDT LS launches.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
@@ -1464,65 +1473,16 @@ SDKMAN JDK. The Java language level still comes from the project model
   :ensure t
   :after yasnippet)
 
-(defun systemhalted/sdkman-java-home-for-file (file)
-  "Return the SDKMAN Java home declared by nearest .sdkmanrc for FILE.
-The .sdkmanrc line must look like \"java=<candidate>\", where
-<candidate> is a directory under ~/.sdkman/candidates/java/."
-  (when-let* ((dir (and file (locate-dominating-file file ".sdkmanrc")))
-              (sdkmanrc (expand-file-name ".sdkmanrc" dir)))
-    (with-temp-buffer
-      (insert-file-contents sdkmanrc)
-      (when (re-search-forward "^java=\\([^[:space:]\n]+\\)" nil t)
-        (let ((java-home (expand-file-name
-                          (concat ".sdkman/candidates/java/"
-                                  (match-string 1))
-                          (getenv "HOME"))))
-          (when (file-directory-p java-home)
-            java-home))))))
-
-(defun systemhalted/java-se-runtime-name (java-home)
-  "Return a JavaSE runtime name for JAVA-HOME, or nil if unknown."
-  (when-let* ((candidate (and java-home
-                              (file-name-nondirectory
-                               (directory-file-name java-home)))))
-    (when (string-match "\\([0-9]+\\)" candidate)
-      (format "JavaSE-%s" (match-string 1 candidate)))))
-
-(defun systemhalted/apply-sdkman-java-for-buffer ()
-  "Apply nearest SDKMAN Java version to the current buffer's LSP environment."
-  (when-let* ((java-home (systemhalted/sdkman-java-home-for-file buffer-file-name))
-              (java-bin (expand-file-name "bin" java-home))
-              (java-command (expand-file-name "java" java-bin)))
-    (setq-local process-environment (copy-sequence process-environment))
-    (setq-local exec-path (cons java-bin (remove java-bin exec-path)))
-    (setenv "JAVA_HOME" java-home)
-    (setenv "PATH" (concat java-bin path-separator (getenv "PATH")))
-    (setq-local lsp-java-java-path java-command)
-    (when-let ((runtime-name (systemhalted/java-se-runtime-name java-home)))
-      (setq-local lsp-java-configuration-runtimes
-                  (vector `(:name ,runtime-name
-                            :path ,java-home
-                            :default t))))))
-
-(defconst systemhalted-lsp-excluded-directories
-  (list (expand-file-name "eclipse.jdt.ls/workspace/.cache/" user-emacs-directory)
-        (expand-file-name "eclipse.jdt.ls/server/" user-emacs-directory))
-  "Generated Java/LSP directories where `lsp-deferred' should not start.")
-
-(defun systemhalted/lsp-excluded-file-p (file)
-  "Return non-nil when FILE lives in a generated LSP support directory."
-  (when file
-    (let ((truename (file-truename file)))
-      (catch 'excluded
-        (dolist (dir systemhalted-lsp-excluded-directories)
-          (when (file-in-directory-p truename (file-truename dir))
-            (throw 'excluded t)))
-        nil))))
+(use-package sdkman
+  :load-path "~/Workspace/Personal/setup/sdkman.el/"
+  :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
+  :init
+  (global-sdkman-mode 1))
 
 (defun systemhalted/lsp-deferred-unless-excluded ()
-  "Start `lsp-deferred' unless this buffer is generated LSP support source."
-  (unless (systemhalted/lsp-excluded-file-p buffer-file-name)
-    (systemhalted/apply-sdkman-java-for-buffer)
+  "Start `lsp-deferred' unless this buffer is generated LSP support source.
+Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
+  (unless (sdkman-lsp-java-excluded-file-p buffer-file-name)
     (lsp-deferred)))
 
 (use-package lsp-mode
