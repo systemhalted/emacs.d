@@ -46,7 +46,7 @@ If you add Org features, preserve these invariants. In particular: do not widen 
 
 `C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` was moved to **`C-c P`** (capital P) because day-to-day project work happens far more often than backlog promotion. Keep this convention if you bind anything new — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
 
-Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`).
+Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`).
 
 ## Programming stack
 
