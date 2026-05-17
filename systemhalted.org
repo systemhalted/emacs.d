@@ -1323,6 +1323,58 @@ from anywhere else, fall back to the flat `* Notes' heading."
     (define-key org-mode-map (kbd "C-c j") #'systemhalted/org-babel-enable-jupyter)))
 #+end_src
 
+** Book view for reading
+
+A book-style reading view for any buffer, inspired by Rougier's =book-mode= but
+built from two small, theme-agnostic MELPA packages instead of pulling in
+=nano-theme= and its global hook installations. The visual feel comes from two
+things:
+
+- =olivetti= centers the buffer body in the window with wide symmetric margins,
+  giving the "page" feel.
+- =mixed-pitch= renders body text in =variable-pitch= (already configured as
+  Cantarell at the start of this file) while keeping =fixed-pitch= for source
+  blocks, tables, inline code, and other monospace-sensitive faces. This is the
+  single biggest contributor to the book look.
+
+The other ingredients are already in place above: =org-startup-indented= for
+heading indentation, =org-hide-emphasis-markers= to drop the markup characters,
+and =visual-line-mode= for soft wrapping at the right margin.
+
+Activation is on-demand via =C-c B= (capital, since =C-c b= is =consult-buffer=,
+mirroring the =C-c P= convention used for =systemhalted/promote-to-todo=). The
+toggle is global rather than wired into =org-mode-hook= because the three-file
+model treats =todo.org= and =backlog.org= as workflow surfaces, not reading
+surfaces --- book view there would harm scanning. =notes.org=, tutorial
+buffers, and long-form drafts are where it belongs, and the keybinding makes it
+trivial to invoke wherever it helps.
+
+#+begin_src emacs-lisp
+(use-package olivetti
+  :ensure t
+  :commands olivetti-mode
+  :custom
+  (olivetti-body-width 80)
+  (olivetti-style 'fancy))
+
+(use-package mixed-pitch
+  :ensure t
+  :commands mixed-pitch-mode)
+
+(defun systemhalted/book-view-toggle ()
+  "Toggle a book-style reading view in the current buffer.
+Enables Olivetti centered margins and mixed-pitch body text;
+re-running disables both. Intended for org reading sessions
+(notes.org, tutorials, long-form drafts) --- task and capture
+workflow is unaffected unless invoked explicitly."
+  (interactive)
+  (let ((enabling (not (bound-and-true-p olivetti-mode))))
+    (olivetti-mode (if enabling 1 -1))
+    (mixed-pitch-mode (if enabling 1 -1))))
+
+(global-set-key (kbd "C-c B") #'systemhalted/book-view-toggle)
+#+end_src
+
 * Git and Documentation
 
 Magit is the Git interface because it is high value and isolated: one key opens
