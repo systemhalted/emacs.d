@@ -226,6 +226,44 @@ state behind.
     (systemhalted/load-theme))
 #+end_src
 
+** Clipboard
+
+GUI Emacs already shares the system clipboard with the host on every windowed
+backend it supports (NS/Cocoa, X11, PGTK, Wayland). The options below add the
+polish that turns that bidirectional plumbing into the behavior most people
+expect:
+
+- =save-interprogram-paste-before-kill= pushes whatever currently sits in the
+  host clipboard onto the kill-ring /before/ a new Emacs kill overwrites the
+  selection, so a paste from outside Emacs is still recoverable through =M-y= /
+  =consult-yank-pop=.
+- =yank-pop-change-selection= mirrors the result of =M-y= back to the system
+  clipboard so the next external paste matches what is visible in Emacs.
+- =kill-do-not-save-duplicates= collapses adjacent identical kills in the
+  kill-ring so =M-y= history is not cluttered by repeated yanks of the same
+  thing.
+
+Terminal Emacs (=emacs -nw= inside Terminal.app, iTerm2, GNOME Terminal,
+Alacritty, etc.) talks to no display server and therefore cannot reach the
+host clipboard without help. =xclip= bridges the gap: on macOS it shells out
+to =pbcopy= / =pbpaste=, on X11 to =xclip= or =xsel=, on Wayland to =wl-copy=
+/ =wl-paste=. It is loaded only when the starting frame is non-graphical so
+it does not displace the native bridge in windowed GUI Emacs.
+
+#+begin_src emacs-lisp
+(setq select-enable-clipboard t
+      select-enable-primary nil
+      save-interprogram-paste-before-kill t
+      yank-pop-change-selection t
+      kill-do-not-save-duplicates t)
+
+(use-package xclip
+  :ensure t
+  :if (not (display-graphic-p))
+  :config
+  (xclip-mode 1))
+#+end_src
+
 ** Text Manipulation
 *** Move text
 Sometimes, I need to move a text up and down a bit. Here, I am mapping M-n and M-p to move text down and move text up respectively.
