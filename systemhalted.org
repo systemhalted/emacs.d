@@ -82,33 +82,38 @@ Warnings buffer is silenced. Messages are still written to the
 
 * Core Editing
 
-This section keeps editor behavior predictable before adding packages. The UI is
-quiet, frames start fullscreen, runtime files are routed under =~/.emacs.d/=, and
-reload/visit commands make this literate file easy to edit from inside Emacs.
-Lock files (=.#filename= symlinks Emacs drops next to a buffer on first edit) are
-disabled outright: this is a single-user setup where the concurrent-edit warning
-effectively never fires, and the symlinks confuse external watchers (bundlers,
-file-system watchers, language servers, Git GUIs).
-=C-h T= surfaces the tutorial subtrees from this file as read-only indirect
-buffers, the same way =C-h t= opens the built-in Emacs tutorial — the docs
-live next to the code that binds them, and the buffer renders as Org so tables,
-links, and verbatim keys stay legible.
+The editor baseline before any package loads: quiet startup, runtime files
+routed under =~/.emacs.d/=, fullscreen frames, line-number safety, an
+emergency UI reset for runaway sessions, and the commands that make this
+literate file easy to edit from inside Emacs.
 
-Nord is the preferred theme. Theme loading disables previously enabled themes
-first because repeated config reloads should not stack faces or leave stale theme
-state behind.
+** Editor defaults and runtime files
 
-Long-running Emacs sessions can become memory-bound if redisplay is forced to
-combine expensive features in large or visually complex buffers. Line numbers are
-therefore enabled only for ordinary local programming buffers, and =so-long=
-protects buffers with pathological long lines. If the UI starts to degrade,
-=C-c != runs =systemhalted/emergency-ui-reset= to disable expensive UI/runtime
-features and force a garbage collection. If Emacs is unresponsive on macOS,
-sample the process from a terminal with:
+One =setq= block establishes the boring baseline; the clusters it covers:
 
-#+begin_src sh
-sample <pid> 5 -file /tmp/emacs-hang-sample.txt
-#+end_src
+- *Quiet startup.* =inhibit-startup-screen=, =initial-scratch-message nil=,
+  and =initial-major-mode 'org-mode= replace the splash screen with an empty
+  =*scratch*= in Org mode — this file's native format.
+- *Sensory quiet.* =ring-bell-function 'ignore= silences the system beep;
+  =echo-keystrokes 0.01= makes the minibuffer show the in-progress chord
+  almost immediately so which-key has something to attach to.
+- *Confirm kill.* =confirm-kill-emacs= guards =C-x C-c= so a stray chord
+  can't take down the session.
+- *Backups routed locally.* =backup-directory-alist= sends every =~filename=
+  to =~/.emacs.d/backups/= and =auto-save-file-name-transforms= sends
+  =#filename#= to =~/.emacs.d/auto-save-list/=. The repository's
+  =.gitignore= excludes both, keeping the working tree clean.
+- *Lock files off.* =create-lockfiles nil= drops the =.#filename= symlinks
+  Emacs writes next to a buffer on first edit. This is a single-user setup
+  where the concurrent-edit warning effectively never fires, and the
+  symlinks confuse external watchers (bundlers, file-system watchers,
+  language servers, Git GUIs).
+- *Versioned backups.* =backup-by-copying=, =delete-old-versions=, and the
+  =kept-new=/=kept-old= caps keep a small rolling history per file.
+
+After the =setq=, =y-or-n-p= replaces =yes-or-no-p= globally (one-key
+confirmation), and UTF-8 is asserted across coding system, language
+environment, and default I/O.
 
 #+begin_src emacs-lisp
   (setq inhibit-startup-screen t
@@ -130,7 +135,16 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
   (prefer-coding-system 'utf-8)
   (set-language-environment 'utf-8)
   (set-default-coding-systems 'utf-8)
+#+end_src
 
+** Customization group and chrome
+
+=defgroup systemhalted= namespaces every =defcustom= in this config so they
+all surface together under =M-x customize-group RET systemhalted=. The three
+=…-mode -1= calls strip the menu bar, tool bar, and scroll bars before any
+frame is drawn — chrome that is dead weight when navigation is keyboard-first.
+
+#+begin_src emacs-lisp
   (defgroup systemhalted nil
     "Personal Emacs configuration."
     :group 'convenience)
@@ -138,7 +152,18 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
   (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
   (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
   (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+#+end_src
 
+** Fullscreen frames
+
+Both the initial frame and any subsequent frames open fullscreen. The
+portable bit is =(fullscreen . fullboth)= in the frame alists, which works
+under X11 and PGTK. =ns-use-native-fullscreen= is the macOS-only toggle that
+makes Cmd-Ctrl-F use the system's native fullscreen animation rather than a
+maximized-but-windowed state; setting it is wrapped in a darwin check
+because the variable is unbound on Linux.
+
+#+begin_src emacs-lisp
   (when (display-graphic-p)
     ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
     ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
@@ -147,7 +172,30 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
       (setq ns-use-native-fullscreen t)))
   (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
   (add-to-list 'default-frame-alist '(fullscreen . fullboth))
+#+end_src
 
+** Line numbers, gated to safe buffers
+
+Long-running Emacs sessions can become memory-bound when redisplay is forced
+to combine expensive features in large or visually complex buffers. The
+=display-line-numbers-mode= margin is one of those features. Rather than
+turning it on globally, an eligibility predicate filters down to ordinary
+local programming buffers:
+
+- Mode must derive from =prog-mode= — text and Org buffers don't get the
+  margin.
+- Must be visiting a local file (not TRAMP, not =*scratch*=, not a generated
+  Org export buffer like =systemhalted.html=).
+- Buffer size below =systemhalted/line-number-max-buffer-size= (1 MiB) — at
+  that point the margin's per-redisplay cost stops being free.
+- No unusually long lines in the first 2 000 lines (=systemhalted/long-line-buffer-p=).
+  Pathological long lines are what =so-long= is for, and the line-number
+  gutter compounds their slowness.
+
+=systemhalted/display-line-numbers-disable-all= is the explicit escape
+hatch, also called from the emergency UI reset further down.
+
+#+begin_src emacs-lisp
   (defcustom systemhalted/line-number-max-buffer-size (* 1024 1024)
     "Maximum buffer size where line numbers are enabled automatically."
     :type 'integer
@@ -205,7 +253,34 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
           (display-line-numbers-mode -1)))))
 
   (add-hook 'prog-mode-hook #'systemhalted/display-line-numbers-maybe)
+#+end_src
 
+** Always-on minor modes and shared infrastructure
+
+Eight short minor-mode toggles cover the everyday quality-of-life baseline:
+
+- =column-number-mode= shows column position in the mode line; pairs with
+  the default line count.
+- =display-time-mode= / =display-battery-mode= add clock and battery
+  indicators so a long-running Emacs session doesn't need a side glance.
+- =electric-pair-mode= auto-inserts matching brackets and quotes in
+  prog-mode; =show-paren-mode= highlights the matching delimiter under
+  point.
+- =save-place-mode= remembers point per file across restarts.
+- =recentf-mode= keeps a recently-opened-files list that =consult-buffer=
+  surfaces under the =f= narrowing key.
+- =global-auto-revert-mode= refreshes buffers whose backing files changed
+  on disk — important when language servers or formatters rewrite files
+  underneath us.
+
+The three =use-package= forms wire in built-ins the rest of the config
+depends on: =seq= (used by helpers like =systemhalted/active-minor-modes=),
+=so-long= (protects against pathological long lines that the line-number
+gate above also accounts for), and =server= (starts the Emacs server when
+not in batch mode, so =emacsclient= and the macOS =/Applications/Emacs.app=
+icon attach to this process instead of spawning a new one).
+
+#+begin_src emacs-lisp
   (column-number-mode 1)
   (display-time-mode 1)
   (display-battery-mode 1)
@@ -228,7 +303,38 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
     :config
     (unless (or noninteractive (server-running-p))
       (server-start)))
+#+end_src
 
+** Diagnostics and the emergency UI reset
+
+When the UI starts to degrade — sluggish redisplay, climbing RSS,
+unresponsive minibuffer — these helpers tell you what's running and let
+you shed the expensive bits without restarting Emacs.
+
+=systemhalted/diagnostics= (=M-x= it) collects uptime, current buffer,
+buffer size and longest-line sample, active minor modes, LSP state, live
+timer counts, GC counter, and a memory summary into a single alist for
+inspection or capture into a notes buffer.
+
+=systemhalted/emergency-ui-reset= (bound to =C-c !=) is the actual
+turn-it-off button. It disables line numbers everywhere, stops
+=global-auto-revert-mode=, and walks every buffer killing Flycheck, LSP,
+=mixed-pitch=, and =olivetti= modes where they are active; then it forces a
+GC and prints the resulting memory summary. Cheap to invoke, completely
+reversible — re-opening a file re-runs the relevant hooks.
+
+If Emacs is unresponsive enough that =C-c != itself doesn't fire, sample
+the process from a terminal (macOS):
+
+#+begin_src sh
+sample <pid> 5 -file /tmp/emacs-hang-sample.txt
+#+end_src
+
+On Linux the equivalent is =sudo perf record -F 99 -p <pid> -- sleep 5=
+followed by =perf report=, or =py-spy dump --pid <pid>= for a one-shot
+backtrace if =py-spy= happens to be installed.
+
+#+begin_src emacs-lisp
   (defun systemhalted/buffer-longest-line-sample (&optional line-limit)
     "Return the longest line length found in the first LINE-LIMIT lines."
     (save-excursion
@@ -299,12 +405,38 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
     (message "Emergency UI reset complete: %S" (systemhalted/memory-summary)))
 
   (global-set-key (kbd "C-c !") #'systemhalted/emergency-ui-reset)
+#+end_src
 
+** Small convenience keys and windmove
+
+Two micro-tweaks live alone because they don't belong with any package:
+
+- =C-x k= rebinds =kill-buffer= → =kill-current-buffer=. The stock binding
+  prompts even when point is in the buffer you want to kill, which adds a
+  =RET= for nothing.
+- =windmove= is built-in and provides directional window navigation
+  (=S-<arrow>= by default). The =use-package= form just enables it.
+
+#+begin_src emacs-lisp
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
 
   ;; enable windmove, for easy navigation between open windows
   (use-package windmove)
+#+end_src
 
+** Reload and visit the literate file
+
+This config is iterated on inside Emacs, so the two commands below close
+the loop:
+
+- =C-c e= (=systemhalted/config-visit=) opens =systemhalted.org=.
+- =C-c r= (=systemhalted/config-reload=) saves the open Org buffer if
+  modified, then re-runs =org-babel-load-file= on it. Equivalent to
+  restarting Emacs for most config edits, without losing window/buffer
+  state. Errors during reload land in =*Messages*= but don't take down
+  the session.
+
+#+begin_src emacs-lisp
   (defun systemhalted/config-visit ()
     "Open the literate Emacs configuration."
     (interactive)
@@ -323,7 +455,24 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
       (org-babel-load-file config-file)
       (message "Reloaded Emacs configuration.")))
   (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
+#+end_src
 
+** Tutorial dispatcher
+
+=C-h T= mirrors =C-h t= (the built-in Emacs tutorial) but opens subtrees
+from /this/ file as read-only indirect buffers. The docs live next to the
+code that binds them, the buffer renders as Org so tables, links, and
+verbatim keys stay legible, and edits to the source file are immediately
+visible because the buffer is indirect — no copy, no drift.
+
+=systemhalted/tutorials= is the registry. Adding a tutorial requires *both*
+a new alist entry here *and* a matching =**= heading elsewhere in this file
+whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
+open a heading it cannot find. The currently registered tutorials are the
+three subtrees in this document: =Tutorial: Using the Minimal Org Workflow=,
+=Using LSP and DAP=, and =Tutorial: Using LaTeX=.
+
+#+begin_src emacs-lisp
   (defvar systemhalted/tutorials
     '(("Minimal Org workflow" . "Tutorial: Using the Minimal Org Workflow")
       ("LSP and DAP"          . "Using LSP and DAP")
@@ -359,7 +508,28 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
               (read-only-mode 1))
             (pop-to-buffer indirect))))))
   (global-set-key (kbd "C-h T") #'systemhalted/tutorial)
+#+end_src
 
+** Dired, fonts, and theme
+
+Three small finishing touches:
+
+- *Dired.* =c= in a Dired buffer creates an empty file (overriding the
+  stock binding for =dired-do-copy=, which uses =C= anyway). One-key file
+  creation is the move most often made from a Dired listing.
+- *Fonts.* Fira Code for fixed-pitch (default face) and Cantarell for
+  variable-pitch when both are installed. =mixed-pitch-mode= consumes the
+  variable-pitch face for the book-style reading view further down. Sizes
+  are =150= (=15pt=) on both faces; the =find-font= guards make the block
+  no-op when a font isn't installed instead of leaving a missing-font
+  warning.
+- *Theme.* Nord. =systemhalted/load-theme= disables every currently-enabled
+  theme first because repeated config reloads otherwise stack faces or
+  leave stale theme state behind. =nord-region-highlight 'frost= is the
+  one face customization — selection in the bluer "frost" palette rather
+  than the default muted gray.
+
+#+begin_src emacs-lisp
   (with-eval-after-load 'dired
     (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
 
@@ -421,8 +591,20 @@ it does not displace the native bridge in windowed GUI Emacs.
 #+end_src
 
 ** Text Manipulation
-*** Move text
-Sometimes, I need to move a text up and down a bit. Here, I am mapping M-n and M-p to move text down and move text up respectively.
+
+Three keys for the line-shape edits that come up in every coding session:
+reorder, duplicate, and join. Each is small enough to belong at the editor
+layer rather than inside a structural-editing package like Paredit or
+Combobulate.
+
+*** Move text up or down
+
+=move-text= bubbles the current line (or active region) up with =M-p= or
+down with =M-n=, preserving indentation. Easier than the cut-and-yank
+two-step and faster than =transpose-lines=, which only works on adjacent
+single lines and leaves point in an awkward place. The =message= in
+=:config= confirms the package loaded — useful when iterating on this
+file with =C-c r=.
 
 #+begin_src emacs-lisp
  (use-package move-text
@@ -433,8 +615,15 @@ Sometimes, I need to move a text up and down a bit. Here, I am mapping M-n and M
   (message "move-text loaded successfully"))
 #+end_src
 
-*** Duplicate the current line
-Equivalent of =C-d= (=Cmd-d= on Mac) in Intellij Idea. Source: https://www.emacswiki.org/emacs/CopyingWholeLines#toc12
+*** Duplicate the current line or region
+
+=C-c d= copies the current line (or active region) below itself, leaving
+point at the same column on the new copy. With a numeric prefix it makes
+=N= copies; with a negative prefix it duplicates and comments out the
+original — handy for keeping a known-good version while editing a copy.
+The IntelliJ =Cmd-D= reflex, ported. Source:
+https://www.emacswiki.org/emacs/CopyingWholeLines#toc12
+
 #+begin_src emacs-lisp
      (define-key global-map (kbd "C-c d")
   (defun systemhalted/duplicate-line-or-region (&optional n)
@@ -462,7 +651,14 @@ Equivalent of =C-d= (=Cmd-d= on Mac) in Intellij Idea. Source: https://www.emacs
 #+end_src
 
 
-*** Join following line
+*** Join following line or unwrap region
+
+=C-c k= folds the next line up into the current one, replacing the line
+break with a single space. With a region active it unwraps the whole
+region into a single line by calling =fill-region= with an unreachable
+=fill-column=. The two cases share a binding because they are the same
+intent — "make this one line" — at different scales.
+
 #+begin_src emacs-lisp
   (define-key global-map (kbd "C-c k")
   (defun systemhalted/join-following-line (arg)
@@ -1255,6 +1451,18 @@ C-c j
 Use Jupyter only when an Org file needs notebook-style execution. Keeping it
 opt-in prevents normal Org startup from carrying notebook server state.
 
+** Path helpers and task-state vocabulary
+
+These tiny pieces are the vocabulary every other Org guard speaks:
+=systemhalted/org-file= resolves a name against =org-directory= (centralises
+the =~/org/= assumption so nothing else hard-codes it),
+=systemhalted/org-task-states= names the three keywords the workflow uses
+(=TODO=, =IN-PROGRESS=, =DONE=), =systemhalted/org-buffer-file-p= asks
+"is the current buffer this specific file?" using =file-truename= so symlinks
+into =~/org/= don't slip past the guards, and
+=systemhalted/org-buffer-has-task-heading-p= scans for any heading whose
+keyword is one of the reserved task states.
+
 #+begin_src emacs-lisp
 (defun systemhalted/org-file (file)
   "Return FILE expanded inside `org-directory'."
@@ -1278,7 +1486,31 @@ opt-in prevents normal Org startup from carrying notebook server state.
              (regexp-opt systemhalted/org-task-states)
              "\\)\\(?:[ \t]\\|$\\)")
      nil t)))
+#+end_src
 
+** Three-file guards
+
+Four checks enforce the =todo.org= / =backlog.org= / =notes.org= boundary
+in different places:
+
+- =systemhalted/validate-backlog= runs as a =before-save-hook= on
+  =backlog.org=. It rejects any task heading (so the file stays a passive
+  list of things to maybe read/watch/learn) and any =SCHEDULED:= or
+  =DEADLINE:= line (planning belongs in =todo.org=). The error message
+  points to =C-c P= as the legitimate exit ramp.
+- =systemhalted/validate-notes= runs as a =before-save-hook= on =notes.org=.
+  It rejects task headings; notes are durable thinking, not work items.
+- =systemhalted/restrict-todo-usage= runs as
+  =org-after-todo-state-change-hook=. If =C-c C-t= is pressed anywhere
+  outside =todo.org=, the hook silently reverts the state change and then
+  errors. =inhibit-message= keeps the revert silent because the error
+  message is the user-facing signal.
+- =systemhalted/assert-agenda-scope= runs at startup (and is wired into
+  =after-init-hook= further below) to confirm =org-agenda-files= still
+  contains only =todo.org=. If something else widens the agenda, startup
+  errors loudly rather than silently.
+
+#+begin_src emacs-lisp
 (defun systemhalted/validate-backlog ()
   "Ensure backlog remains passive and never contains task entries."
   (when (systemhalted/org-buffer-has-task-heading-p)
@@ -1307,7 +1539,24 @@ opt-in prevents normal Org startup from carrying notebook server state.
   (unless (equal org-agenda-files
                  (list (systemhalted/org-file "todo.org")))
     (error "Agenda must only include todo.org")))
+#+end_src
 
+** Promotion: =C-c P= from backlog to todo
+
+Promotion is the only sanctioned path from passive backlog item to
+intentional work. =systemhalted/org-goto-or-create-heading= positions
+point at the end of a named top-level heading inside the current buffer,
+creating it (with surrounding blank lines) if it doesn't exist yet — used
+to make sure =* Tasks= is present in =todo.org= before pasting.
+
+=systemhalted/promote-to-todo= is the user-facing command (bound to
+=C-c P= in the main org configuration further below). It cuts the
+current subtree from wherever it is, opens =todo.org=, ensures =* Tasks=
+exists, pastes the subtree under it as a level-2 heading, and marks it
+=TODO=. =C-c p= is reserved for Projectile, which is why promotion takes
+the capital =P=.
+
+#+begin_src emacs-lisp
 (defun systemhalted/org-goto-or-create-heading (heading)
   "Move to the end of top-level HEADING, creating it when needed."
   (goto-char (point-min))
@@ -1340,7 +1589,25 @@ opt-in prevents normal Org startup from carrying notebook server state.
       (org-todo "TODO"))
     (save-buffer))
   (message "Promoted item to todo.org"))
+#+end_src
 
+** Backlog seeding and per-file constraint dispatch
+
+=systemhalted/ensure-backlog-structure= runs on =find-file-hook=: the very
+first time =backlog.org= is opened (when it's still empty), it seeds the
+five passive categories — Articles, Books, Ideas, Videos, Courses — so
+the file isn't a blank canvas with no organizing principle.
+
+=systemhalted/apply-org-file-constraints= runs on =org-mode-hook= and
+dispatches per file: =backlog.org= gets the
+=systemhalted/validate-backlog= save hook; =notes.org= gets the
+=systemhalted/validate-notes= save hook /and/ has its
+=org-todo-keywords= cleared locally so =C-c C-t= becomes a no-op
+(belt-and-suspenders with =systemhalted/restrict-todo-usage=).
+=todo.org= gets nothing extra — it is the file where task states are
+allowed, so no guard is needed.
+
+#+begin_src emacs-lisp
 (defun systemhalted/ensure-backlog-structure ()
   "Seed an empty backlog with passive categories."
   (when (and (systemhalted/org-buffer-file-p "backlog.org")
@@ -1357,7 +1624,29 @@ opt-in prevents normal Org startup from carrying notebook server state.
     ;; Notes are for thinking and writing output, so TODO cycling is disabled.
     (setq-local org-todo-keywords nil)
     (add-hook 'before-save-hook #'systemhalted/validate-notes nil t))))
+#+end_src
 
+** Source-aware notes capture
+
+=systemhalted/org-notes-target= is the =:function= callback for the =n=
+capture template defined further below. It decides /where/ in =notes.org=
+the new note lands based on the buffer capture was launched from:
+
+- If point was on a heading in any Org file other than =notes.org= (e.g.
+  a backlog item), the source heading gains an =:ID:= property (one-time,
+  via =org-id-get-create=), and the note lands under a top-level heading
+  in =notes.org= whose =:SOURCE_ID:= matches that ID. Repeated captures
+  from the same source all land under the same subtree — *even if the
+  source is later renamed*, because the link is by ID, not text.
+- Otherwise (capture from a code buffer, plain-text scratch, or
+  =notes.org= itself), the note falls back under the flat =* Notes=
+  heading created on demand by =systemhalted/org-goto-or-create-heading=.
+
+The matching =:PROPERTIES:= drawer is written inline rather than going
+through Org's property API because the heading hasn't been created at
+this point — we're writing it from scratch.
+
+#+begin_src emacs-lisp
 (defun systemhalted/org-notes-target ()
   "Position point in notes.org for a `file+function' capture target.
 When capture is launched from an Org heading outside notes.org, ensure that
@@ -1395,7 +1684,56 @@ from anywhere else, fall back to the flat `* Notes' heading."
                   "  :END:\n"))))
      (t
       (systemhalted/org-goto-or-create-heading "Notes")))))
+#+end_src
 
+** Main Org configuration
+
+The =org= =use-package= form is where everything declared above gets
+wired together. The interesting clusters:
+
+- *Global keys.* =C-c a= for the agenda, =C-c c= for capture, =C-c l=
+  for =org-store-link=. The mode hook turns on =visual-line-mode= so long
+  paragraphs wrap softly in any Org buffer.
+- *Display.* =org-startup-indented t= renders headings with virtual
+  indentation; =org-hide-emphasis-markers t= suppresses the surrounding
+  =/= / =*= / === characters on inline emphasis (cleaner for reading,
+  still typeable); =org-ellipsis " ..."= replaces the default =...=
+  folded-heading marker; =org-src-window-setup 'current-window= keeps
+  =C-c '= source edits in the same window instead of splitting.
+- *Babel safety.* =org-confirm-babel-evaluate t= prompts before
+  executing a code block — necessary because this file itself contains
+  Babel blocks that get evaluated on tangle.
+- *Task vocabulary.* =org-todo-keywords= names exactly the three states
+  declared in =systemhalted/org-task-states= above.
+
+The =:config= block sets four narrow choices and registers the four
+workflow hooks:
+
+- =org-agenda-files= is literally just =todo.org=. Agenda views show
+  /actionable/ work, never backlog reading or note thinking.
+- =org-refile-targets= is restricted to whatever is in
+  =org-agenda-files= so =C-c C-w= can never accidentally refile into
+  backlog or notes — promotion through =C-c P= is the only intentional
+  path from backlog to todo.
+- =org-capture-templates= defines =t= (single todo into =* Tasks=), a
+  =b=-prefixed sub-menu for backlog (Article/Book/Idea/Video/Course
+  routed to their respective headings), and =n= for notes (which
+  dispatches through =systemhalted/org-notes-target= above for
+  source-aware filing).
+- =org-agenda-custom-commands= adds one view, =n= for "Now", which
+  shows =IN-PROGRESS= first and then =TODO=. Most days that's the only
+  agenda view actually needed.
+
+Then the four hooks: =org-mode-hook= applies per-file constraints,
+=org-after-todo-state-change-hook= enforces the
+todo-only-in-todo-file rule, =find-file-hook= seeds backlog structure,
+and =after-init-hook= asserts the agenda scope at startup (plus an
+immediate call so it triggers even when the config is reloaded
+interactively rather than at init). =C-c P= is bound globally for
+promotion. Finally, Babel is loaded for Emacs Lisp, Java, Python, and
+shell — Jupyter is opt-in via its own subsection below.
+
+#+begin_src emacs-lisp
 (use-package org
   :ensure nil
   :bind
@@ -1471,7 +1809,27 @@ from anywhere else, fall back to the flat `* Notes' heading."
      (java . t)
      (python . t)
      (shell . t))))
+#+end_src
 
+** Org extensions and exporters
+
+Four built-in Org modules that the workflow above relies on:
+
+- =org-tempo= re-enables the short-form structure templates (=<s TAB= →
+  =#+begin_src ... #+end_src=, =<q TAB= → quote block, etc.), which were
+  unbundled into a separate module in Org 9.2.
+- =org-id= manages persistent =:ID:= properties.
+  =create-if-interactive= means =org-store-link= and the =%a= capture
+  escape lazily attach an =:ID:= the first time an item is linked — used
+  by =systemhalted/org-notes-target= above to key notes to their source
+  even after the source is renamed. =org-id-locations-file= keeps the
+  index file out of the project root.
+- =ox-md=, =ox-html=, =ox-latex= are the export backends used for
+  =C-c C-e m m= (Markdown), =C-c C-e h h= (HTML), =C-c C-e l l= (LaTeX
+  source), and =C-c C-e l p= (PDF, through =latexmk= configured in the
+  LaTeX section).
+
+#+begin_src emacs-lisp
 (use-package org-tempo
   :ensure nil
   :after org)
@@ -1497,7 +1855,24 @@ from anywhere else, fall back to the flat `* Notes' heading."
 (use-package ox-latex
   :ensure nil
   :after org)
+#+end_src
 
+** Jupyter — opt-in notebook support
+
+Jupyter integration is loaded lazily and enabled only when explicitly
+asked. Normal Org startup stays light: no notebook kernels, no
+=jupyter-server= state, no ZMQ socket handling. When a notebook
+workflow is needed, =C-c j= inside any Org-mode buffer registers
+=jupyter= as a Babel language for the current Emacs session.
+
+=systemhalted/org-babel-enable-jupyter= is the session-wide opener
+(adds =jupyter= to =org-babel-load-languages= and reloads them), and
+the =jupyter= =use-package= keeps the command list autoloaded but
+defers everything else until the first call. The keybinding is
+installed on =org-mode-map= rather than globally so it doesn't leak
+into non-Org buffers.
+
+#+begin_src emacs-lisp
 (defun systemhalted/org-babel-enable-jupyter ()
   "Enable Jupyter support for Org Babel in the current Emacs session."
   (interactive)
@@ -1574,24 +1949,55 @@ workflow is unaffected unless invoked explicitly."
 
 * Git and Documentation
 
-Magit is the Git interface because it is high value and isolated: one key opens
-the status buffer, and the package does not impose a broader workflow. Markdown
-and YAML are kept as direct file-mode support for common project documentation
-and configuration files.
+Three file-shape packages: Magit for Git, Markdown mode for prose
+documentation, YAML mode for configuration. None impose a workflow beyond
+their own file type, so they cohabit in one section.
+
+** Magit — Git through a status buffer
+
+[[https://magit.vc/][Magit]] is the only Git interface here because it is
+high-leverage and self-contained: =C-x g= opens the status buffer, every
+git operation has a discoverable keybinding from there (=s= stage, =u=
+unstage, =c c= commit, =b b= switch branch, =l l= log, =P p= push, =F u=
+pull), and there's no global behavior change outside that buffer. No
+custom hunks-on-save, no auto-commit, no smart-staging — explicit Git
+remains explicit.
 
 #+begin_src emacs-lisp
 (use-package magit
   :ensure t
   :bind
   ("C-x g" . magit-status))
+#+end_src
 
+** Markdown mode — README and prose docs
+
+Three file globs: =README.md= opens in =gfm-mode= (GitHub-flavored Markdown,
+which renders =\n= as line breaks and supports task-list checkboxes) since
+that's where the README convention lives; every other =.md= or =.markdown=
+file uses plain =markdown-mode=. The GFM split matters because writing
+README bullets that render correctly on GitHub requires the GFM-specific
+parsing.
+
+#+begin_src emacs-lisp
 (use-package markdown-mode
   :ensure t
   :mode
   (("README\\.md\\'" . gfm-mode)
    ("\\.md\\'" . markdown-mode)
    ("\\.markdown\\'" . markdown-mode)))
+#+end_src
 
+** YAML mode — configuration files
+
+YAML is whitespace-significant, so tab handling matters. =yaml-mode= covers
+both =.yml= and =.yaml=, plus the project-specific =Bogiefile= which is
+plain YAML under a non-standard name. The mode hook locks =tab-width= to
+=2= (the de facto YAML convention) and rebinds =RET= to
+=newline-and-indent= so a new key stays at the correct indent depth
+instead of dropping to column 0.
+
+#+begin_src emacs-lisp
 (use-package yaml-mode
   :ensure t
   :mode
@@ -1605,94 +2011,39 @@ and configuration files.
 
 * Programming
 
-Programming support is centered on LSP because Java, Python, and web projects
-all benefit from language-server features: diagnostics, jump-to-definition,
-rename, completion metadata, and formatting. =lsp-mode= owns the protocol,
-=lsp-ui= adds lightweight UI affordances, =lsp-java= configures JDT LS, and
-=lsp-pyright= provides Python analysis through Pyright. Debugging is layered on
-top through =dap-mode=, the Emacs front-end for the Debug Adapter Protocol;
-=dap-java= reuses the JDT LS that =lsp-java= already installs, so Java gets
-breakpoints and stepping with no extra server.
+Language intelligence is centered on =lsp-mode=: one protocol, one
+completion path through Corfu via =capf=, one diagnostics surface through
+Flycheck. =lsp-mode= owns the protocol, =lsp-ui= layers a few minimal
+in-buffer affordances, =lsp-java= drives JDT LS, =lsp-pyright= drives
+Pyright, and =dap-mode= reuses JDT LS for breakpoints in Java. The
+subsections below introduce each piece next to its rationale; a usage
+tutorial for the everyday LSP/DAP commands lives at the end of this
+section under =Using LSP and DAP=.
 
-This replaces older language-specific stacks such as Elpy/Tide/company-centered
-configuration. The goal is fewer parallel systems: Flycheck reports diagnostics,
-Yasnippet provides snippets, Corfu handles completion UI, and LSP supplies
-language intelligence. Web editing is split by file type: =web-mode= for
-HTML/TSX, =rjsx-mode= for JSX/JS, =typescript-mode= for TS, and built-in
-=css-mode= for CSS.
+This replaces older language-specific stacks (Elpy, Tide, company-*) — see
+=CLAUDE.md= for the deliberate-removal note. The goal is fewer parallel
+systems doing the same job.
 
-The LSP defaults below favor bounded memory over automatic UI richness. A Java
-editing session previously pushed the Emacs process above 50 GB of application
-memory; JDT LS itself is capped by =lsp-java-vmargs=, so the risk is Emacs
-retaining protocol messages, file watches, hover payloads, and completion
-metadata. Logs and IO history are capped, recursive file watchers are disabled,
-and workspaces shut down when their last buffer closes. Docs, code actions,
-project refreshes, and debugger UI remain available from explicit keybindings.
+** Process I/O and shell environment
 
-Shell scripts and shell dotfiles use the built-in =sh-mode=. =lsp-mode= ships a
-client for =bash-language-server= (no extra wrapper package needed), and
-Flycheck routes diagnostics through =shellcheck= when it is on =PATH=. Both
-are external binaries; install them once before opening a shell file:
+Two startup-time settings that the rest of the section depends on:
 
-#+begin_src sh
-# bash-language-server (npm, all platforms):
-npm install -g bash-language-server
-
-# shellcheck:
-# macOS, MacPorts:   sudo port install shellcheck
-# macOS, Homebrew:   brew install shellcheck
-# Fedora:            sudo dnf install ShellCheck
-# Ubuntu / Debian:   sudo apt install shellcheck
-#+end_src
-
-A small hook, =systemhalted/sh-pick-shell=, sets =sh-shell= to =zsh= for
-recognised zsh dotfiles (=.zshrc=, =.zshenv=, =.zprofile=, =.zlogin=,
-=.zlogout=, =*.zsh=) and to =bash= for =.bashrc= / =.bash_*= so font-lock
-matches the dialect. Ambiguous names like =.profile= are left to =sh-mode='s
-own detection (shebang or =$SHELL=).
-
-A short usage tutorial for both LSP and DAP lives at the end of this section,
-under =Using LSP and DAP=.
-
-Note on =lsp-completion-provider=: it is set to =:none=, not =:capf=, even
-though completion is very much wanted. =lsp-completion-mode= always registers
-=lsp-completion-at-point= on =completion-at-point-functions= regardless of
-this setting; the provider option only controls whether =lsp-mode= tries to
-auto-enable =company-mode=. Since this configuration uses Corfu (capf-based)
-and intentionally does not install company, =:capf= falls through to the
-company branch and emits *"Unable to autoconfigure company-mode."* once per
-LSP buffer. =:none= skips that branch while leaving the capf wired up.
-
-JDK locations are *not* hard-coded here. GUI Emacs --- on macOS, on Linux
-Wayland (PGTK), and on Linux X11 launched outside a terminal --- does not
-inherit the user's interactive shell environment, so things like =JAVA_HOME=
-and SDKMAN / Homebrew / MacPorts / asdf / distro-package =PATH= entries are
-missing from the Emacs process unless we copy them in. =exec-path-from-shell=
-does exactly that: it spawns a login + interactive shell, reads the named
-environment variables, and pushes them into Emacs at startup. With
-=JAVA_HOME= imported this way, =lsp-java= / JDT LS has a sane fallback:
-whichever JDK SDKMAN (or the distro's =update-alternatives=) currently
-considers default.
-
-Java buffers get one extra project-local layer before LSP starts. If a nearby
-=.sdkmanrc= contains =java=<version>= (or =maven=…=, =gradle=…=, or any other
-SDKMAN candidate), =global-sdkman-mode= --- from the local =sdkman.el=
-package at =~/Workspace/Personal/setup/sdkman.el/= --- applies the project
-candidates to the buffer's =process-environment=, =exec-path=, and =PATH=, sets
-=JAVA_HOME= / =MAVEN_HOME= / =GRADLE_HOME= as appropriate, points
-=lsp-java-java-path= at that JDK's =bin/java= so JDT LS itself launches with
-the project JDK, and sends the same JDK to JDT LS as the default
-=java.configuration.runtimes= entry. This keeps GUI Emacs startup generic while
-letting each Java project choose its own SDKMAN JDK. The Java language level
-still comes from the project model (Maven/Gradle/Eclipse metadata such as
-=maven.compiler.release= or =maven.compiler.source=), not from =JAVA_HOME=
-alone.
-
-The =java-mode= hook below only gates =lsp-deferred= against generated JDT LS
-support directories (workspace cache and server source). =lsp-deferred= itself
-does not start LSP until the buffer becomes visible, so the buffer-local
-SDKMAN state applied by =global-sdkman-mode= via =after-change-major-mode-hook=
-is already in place by the time JDT LS launches.
+- =read-process-output-max= controls the largest chunk Emacs reads from a
+  subprocess in one go. The default (4 KiB on most systems) is fine for
+  =grep= but pathological for =lsp-mode=, which streams large JSON
+  responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
+  per-response syscall count by ~250×, which is the single biggest
+  responsiveness win for Java buffers.
+- =exec-path-from-shell= imports =PATH=, =MANPATH=, and =JAVA_HOME= from
+  a login + interactive shell on startup. GUI Emacs (macOS, Linux Wayland
+  via PGTK, Linux X11 launched from outside a terminal) does *not*
+  inherit the interactive shell environment, so SDKMAN / Homebrew /
+  MacPorts / =update-alternatives= entries are otherwise invisible to
+  the Emacs process. SDKMAN's init only runs in interactive shells
+  (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
+  arguments are =-l -i= — both flags are needed to source the full
+  shell startup. The =:if= guard skips this in headless batch runs where
+  there's no shell to spawn.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
@@ -1707,12 +2058,36 @@ is already in place by the time JDT LS launches.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
   :config
   (exec-path-from-shell-initialize))
+#+end_src
 
+** Flycheck — diagnostics in =prog-mode=
+
+[[https://www.flycheck.org/][Flycheck]] is the single diagnostics surface.
+It activates on =prog-mode= entry and consults whatever checker is
+registered for the active major mode — bash through =shellcheck=,
+JavaScript through =eslint=, etc. For LSP-managed buffers, =lsp-mode=
+registers itself as a Flycheck checker automatically, so the same UI
+shows language-server diagnostics alongside linter output. Nothing to
+configure beyond the hook.
+
+#+begin_src emacs-lisp
 (use-package flycheck
   :ensure t
   :hook
   (prog-mode . flycheck-mode))
+#+end_src
 
+** Yasnippet — template expansion
+
+=yasnippet= turns named triggers into multi-line templates with tab stops
+and mirror fields; =yasnippet-snippets= ships a community-maintained
+collection covering every major mode used here. Both are enabled globally
+because LSP completion candidates can carry snippet payloads
+(=lsp-enable-snippet t= further below), and accepting one of those
+candidates expands through yasnippet — so the package needs to be live in
+every LSP buffer even when it's never invoked by name.
+
+#+begin_src emacs-lisp
 (use-package yasnippet
   :ensure t
   :config
@@ -1721,7 +2096,33 @@ is already in place by the time JDT LS launches.
 (use-package yasnippet-snippets
   :ensure t
   :after yasnippet)
+#+end_src
 
+** SDKMAN — project-local JDK selection
+
+JDK locations are *not* hard-coded. The local =sdkman.el= package at
+=~/Workspace/Personal/setup/sdkman.el/= ties Java projects to whichever
+JDK their =.sdkmanrc= names. When a Java buffer is visited,
+=global-sdkman-mode= reads the nearest =.sdkmanrc= and applies the listed
+SDKMAN candidates (=java=, =maven=, =gradle=, …) to the buffer's
+=process-environment=, =exec-path=, and =PATH=; sets =JAVA_HOME= /
+=MAVEN_HOME= / =GRADLE_HOME= as appropriate; and points
+=lsp-java-java-path= at that JDK's =bin/java= so JDT LS itself launches
+with the project's JDK rather than whatever SDKMAN considers default
+globally. The Java language level still comes from the project model
+(=maven.compiler.release=, Gradle toolchain config, Eclipse metadata),
+not =JAVA_HOME= alone.
+
+=systemhalted/lsp-deferred-unless-excluded= is the helper that
+=lsp-mode='s =java-mode= hook calls instead of plain =lsp-deferred=. It
+defers to =sdkman-lsp-java-excluded-file-p= to skip generated JDT LS
+support files (workspace cache, decompiled server source) — opening one
+of those for inspection shouldn't spin up a fresh JDT LS session.
+=lsp-deferred= itself waits for the buffer to become visible, so by the
+time JDT LS starts, the SDKMAN buffer-local state applied via
+=after-change-major-mode-hook= is already in place.
+
+#+begin_src emacs-lisp
 (use-package sdkman
   :load-path "~/Workspace/Personal/setup/sdkman.el/"
   :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
@@ -1733,7 +2134,56 @@ is already in place by the time JDT LS launches.
 Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   (unless (sdkman-lsp-java-excluded-file-p buffer-file-name)
     (lsp-deferred)))
+#+end_src
 
+** LSP-mode — protocol, completion, memory tuning
+
+[[https://emacs-lsp.github.io/lsp-mode/][lsp-mode]] is the protocol layer.
+It attaches to Java via =systemhalted/lsp-deferred-unless-excluded=
+(SDKMAN-aware) and to JS/TS/web/CSS via plain =lsp-deferred=. The
+non-default settings exist for two reasons:
+
+*Memory bounds.* A Java editing session previously pushed Emacs above
+50 GiB of resident memory; JDT LS itself is capped by =lsp-java-vmargs=,
+so the runaway growth came from Emacs retaining protocol messages, file
+watches, hover payloads, and completion metadata indefinitely:
+
+- =lsp-enable-file-watchers nil= and =lsp-file-watch-threshold 2000= stop
+  Emacs from registering recursive watchers on huge monorepos. JDT LS
+  has its own file watching; doing it again in Emacs is duplicated work
+  and unbounded notification noise.
+- =lsp-log-io nil= and =lsp-log-max 2000= keep the IO log tiny.
+  =lsp-io-messages-max 200= caps the kept-in-memory protocol history.
+- =lsp-keep-workspace-alive nil= shuts a workspace down when its last
+  buffer is killed, releasing the JDT LS process and its protocol state
+  immediately rather than at next GC.
+
+*Completion provider, the =:none= gotcha.* =lsp-completion-provider= is
+set to =:none=, *not* =:capf=, even though completion is wanted. The
+naming is misleading: =lsp-completion-mode= always registers
+=lsp-completion-at-point= on =completion-at-point-functions= regardless
+of this setting; the provider option only controls whether =lsp-mode=
+tries to auto-enable =company-mode=. With Corfu (capf-based) and no
+company installed, =:capf= still falls through to the company branch and
+warns "Unable to autoconfigure company-mode" once per LSP buffer.
+=:none= skips that branch entirely while leaving the capf wired up,
+which is what Corfu consumes.
+
+*Quiet UI by default.* =lsp-enable-symbol-highlighting nil=,
+=lsp-headerline-breadcrumb-enable nil=, =lsp-modeline-code-actions-enable nil=,
+=lsp-enable-on-type-formatting nil=, and the
+=lsp-completion-show-detail/-kind nil= pair drop the chatty defaults.
+Hover docs, code actions, symbol highlight, and on-type formatting are
+all available on demand via the bindings below; they're just not on
+constantly.
+
+The bindings hang off the standard =C-c l= prefix. =C-c C-f= is the
+format-buffer chord, =h h= hover docs, =i= toggles =corfu-popupinfo= for
+completion-side docs, =H= / =F= toggle the noisier features above on a
+per-session basis, =R= restarts the workspace, and =j u= refreshes the
+Java project model when the build file changes.
+
+#+begin_src emacs-lisp
 (use-package lsp-mode
   :ensure t
   :commands
@@ -1775,7 +2225,26 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   (lsp-enable-snippet t)
   (lsp-modeline-code-actions-enable nil)
   (lsp-response-timeout 30))
+#+end_src
 
+** LSP-UI — sideline and doc tweaks
+
+=lsp-ui= layers in-buffer affordances on top of =lsp-mode=. The defaults
+here keep almost everything off because the sideline and the perpetual
+docs popup were the worst contributors to flicker and CPU churn in long
+Java sessions: =lsp-ui-doc-enable nil= keeps hover docs out of the
+margin (use =C-c l h h= when you actually want them);
+=lsp-ui-doc-show-with-mouse nil= disables the hover-popup-on-mouse
+behavior; =lsp-ui-sideline-enable nil= and
+=lsp-ui-sideline-show-code-actions nil= drop the entire sideline
+visualization. =lsp-ui-doc-include-signature t= stays on so /when/ a doc
+popup is invoked explicitly, the function signature is included.
+
+The two =:custom-face= overrides make any docs popup blend with the Nord
+theme: transparent background, italic font-lock-string-face for the
+header.
+
+#+begin_src emacs-lisp
 (use-package lsp-ui
   :ensure t
   :after lsp-mode
@@ -1791,7 +2260,27 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   :custom-face
   (lsp-ui-doc-background ((t (:background unspecified))))
   (lsp-ui-doc-header ((t (:inherit (font-lock-string-face italic))))))
+#+end_src
 
+** LSP-Java — JDT LS configuration
+
+=lsp-java= configures Eclipse JDT LS. Four settings cover the project
+ergonomics:
+
+- =lsp-java-completion-guess-method-arguments nil= disables
+  placeholder-style method-arg generation. The auto-generated names
+  (=arg0=, =arg1=) are always wrong and removing them is more work
+  than typing the real names from scratch.
+- =lsp-java-configuration-update-build-configuration "interactive"=
+  prompts before re-syncing the Maven/Gradle project on POM/build-file
+  changes — surprising auto-sync churns the LSP workspace and steals
+  focus. =C-c l j u= triggers the refresh explicitly when wanted.
+- =lsp-java-server-install-dir= and =lsp-java-workspace-dir= are routed
+  under =eclipse.jdt.ls/= inside =user-emacs-directory= so JDT LS server
+  binaries and per-workspace caches stay out of the dotted home root
+  and are covered by =.gitignore=.
+
+#+begin_src emacs-lisp
 (use-package lsp-java
   :ensure t
   :after lsp-mode
@@ -1800,7 +2289,28 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   (lsp-java-configuration-update-build-configuration "interactive")
   (lsp-java-server-install-dir (expand-file-name "eclipse.jdt.ls/server/" user-emacs-directory))
   (lsp-java-workspace-dir (expand-file-name "eclipse.jdt.ls/workspace/" user-emacs-directory)))
+#+end_src
 
+** DAP-mode — Java debugging through JDT LS
+
+=dap-mode= is the Emacs Debug Adapter Protocol front end. Loading
+=dap-java= in =:config= wires it through the JDT LS that =lsp-java=
+already installs — no extra server. =C-c l d= opens the DAP hydra
+(stepping, breakpoints, watch). =dap-auto-configure-features= keeps the
+default four panes (sessions, locals, controls, tooltip); the others
+(REPL, expressions, breakpoints list) are available but not on by
+default.
+
+=dap-java--populate-default-args= resolves the main class, classpath,
+and debug-server metadata through synchronous JDT LS commands. Cold
+Maven imports can exceed the normal interactive LSP timeout (30 s) even
+when the server is healthy, so =systemhalted/with-longer-dap-java-timeout=
+wraps that call with a 60 s =lsp-response-timeout=. =advice-remove=
+followed by =advice-add= makes the install idempotent under config
+reloads — applying the advice twice would otherwise double-wrap and
+inflate the timeout to 120 s.
+
+#+begin_src emacs-lisp
 (defun systemhalted/with-longer-dap-java-timeout (orig-fun &rest args)
   "Call ORIG-FUN with a longer timeout for DAP Java launch metadata."
   ;; `dap-java-debug' resolves main class, classpath, and debug-server
@@ -1824,7 +2334,23 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   (advice-add 'dap-java--populate-default-args
               :around
               #'systemhalted/with-longer-dap-java-timeout))
+#+end_src
 
+** Python — Pyright and the REPL
+
+=lsp-pyright= drives [[https://github.com/microsoft/pyright][Pyright]] for
+type-aware navigation and diagnostics in =python-mode=. The =python-mode=
+hook =require='s =lsp-pyright= lazily (so opening a non-Python file
+doesn't pay the load cost) and then calls =lsp-deferred=.
+=lsp-pyright-langserver-command "pyright"= expects the executable on
+=PATH= — install via =pip install pyright= or =npm install -g pyright=
+(both work, the npm install is what Microsoft ships).
+
+The built-in =python= mode is configured separately just to pin the
+REPL command to =python3= — distros where =python= still maps to Python 2
+would otherwise launch the wrong interpreter on =C-c C-p=.
+
+#+begin_src emacs-lisp
 (use-package lsp-pyright
   :ensure t
   :after lsp-mode
@@ -1839,7 +2365,34 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   :ensure nil
   :custom
   (python-shell-interpreter "python3"))
+#+end_src
 
+** Web editing — one mode per file type
+
+The web stack is intentionally split by file extension rather than
+collapsed onto a single web-or-JS mega-mode. Each mode owns the file
+types it's actually good at:
+
+- =web-mode= handles =.html= and =.tsx= — markup-heavy templates where
+  the JSX-in-TS embedding needs the same multi-language-block awareness
+  as templated HTML. Indent offsets are all locked to 2.
+- =rjsx-mode= handles =.jsx= and =.js= — JSX-aware editing built on
+  =js2-mode=. =js2-mode-show-parse-errors nil= silences the on-by-default
+  inline error highlighting; Flycheck is the diagnostics surface for the
+  whole stack, and =js2-mode='s parser is too noisy on modern JS that
+  uses optional chaining, decorators, etc.
+- =typescript-mode= handles =.ts= — plain TS, no JSX. =.tsx= goes to
+  =web-mode= above because the JSX-in-TS combo benefits from web-mode's
+  block awareness more than typescript-mode's stricter TS grammar.
+- =css-mode= is built-in and configured just to set =css-indent-offset=
+  to 2 and route through =lsp-deferred= so the language server handles
+  diagnostics and navigation.
+
+All four feed into =lsp-mode='s hook (the =js-mode rjsx-mode
+typescript-mode web-mode css-mode= group up above), so jump-to-def,
+rename, and completion work uniformly across the stack.
+
+#+begin_src emacs-lisp
 (use-package web-mode
   :ensure t
   :mode
@@ -1873,7 +2426,38 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
   (css-mode . lsp-deferred)
   :custom
   (css-indent-offset 2))
+#+end_src
 
+** Shell scripts and dotfiles
+
+Shell scripts and shell dotfiles use the built-in =sh-mode=. =lsp-mode=
+ships a client for =bash-language-server= (no wrapper package needed) and
+Flycheck routes diagnostics through =shellcheck= when it's on =PATH=.
+Both are external; install before opening a shell file:
+
+#+begin_src sh
+# bash-language-server (npm, all platforms):
+npm install -g bash-language-server
+
+# shellcheck:
+# macOS, MacPorts:   sudo port install shellcheck
+# macOS, Homebrew:   brew install shellcheck
+# Fedora:            sudo dnf install ShellCheck
+# Ubuntu / Debian:   sudo apt install shellcheck
+#+end_src
+
+=sh-mode= ships with shebang and =$SHELL= detection that handles ordinary
+=.sh= files correctly, so this section only teaches it about the
+extensionless zsh dotfiles (=.zshrc=, =.zshenv=, =.zprofile=, =.zlogin=,
+=.zlogout=) — files where the name alone is the only hint to the dialect.
+=systemhalted/sh-pick-shell= then runs on =sh-mode-hook=, matches against
+a tight regex of known names, and calls =sh-set-shell= with =zsh= for
+those plus any =*.zsh= file, or =bash= for =.bashrc= / =.bash_profile= /
+=.bash_login= / =.bash_logout= / =.bash_aliases=. Ambiguous names like
+=.profile= or =foo.zshrc= (which could be a user's own template) are left
+alone so =sh-mode='s shebang/=$SHELL= detection still gets a chance.
+
+#+begin_src emacs-lisp
 (use-package sh-script
   :ensure nil
   :mode (("\\.zshrc\\'"    . sh-mode)
@@ -1897,7 +2481,25 @@ Matching only well-known names avoids clobbering `sh-mode''s own detection
           (sh-set-shell "zsh" nil nil))
          ((string-match-p "\\`\\.?bash\\(?:rc\\|_profile\\|_login\\|_logout\\|_aliases\\)\\'" name)
           (sh-set-shell "bash" nil nil)))))))
+#+end_src
 
+** JSON — built-in =js-json-mode= when available
+
+Emacs 29 ships =js-json-mode= as a separate JSON-only major mode (faster
+than reusing =js-mode= for JSON). When it's available, =.json= files use
+it and get LSP through =lsp-deferred= — the bash-language-server stack
+also handles JSON schema validation through =vscode-json-languageserver=
+when that binary is installed via =npm install -g
+vscode-langservers-extracted=. The =fboundp= guard means Emacs 28 and
+earlier silently keep the previous behavior (=javascript-mode= or
+=js-mode= via the default =auto-mode-alist=).
+
+The trailing =;;; systemhalted.el ends here= comment is the conventional
+file footer; it's emitted here at the end of this code chunk because of
+how the original monolithic block tangled, but it does not mark the
+literal end of the tangled file (more code follows in later sections).
+
+#+begin_src emacs-lisp
 (when (fboundp 'js-json-mode)
   (add-to-list 'auto-mode-alist '("\\.json\\'" . js-json-mode))
   (add-hook 'js-json-mode-hook #'lsp-deferred))
@@ -1905,11 +2507,15 @@ Matching only well-known names avoids clobbering `sh-mode''s own detection
 ;;; systemhalted.el ends here
 #+end_src
 
-**** Associate Java and related files with java-mode
-=lsp-java= caches JDK source content under filenames like
-=BlockingQueue.java(<java.util.concurrent(BlockingQueue.class)=.
-The literal trailing ')' keeps =`\\.java\\`= from matching, so teach
-=auto-mode-alist= about the parenthesized form explicitly.
+** JDK source filename association
+
+=lsp-java= caches JDK source content under filenames shaped like
+=BlockingQueue.java(<java.util.concurrent(BlockingQueue.class)= — Eclipse's
+way of encoding the originating archive in the path. The literal trailing
+=)= prevents =\\.java\\'= (the standard java-mode glob) from matching, so
+those buffers open in fundamental-mode without syntax highlighting. The
+extra =auto-mode-alist= entry teaches Emacs about the parenthesized form
+explicitly.
 
 #+begin_src emacs-lisp
   ;; lsp-java caches JDK source content under filenames like
@@ -2067,29 +2673,20 @@ gitignored.
 
 * LaTeX
 
-LaTeX support is split across three layers: AUCTeX for editing and
-compilation, =preview-latex= (bundled with AUCTeX) for inline math and
-figure previews inside the source buffer, and =latexmk= as the build
-driver so reruns for cross-references and bibliographies happen
-automatically. RefTeX is enabled on top for label, reference, and
-citation completion --- it is built in and integrates with AUCTeX
-without extra configuration.
+Three layers: AUCTeX for editing and compilation, =auctex-latexmk= so
+=latexmk= drives the build (handling cross-reference and bibliography
+reruns automatically), and RefTeX for label / reference / citation
+completion. The compiled PDF opens in the OS default viewer instead of
+=pdf-tools= — fast to install, enough for the edit → compile → read →
+save loop. Org's PDF export is rerouted through the same =latexmk=
+command at the end of the section.
 
-The compiled PDF opens in the OS's default PDF viewer: =Preview.app= on
-macOS via =open -a=, and whatever is registered for =application/pdf= on
-Linux via =xdg-open= (Evince on GNOME, Okular on KDE, Atril on MATE, etc.).
-This avoids the =pdf-tools= build chain (poppler + epdfinfo compile) and
-is enough for the edit -> compile -> read -> save workflow. =pdf-tools=
-can be turned on later for in-Emacs viewing and bidirectional SyncTeX;
-the commented build dependencies below show the exact swap.
+** Installation — TeX distribution
 
-Org's PDF export is rerouted through =latexmk= so =C-c C-e l p= in any
-=.org= file gets the same robust build behavior as =.tex= files
-(handles =\ref=, =\cite=, and TOC reruns automatically).
-
-External binaries: a TeX distribution providing =pdflatex= / =xelatex=
-/ =latexmk= is required. Install per platform; the full distribution
-(~4 GB) is preferred so missing-package chasing never blocks a build.
+A working TeX Live providing =pdflatex= / =xelatex= / =latexmk= must be
+on the shell =PATH= Emacs inherits (via =exec-path-from-shell=,
+configured in the Programming section). The full distribution (~4 GB)
+is preferred so missing-package chasing never blocks a build.
 
 #+begin_src sh
 # TeX Live (full distribution + latexmk):
@@ -2106,14 +2703,46 @@ External binaries: a TeX distribution providing =pdflatex= / =xelatex=
 # Then in Emacs: M-x pdf-tools-install
 #+end_src
 
-After installation, the TeX Live =bin= directory must be on the shell
-=PATH= that Emacs inherits (via =exec-path-from-shell=, configured in
-the Programming section). On macOS the installer adds =/Library/TeX/texbin=
-to =/etc/paths.d/=, which login shells pick up automatically. On Linux
-the distro package installs into =/usr/bin= so it is already on =PATH=
-without extra setup. If =M-x executable-find RET latexmk= returns =nil=
-after install, restart the shell (or Emacs) so the new =PATH= entry is
-visible.
+On macOS the installer adds =/Library/TeX/texbin= to =/etc/paths.d/=,
+which login shells pick up automatically. On Linux the distro package
+installs into =/usr/bin= so it's already on =PATH= without extra setup.
+If =M-x executable-find RET latexmk= returns =nil= after installing,
+restart the shell (or Emacs) so the new =PATH= entry is visible.
+
+** AUCTeX — editing and compilation
+
+[[https://www.gnu.org/software/auctex/][AUCTeX]] replaces the built-in
+=latex-mode= with =LaTeX-mode=, a richer environment that knows about
+TeX command structure, environments, sections, and math. The mode hooks
+turn on three things on every LaTeX buffer:
+
+- =turn-on-reftex= activates RefTeX (configured separately further down)
+  for label / cite / ref completion.
+- =LaTeX-math-mode= adds the ` (backtick) math-insert prefix —
+  =` a= → =\alpha=, =` s= → =\sigma=, etc.
+- =TeX-source-correlate-mode= enables SyncTeX so source ↔ PDF location
+  jumps work (=TeX-source-correlate-start-server t= leaves the SyncTeX
+  server running so viewers can call back into Emacs).
+
+The custom settings:
+
+- =TeX-auto-save t= and =TeX-parse-self t= cache parsed buffer
+  structure across edits so completion stays responsive.
+- =TeX-master nil= asks AUCTeX to prompt for the master file (the file
+  that =\input='s the others) the first time per directory rather than
+  guessing — wrong here means rebuilds against the wrong root.
+- =TeX-PDF-mode t= compiles to PDF, not DVI; the mode-line shows
+  =LaTeX/P= when it's active.
+- =TeX-command-default "LatexMk"= makes =C-c C-c= default to the
+  =LatexMk= command (registered by =auctex-latexmk= in the next
+  subsection) instead of plain =pdflatex=.
+
+The =:config= block sets up the PDF viewer. On macOS, =open -a
+Preview.app= launches Preview; on Linux/BSD, =xdg-open= dispatches to
+whatever the desktop has registered for =application/pdf= (Evince on
+GNOME, Okular on KDE, Atril on MATE, etc.). Switching to =pdf-tools=
+later is a matter of installing it (see the shell block above) and
+changing this selection to ='((output-pdf "PDF Tools"))=.
 
 #+begin_src emacs-lisp
 (use-package tex
@@ -2142,19 +2771,59 @@ visible.
             TeX-view-program-list      '(("Preview" "open -a Preview.app %o")))
     (setq TeX-view-program-selection '((output-pdf "xdg-open"))
           TeX-view-program-list      '(("xdg-open" "xdg-open %o")))))
+#+end_src
 
+** AUCTeX-latexmk — robust build driver
+
+[[https://github.com/tom-tan/auctex-latexmk][auctex-latexmk]] registers a
+=LatexMk= command with AUCTeX so =C-c C-c → LatexMk → RET= invokes
+=latexmk= instead of stopping after the first =pdflatex= pass. =latexmk=
+handles the reruns for cross-references (=\ref=, =\pageref=), citations
+(=\cite=, =\bibliography=), and table-of-contents updates automatically;
+without it, the user has to press =C-c C-c= repeatedly until references
+stop changing. =auctex-latexmk-setup= wires the command into AUCTeX's
+command list at load time.
+
+#+begin_src emacs-lisp
 (use-package auctex-latexmk
   :ensure t
   :after tex
   :config
   (auctex-latexmk-setup))
+#+end_src
 
+** RefTeX — labels, references, citations
+
+RefTeX is built into Emacs and ships with the AUCTeX integration glue
+already written; only two settings are needed.
+=reftex-plug-into-AUCTeX t= tells RefTeX to take over =\ref=, =\cite=,
+and =\label= insertion inside AUCTeX buffers — the picker UIs that the
+LaTeX tutorial demonstrates with =C-c (=, =C-c )=, =C-c [=, and
+=C-c ==. =reftex-default-bibliography nil= leaves the bibliography
+list empty so RefTeX reads it from the =\bibliography{...}= directive
+in each document rather than from a globally-configured file —
+correct because different =.tex= files use different =.bib= sources.
+
+#+begin_src emacs-lisp
 (use-package reftex
   :ensure nil
   :custom
   (reftex-plug-into-AUCTeX t)
   (reftex-default-bibliography nil))
+#+end_src
 
+** Org PDF export via latexmk
+
+The Org exporter's default PDF process is a hard-coded
+=pdflatex → bibtex → pdflatex × 2= chain that doesn't always
+converge on references or citations. Replacing
+=org-latex-pdf-process= with a single =latexmk= invocation lets
+=C-c C-e l p= in any =.org= file get the same correctness guarantees
+=.tex= files already have. =-pdf= forces PDF output;
+=-interaction=nonstopmode= prevents prompts from blocking the build;
+=-output-directory=%o %f= keeps Org's chosen output directory.
+
+#+begin_src emacs-lisp
 ;; Route Org's PDF export through latexmk so cross-refs and citations
 ;; resolve in one C-c C-e l p, matching the AUCTeX build above.
 (with-eval-after-load 'ox-latex
