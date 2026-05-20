@@ -1048,13 +1048,23 @@ having to remember or look them up.
 enough that it surfaces during a hesitation, long enough that it stays out
 of the way during fluent typing of a known chord.
 
+By default which-key truncates command names at 27 characters, so entries
+like =markdown-follow-thing-at-point= or =markdown-outline-next-same-level=
+show up as =markdown-follow-thing-at-..=. Disabling
+=which-key-max-description-length= keeps the full names, and widening the
+side-window cap to half the frame gives them room to render without
+wrapping. The popup still shrinks to fit when fewer keys are bound.
+
 #+begin_src emacs-lisp
   (use-package which-key
     :ensure t
     :config
     (which-key-mode 1)
     (setq which-key-idle-delay 0.4
-  	which-key-sort-order 'which-key-description-order))
+  	which-key-sort-order 'which-key-description-order
+  	which-key-max-description-length nil
+  	which-key-side-window-max-width 0.5
+  	which-key-allow-imprecise-window-fit nil))
 #+end_src
 
 * Org Mode
