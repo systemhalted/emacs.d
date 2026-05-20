@@ -94,6 +94,18 @@ Nord is the preferred theme. Theme loading disables previously enabled themes
 first because repeated config reloads should not stack faces or leave stale theme
 state behind.
 
+Long-running Emacs sessions can become memory-bound if redisplay is forced to
+combine expensive features in large or visually complex buffers. Line numbers are
+therefore enabled only for ordinary local programming buffers, and =so-long=
+protects buffers with pathological long lines. If the UI starts to degrade,
+=C-c != runs =systemhalted/emergency-ui-reset= to disable expensive UI/runtime
+features and force a garbage collection. If Emacs is unresponsive on macOS,
+sample the process from a terminal with:
+
+#+begin_src sh
+sample <pid> 5 -file /tmp/emacs-hang-sample.txt
+#+end_src
+
 #+begin_src emacs-lisp
   (setq inhibit-startup-screen t
         initial-scratch-message nil
@@ -114,6 +126,9 @@ state behind.
   (set-language-environment 'utf-8)
   (set-default-coding-systems 'utf-8)
 
+  (defgroup systemhalted nil
+    "Personal Emacs configuration."
+    :group 'convenience)
 
   (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
   (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
@@ -128,9 +143,63 @@ state behind.
   (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
   (add-to-list 'default-frame-alist '(fullscreen . fullboth))
 
-  (global-display-line-numbers-mode 1)
-  (dolist (hook '(org-mode-hook term-mode-hook shell-mode-hook eshell-mode-hook))
-    (add-hook hook (lambda () (display-line-numbers-mode -1))))
+  (defcustom systemhalted/line-number-max-buffer-size (* 1024 1024)
+    "Maximum buffer size where line numbers are enabled automatically."
+    :type 'integer
+    :group 'systemhalted)
+
+  (defcustom systemhalted/line-number-max-line-length 1000
+    "Maximum sampled line length where line numbers are enabled automatically."
+    :type 'integer
+    :group 'systemhalted)
+
+  (defun systemhalted/long-line-buffer-p ()
+    "Return non-nil when the current buffer has unusually long sampled lines."
+    (save-excursion
+      (save-restriction
+        (widen)
+        (goto-char (point-min))
+        (let ((limit (save-excursion
+                       (forward-line 2000)
+                       (point)))
+              (too-long nil))
+          (while (and (not too-long) (< (point) limit))
+            (let ((length (- (line-end-position) (line-beginning-position))))
+              (when (> length systemhalted/line-number-max-line-length)
+                (setq too-long t)))
+            (forward-line 1))
+          too-long))))
+
+  (defun systemhalted/generated-export-buffer-p ()
+    "Return non-nil when the current buffer visits a generated config export."
+    (and buffer-file-name
+         (member (file-name-nondirectory buffer-file-name)
+                 '("systemhalted.md" "systemhalted.html" "systemhalted.tex"))))
+
+  (defun systemhalted/display-line-numbers-eligible-p ()
+    "Return non-nil when line numbers are useful and unlikely to hurt redisplay."
+    (and (derived-mode-p 'prog-mode)
+         buffer-file-name
+         (not (file-remote-p buffer-file-name))
+         (not (systemhalted/generated-export-buffer-p))
+         (< (buffer-size) systemhalted/line-number-max-buffer-size)
+         (not (systemhalted/long-line-buffer-p))
+         (not (minibufferp))))
+
+  (defun systemhalted/display-line-numbers-maybe ()
+    "Enable line numbers only in normal local code buffers."
+    (when (systemhalted/display-line-numbers-eligible-p)
+      (display-line-numbers-mode 1)))
+
+  (defun systemhalted/display-line-numbers-disable-all ()
+    "Disable line numbers in every live buffer."
+    (interactive)
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (when (bound-and-true-p display-line-numbers-mode)
+          (display-line-numbers-mode -1)))))
+
+  (add-hook 'prog-mode-hook #'systemhalted/display-line-numbers-maybe)
 
   (column-number-mode 1)
   (display-time-mode 1)
@@ -140,6 +209,91 @@ state behind.
   (save-place-mode 1)
   (recentf-mode 1)
   (global-auto-revert-mode 1)
+
+  (use-package seq
+    :ensure nil)
+
+  (use-package so-long
+    :ensure nil
+    :config
+    (global-so-long-mode 1))
+
+  (use-package server
+    :ensure nil
+    :config
+    (unless (or noninteractive (server-running-p))
+      (server-start)))
+
+  (defun systemhalted/buffer-longest-line-sample (&optional line-limit)
+    "Return the longest line length found in the first LINE-LIMIT lines."
+    (save-excursion
+      (save-restriction
+        (widen)
+        (goto-char (point-min))
+        (let ((remaining (or line-limit 2000))
+              (longest 0))
+          (while (and (> remaining 0) (not (eobp)))
+            (setq longest (max longest (- (line-end-position) (line-beginning-position))))
+            (setq remaining (1- remaining))
+            (forward-line 1))
+          longest))))
+
+  (defun systemhalted/active-minor-modes ()
+    "Return active minor modes for the current buffer."
+    (seq-filter (lambda (mode)
+                  (and (boundp mode) (symbol-value mode)))
+                minor-mode-list))
+
+  (defun systemhalted/memory-summary ()
+    "Return a compact memory summary for diagnostics."
+    (cond
+     ((fboundp 'memory-use-counts)
+      (memory-use-counts))
+     (t
+      (car (garbage-collect)))))
+
+  (defun systemhalted/diagnostics ()
+    "Return runtime diagnostics for investigating slow or memory-heavy sessions."
+    (interactive)
+    (let ((report
+           `((uptime-seconds . ,(float-time (time-subtract (current-time) before-init-time)))
+             (current-buffer . ,(buffer-name))
+             (major-mode . ,major-mode)
+             (buffer-file . ,buffer-file-name)
+             (buffer-size . ,(buffer-size))
+             (line-count . ,(count-lines (point-min) (point-max)))
+             (longest-line-sample . ,(systemhalted/buffer-longest-line-sample))
+             (display-line-numbers . ,(bound-and-true-p display-line-numbers-mode))
+             (active-minor-modes . ,(systemhalted/active-minor-modes))
+             (lsp-mode . ,(bound-and-true-p lsp-mode))
+             (timers . ,(length timer-list))
+             (idle-timers . ,(length timer-idle-list))
+             (garbage-collections . ,gcs-done)
+             (memory . ,(systemhalted/memory-summary)))))
+      (when (called-interactively-p 'interactive)
+        (message "%s" report))
+      report))
+
+  (defun systemhalted/emergency-ui-reset ()
+    "Disable expensive UI/runtime features and run garbage collection."
+    (interactive)
+    (systemhalted/display-line-numbers-disable-all)
+    (when (bound-and-true-p global-auto-revert-mode)
+      (global-auto-revert-mode -1))
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (when (bound-and-true-p flycheck-mode)
+          (ignore-errors (flycheck-mode -1)))
+        (when (bound-and-true-p lsp-mode)
+          (ignore-errors (lsp-disconnect)))
+        (when (bound-and-true-p mixed-pitch-mode)
+          (ignore-errors (mixed-pitch-mode -1)))
+        (when (bound-and-true-p olivetti-mode)
+          (ignore-errors (olivetti-mode -1)))))
+    (garbage-collect)
+    (message "Emergency UI reset complete: %S" (systemhalted/memory-summary)))
+
+  (global-set-key (kbd "C-c !") #'systemhalted/emergency-ui-reset)
 
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
 
@@ -922,6 +1076,18 @@ Jupyter support is opt-in. Normal Org startup should stay light and quiet; when 
 notebook workflow is needed, =C-c j= enables the Jupyter Babel integration for
 that session.
 
+Org export is available for common document formats:
+
+- =C-c C-e m m= exports the current Org file to Markdown.
+- =C-c C-e h h= exports the current Org file to HTML.
+- =C-c C-e l l= exports the current Org file to LaTeX source.
+- =C-c C-e l p= exports the current Org file to PDF through LaTeX.
+
+For this configuration, run those commands from =systemhalted.org=. Markdown,
+HTML, and LaTeX source exports are written next to the Org file as
+=systemhalted.md=, =systemhalted.html=, and =systemhalted.tex=. PDF export uses
+the =latexmk= setup in the LaTeX section.
+
 ** Tutorial: Using the Minimal Org Workflow
 
 This workflow has three places for information. Use them literally:
@@ -1031,7 +1197,7 @@ Notes are not tasks. The captured body also contains a backlink (=%a=) so
   :END:
 ** Kafka delivery guarantees
    Exactly-once is a coordination property, not just a producer setting.
-   [[id:7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a][Designing Data-Intensive Applications]]
+   =[[id:7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a][Designing Data-Intensive Applications]]=
 
 * Notes
 ** A standalone thought captured from a code buffer
@@ -1238,13 +1404,6 @@ from anywhere else, fall back to the flat `* Notes' heading."
   (org-todo-keywords
    '((sequence "TODO" "IN-PROGRESS" "|" "DONE")))
   :config
-  (require 'org-tempo)
-  ;; Stable IDs let notes link back to a backlog item that is later renamed or
-  ;; reordered. `create-if-interactive' means `org-store-link' and the %a capture
-  ;; escape lazily attach an :ID: property the first time an item is linked.
-  (require 'org-id)
-  (setq org-id-link-to-org-use-id 'create-if-interactive
-        org-id-locations-file (expand-file-name ".org-id-locations" user-emacs-directory))
   ;; Agenda is only for execution. Backlog and notes stay out of the task view.
   (setq org-agenda-files
         (list (systemhalted/org-file "todo.org"))
@@ -1300,6 +1459,32 @@ from anywhere else, fall back to the flat `* Notes' heading."
      (java . t)
      (python . t)
      (shell . t))))
+
+(use-package org-tempo
+  :ensure nil
+  :after org)
+
+(use-package org-id
+  :ensure nil
+  :after org
+  ;; Stable IDs let notes link back to a backlog item that is later renamed or
+  ;; reordered. `create-if-interactive' means `org-store-link' and the %a capture
+  ;; escape lazily attach an :ID: property the first time an item is linked.
+  :custom
+  (org-id-link-to-org-use-id 'create-if-interactive)
+  (org-id-locations-file (expand-file-name ".org-id-locations" user-emacs-directory)))
+
+(use-package ox-md
+  :ensure nil
+  :after org)
+
+(use-package ox-html
+  :ensure nil
+  :after org)
+
+(use-package ox-latex
+  :ensure nil
+  :after org)
 
 (defun systemhalted/org-babel-enable-jupyter ()
   "Enable Jupyter support for Org Babel in the current Emacs session."
