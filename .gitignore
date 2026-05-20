@@ -27,6 +27,7 @@ ido.last
 ido.last~
 network-security.data
 places
+*.eld
 projectile-bookmarks.eld
 projectile.cache
 projects
