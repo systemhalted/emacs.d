@@ -85,6 +85,10 @@ Warnings buffer is silenced. Messages are still written to the
 This section keeps editor behavior predictable before adding packages. The UI is
 quiet, frames start fullscreen, runtime files are routed under =~/.emacs.d/=, and
 reload/visit commands make this literate file easy to edit from inside Emacs.
+Lock files (=.#filename= symlinks Emacs drops next to a buffer on first edit) are
+disabled outright: this is a single-user setup where the concurrent-edit warning
+effectively never fires, and the symlinks confuse external watchers (bundlers,
+file-system watchers, language servers, Git GUIs).
 =C-h T= surfaces the tutorial subtrees from this file as read-only indirect
 buffers, the same way =C-h t= opens the built-in Emacs tutorial — the docs
 live next to the code that binds them, and the buffer renders as Org so tables,
@@ -116,6 +120,7 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
         backup-by-copying t
         backup-directory-alist `(("." . ,(expand-file-name "backups/" user-emacs-directory)))
         auto-save-file-name-transforms `((".*" ,(expand-file-name "auto-save-list/" user-emacs-directory) t))
+        create-lockfiles nil
         delete-old-versions t
         kept-new-versions 3
         kept-old-versions 2
@@ -296,9 +301,6 @@ sample <pid> 5 -file /tmp/emacs-hang-sample.txt
   (global-set-key (kbd "C-c !") #'systemhalted/emergency-ui-reset)
 
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
-
-  ;;enable cua mode
-  (cua-mode 1)
 
   ;; enable windmove, for easy navigation between open windows
   (use-package windmove)
