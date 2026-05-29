@@ -2101,7 +2101,7 @@ every LSP buffer even when it's never invoked by name.
 ** SDKMAN — project-local JDK selection
 
 JDK locations are *not* hard-coded. The local =sdkman.el= package at
-=~/Workspace/Personal/setup/sdkman.el/= ties Java projects to whichever
+the sibling =sdkman.el= checkout next to the real =emacs.d= clone ties Java projects to whichever
 JDK their =.sdkmanrc= names. When a Java buffer is visited,
 =global-sdkman-mode= reads the nearest =.sdkmanrc= and applies the listed
 SDKMAN candidates (=java=, =maven=, =gradle=, …) to the buffer's
@@ -2124,7 +2124,8 @@ time JDT LS starts, the SDKMAN buffer-local state applied via
 
 #+begin_src emacs-lisp
 (use-package sdkman
-  :load-path "~/Workspace/Personal/setup/sdkman.el/"
+  :preface
+  (add-to-list 'load-path (expand-file-name "../sdkman.el" (file-truename user-emacs-directory)))
   :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
   :init
   (global-sdkman-mode 1))

@@ -2,9 +2,11 @@
 ;;; Commentary:
 
 ;;; Code:
-;; OrgBabel
-(org-babel-load-file "~/.emacs.d/systemhalted.org")
-;; -OrgBabel
+(let ((config-el (expand-file-name "systemhalted.el" user-emacs-directory))
+      (config-org (expand-file-name "systemhalted.org" user-emacs-directory)))
+  (if (file-exists-p config-el)
+      (load config-el nil 'nomessage)
+    (org-babel-load-file config-org)))
 (put 'downcase-region 'disabled nil)
 (provide 'init)
 ;;; init.el ends here
