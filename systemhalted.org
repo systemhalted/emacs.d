@@ -2311,6 +2311,31 @@ followed by =advice-add= makes the install idempotent under config
 reloads — applying the advice twice would otherwise double-wrap and
 inflate the timeout to 120 s.
 
+JPMS-modular Maven modules need a second fix. When a module declares
+itself in =module-info.java= (e.g. =module kisoku.api=), JDT LS's
+=vscode.java.resolveMainClass= returns the *module-qualified* main class
+=kisoku.api/in.systemhalted.kisoku.api.Test=. Upstream
+=dap-java--populate-launch-args= calls =vscode.java.resolveClasspath=,
+which returns a two-element sequence =[modulePaths classPaths]=, but keeps
+only =classPaths= (=cl-second=) and pins =:modulePaths= to an empty
+vector. A module-qualified class launched in classpath mode (=java -cp …
+kisoku.api/in.systemhalted.kisoku.api.Test=) makes the JVM rewrite =/= to
+=.=, yielding =ClassNotFoundException= and a failed jdwp handshake.
+=systemhalted/dap-java-add-module-paths= advises the launch populator with
+=:filter-return= — the cleanest hook because that function returns the
+finished conf plist — re-resolves the classpath, and when =modulePaths=
+(=cl-first=) is non-empty sets =:modulePaths= forcefully. It must use
+=plist-put=, not =dap--put-if-absent=: the template's pre-set empty vector
+is non-nil, so =dap--put-if-absent= (which only fills =nil= slots) would
+never replace it. With real module paths in place the bundled java-debug
+adapter assembles =--module-path … -m module/Class= itself. For
+non-modular projects =modulePaths= comes back empty and the conf is
+returned untouched, so ordinary classpath launches are unaffected. Use the
+plain *Java Run Configuration* template for modular modules; the
+*compile/attach* variant hand-rolls its own =java -cp … <mainClass>=
+command and is not module-aware. This is a workaround for an upstream
+=lsp-java= bug; remove the advice once it is fixed there.
+
 #+begin_src emacs-lisp
 (defun systemhalted/with-longer-dap-java-timeout (orig-fun &rest args)
   "Call ORIG-FUN with a longer timeout for DAP Java launch metadata."
@@ -2319,6 +2344,41 @@ inflate the timeout to 120 s.
   ;; exceed the normal interactive LSP timeout without implying server failure.
   (let ((lsp-response-timeout 60))
     (apply orig-fun args)))
+
+(defun systemhalted/dap-java-add-module-paths (conf)
+  "Populate :modulePaths in CONF for JPMS-modular Java launch configs.
+
+`dap-java--populate-launch-args' resolves the classpath via
+`vscode.java.resolveClasspath', which returns a two-element sequence
+[MODULE-PATHS CLASS-PATHS].  Upstream keeps only CLASS-PATHS (cl-second)
+and forces :modulePaths to an empty vector, so a module declared in a
+`module-info.java' is launched in classpath mode with a module-qualified
+main class (e.g. \"kisoku.api/in.systemhalted.kisoku.api.Test\").  The JVM
+then rewrites \"/\" to \".\" and fails with ClassNotFoundException before
+the jdwp handshake.
+
+This filter re-resolves the classpath, and when MODULE-PATHS (cl-first)
+is non-empty sets :modulePaths forcefully (plist-put, not
+`dap--put-if-absent', because the template's pre-set empty vector is
+non-nil and would never be overridden).  The bundled java-debug adapter
+then assembles `--module-path ... -m module/Class' on its own.  For
+non-modular projects MODULE-PATHS is empty and CONF is returned
+unchanged.
+
+Workaround for upstream emacs-lsp/lsp-java: dap-java--populate-launch-args
+discards resolveClasspath's module paths (keeps only cl-second).  Remove
+this advice once that is fixed upstream.  See
+https://github.com/emacs-lsp/lsp-java/issues/511."
+  (-let [(&plist :mainClass main-class :projectName project-name) conf]
+    (when (and main-class project-name)
+      (let* ((resolved (with-lsp-workspace (lsp-find-workspace 'jdtls)
+                         (lsp-send-execute-command
+                          "vscode.java.resolveClasspath"
+                          (vector main-class project-name))))
+             (module-paths (and resolved (elt resolved 0))))
+        (when (and module-paths (not (seq-empty-p module-paths)))
+          (setq conf (plist-put conf :modulePaths module-paths))))))
+  conf)
 
 (use-package dap-mode
   :ensure t
@@ -2334,7 +2394,12 @@ inflate the timeout to 120 s.
                  #'systemhalted/with-longer-dap-java-timeout)
   (advice-add 'dap-java--populate-default-args
               :around
-              #'systemhalted/with-longer-dap-java-timeout))
+              #'systemhalted/with-longer-dap-java-timeout)
+  (advice-remove 'dap-java--populate-launch-args
+                 #'systemhalted/dap-java-add-module-paths)
+  (advice-add 'dap-java--populate-launch-args
+              :filter-return
+              #'systemhalted/dap-java-add-module-paths))
 #+end_src
 
 ** Python — Pyright and the REPL
