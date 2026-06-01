@@ -2034,12 +2034,15 @@ Two startup-time settings that the rest of the section depends on:
   responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
   per-response syscall count by ~250×, which is the single biggest
   responsiveness win for Java buffers.
-- =exec-path-from-shell= imports =PATH=, =MANPATH=, and =JAVA_HOME= from
-  a login + interactive shell on startup. GUI Emacs (macOS, Linux Wayland
-  via PGTK, Linux X11 launched from outside a terminal) does *not*
-  inherit the interactive shell environment, so SDKMAN / Homebrew /
-  MacPorts / =update-alternatives= entries are otherwise invisible to
-  the Emacs process. SDKMAN's init only runs in interactive shells
+- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=, and
+  =SDKMAN_EL_DIR= from a login + interactive shell on startup. GUI Emacs
+  (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
+  terminal) does *not* inherit the interactive shell environment, so
+  SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
+  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR= is imported
+  for the same reason: it points the SDKMAN section below at a local
+  =sdkman.el= checkout, and without this import a GUI Emacs would never
+  see it and would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
   (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
   arguments are =-l -i= — both flags are needed to source the full
   shell startup. The =:if= guard skips this in headless batch runs where
@@ -2052,7 +2055,7 @@ Two startup-time settings that the rest of the section depends on:
   :ensure t
   :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
   :init
-  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "JAVA_HOME"))
+  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR"))
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
@@ -2100,9 +2103,18 @@ every LSP buffer even when it's never invoked by name.
 
 ** SDKMAN — project-local JDK selection
 
-JDK locations are *not* hard-coded. The local =sdkman.el= package at
-the sibling =sdkman.el= checkout next to the real =emacs.d= clone ties Java projects to whichever
-JDK their =.sdkmanrc= names. When a Java buffer is visited,
+JDK locations are *not* hard-coded. The =sdkman.el= package ties Java
+projects to whichever JDK their =.sdkmanrc= names. Loading is hybrid and
+driven by the =SDKMAN_EL_DIR= environment variable: on a development
+machine =SDKMAN_EL_DIR= points at a local checkout (wherever it happens
+to live), and that directory is put on =load-path= directly so edits
+take effect on reload. When the variable is unset or points nowhere
+real, =package-vc= installs the package from
+=github.com/systemhalted/sdkman.el= instead. One committed config works
+on every machine; the only per-machine choice is whether to export
+=SDKMAN_EL_DIR=. (Because GUI Emacs doesn't inherit the shell
+environment, =exec-path-from-shell= imports =SDKMAN_EL_DIR= alongside
+=PATH= — see above.) When a Java buffer is visited,
 =global-sdkman-mode= reads the nearest =.sdkmanrc= and applies the listed
 SDKMAN candidates (=java=, =maven=, =gradle=, …) to the buffer's
 =process-environment=, =exec-path=, and =PATH=; sets =JAVA_HOME= /
@@ -2123,12 +2135,25 @@ time JDT LS starts, the SDKMAN buffer-local state applied via
 =after-change-major-mode-hook= is already in place.
 
 #+begin_src emacs-lisp
-(use-package sdkman
-  :preface
-  (add-to-list 'load-path (expand-file-name "../sdkman.el" (file-truename user-emacs-directory)))
-  :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
-  :init
-  (global-sdkman-mode 1))
+(defvar systemhalted/sdkman-local-checkout
+  (let ((dir (getenv "SDKMAN_EL_DIR")))
+    (and dir (file-directory-p dir) (file-name-as-directory dir)))
+  "Local sdkman.el checkout from $SDKMAN_EL_DIR, or nil to install from GitHub.")
+
+(if systemhalted/sdkman-local-checkout
+    ;; Development machine: $SDKMAN_EL_DIR points at the live checkout, so load
+    ;; it directly and edits take effect on the next reload.
+    (use-package sdkman
+      :preface (add-to-list 'load-path systemhalted/sdkman-local-checkout)
+      :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
+      :init (global-sdkman-mode 1))
+  ;; No local checkout: install from GitHub. :rev :newest tracks the latest
+  ;; commit (use-package-vc-prefer-newest is nil by default, which would pin to
+  ;; a release tag).
+  (use-package sdkman
+    :vc (:url "https://github.com/systemhalted/sdkman.el" :rev :newest)
+    :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
+    :init (global-sdkman-mode 1)))
 
 (defun systemhalted/lsp-deferred-unless-excluded ()
   "Start `lsp-deferred' unless this buffer is generated LSP support source.
