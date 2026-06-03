@@ -1963,6 +1963,21 @@ pull), and there's no global behavior change outside that buffer. No
 custom hunks-on-save, no auto-commit, no smart-staging — explicit Git
 remains explicit.
 
+Commits and rebases done from inside Magit (=c c=, =r= …) open their edit
+buffer right here in this Emacs and finish with =C-c C-c= — the shell's
+editor never enters the picture. For Git run from an *external terminal*,
+the trick is to reuse this same Emacs instead of spawning a throwaway one
+that you'd have to fully quit to release =git=. That's what the always-on
+=server= (see [[*Always-on minor modes and shared infrastructure]]) is for:
+point Git's editor at the client with =git config --global core.editor
+"emacsclient -t -a ''"= (and the matching =sequence.editor= for =rebase
+-i='s todo list). The =-t= opens a terminal frame in the current terminal,
+=-a ''= starts a daemon if none is reachable, and =C-c C-c= finishes /
+=C-c C-k= aborts without killing Emacs. The single-key rebase commands
+(=r= reword, =s= squash, =f= fixup, =p= pick, =e= edit) and the =C-c C-c=
+finish key come from =with-editor= and =git-rebase=, which ride in as
+Magit's own dependencies — no separate =use-package= needed.
+
 #+begin_src emacs-lisp
 (use-package magit
   :ensure t
