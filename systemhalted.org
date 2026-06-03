@@ -1976,13 +1976,40 @@ point Git's editor at the client with =git config --global core.editor
 =C-c C-k= aborts without killing Emacs. The single-key rebase commands
 (=r= reword, =s= squash, =f= fixup, =p= pick, =e= edit) and the =C-c C-c=
 finish key come from =with-editor= and =git-rebase=, which ride in as
-Magit's own dependencies — no separate =use-package= needed.
+Magit's own dependencies.
+
+But those dependencies only activate once Magit itself loads, and Magit is
+autoloaded — it doesn't load until the first =C-x g=. So a commit started
+cold from a terminal would otherwise land in =fundamental-mode= with =C-c
+C-c= unbound. =systemhalted/git-edit-buffer-setup= bridges that gap: a
+=find-file-hook= that costs one string test per visited file and pulls in
+=git-commit= / =git-rebase= (with their =C-c C-c= machinery) only for the
+handful of files Git asks us to edit — keeping both packages out of normal
+startup.
 
 #+begin_src emacs-lisp
+(defun systemhalted/git-edit-buffer-setup ()
+  "Enable Magit's commit/rebase editing for buffers Git opens via emacsclient.
+Magit is only autoloaded (it loads on `C-x g'), so a commit or rebase started
+from an external terminal would otherwise open in `fundamental-mode' with no
+`C-c C-c' to finish.  Gate on the visited file's name — a cheap per-file
+string test — and load `git-commit' / `git-rebase' on demand, never at startup."
+  (when buffer-file-name
+    (let ((name (file-name-nondirectory buffer-file-name)))
+      (cond
+       ((equal name "git-rebase-todo")
+        (require 'git-rebase)
+        (git-rebase-mode))
+       ((string-match-p "\\(?:MSG\\|_DESCRIPTION\\)\\'" name)
+        (require 'git-commit)
+        (git-commit-setup-check-buffer))))))
+
 (use-package magit
   :ensure t
   :bind
-  ("C-x g" . magit-status))
+  ("C-x g" . magit-status)
+  :init
+  (add-hook 'find-file-hook #'systemhalted/git-edit-buffer-setup))
 #+end_src
 
 ** Markdown mode — README and prose docs
