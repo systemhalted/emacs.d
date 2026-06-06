@@ -26,27 +26,27 @@ There is no formal test suite.
 
 ## Naming and style
 
-All custom functions are namespaced `systemhalted/...` (e.g. `systemhalted/promote-to-todo`, `systemhalted/config-reload`). Follow this when adding new functions; do not introduce a second namespace.
+All custom functions are namespaced `systemhalted/...` (e.g. `systemhalted/notes-search`, `systemhalted/config-reload`). Follow this when adding new functions; do not introduce a second namespace.
 
 Use `use-package` for every package, with explicit `:ensure t` for external packages and `:ensure nil` for built-ins. There is no `use-package-always-ensure` — implicit installs are deliberately disabled.
 
-## Org workflow has hard guardrails — read before touching
+## Org is a second brain — notes only, no tasks
 
-The Org setup enforces a three-file model and will *signal errors* if you violate it:
+Org holds **no task management**. The rule: anything with a "done" state goes in Apple Reminders, anything with a date goes in Apple Calendar, everything else goes in org. There is no agenda, no TODO keywords (`org-todo-keywords` is nil), no task lifecycle.
 
-- `~/org/todo.org` — execution. The **only** file in `org-agenda-files`. Allowed states: `TODO → IN-PROGRESS → DONE`.
-- `~/org/backlog.org` — passive intake. A `before-save-hook` rejects any TODO/IN-PROGRESS/DONE heading or `SCHEDULED:`/`DEADLINE:` line.
-- `~/org/notes.org` — durable thinking. `org-todo-keywords` is set to nil locally; a save hook rejects task headings.
+`~/org/` is one file per numbered category (sorted by prefix): `00-inbox.org` (unfiled captures, swept weekly), `10-work.org`, `20-personal.org`, `30-learning.org` (`* Books/Articles/Videos/Courses`), `40-writing.org` (`* Ideas/Drafts/Articles/Poetry/Stories/Books/Published`), `50-journal.org` (datetree), `60-ideas.org`, `99-archive.org`. The file list is `systemhalted/org-category-files`; seed headings are in `systemhalted/org-file-structure`. Missing files are created at startup (`systemhalted/ensure-org-files`); empty ones are seeded on open.
 
-Promotion from backlog → todo is intentionally manual via `C-c P` (`systemhalted/promote-to-todo`). An `org-after-todo-state-change-hook` reverts and errors on any TODO state change outside `todo.org`. `systemhalted/assert-agenda-scope` runs at startup and errors if anything else creeps into `org-agenda-files`.
+Enforcement is **soft by design**: `systemhalted/org-warn-done-state` warns (never blocks) on save when a file under `~/org/` contains TODO/IN-PROGRESS/DONE headings or `SCHEDULED:`/`DEADLINE:` lines. Do not reintroduce hard guards, agenda config, or task keywords.
 
-If you add Org features, preserve these invariants. In particular: do not widen `org-agenda-files`, do not add task keywords to `backlog.org`/`notes.org`, and do not add capture templates that route tasks anywhere except `todo.org`'s `* Tasks` heading.
+Capture (`C-c c`) routes by category: `i` inbox, `w` work, `p` personal, `l` learning sub-menu (`a/b/v/c`), `r` writing idea, `d` idea, `j` journal datetree, `s` source-aware note (`systemhalted/org-notes-target` — groups notes in the inbox by the source heading's `:SOURCE_ID:`). Refile targets (`C-c C-w`) are all category files except inbox/journal, completed as `file/heading` paths.
+
+The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: the config must never reference, require, or delete them.
 
 ## Keybinding collision to remember
 
-`C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` was moved to **`C-c P`** (capital P) because day-to-day project work happens far more often than backlog promotion. Keep this convention if you bind anything new — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
+`C-c p` is the Projectile command prefix (the conventional default) — `C-c p *` belongs to Projectile. Custom bindings take capitals (`C-c B`) or other letters; check for collisions before binding anything new.
 
-Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` store-link, `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`).
+Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c l` store-link, `C-c n` `systemhalted/notes-search` (consult-ripgrep over `~/org/`), `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`). `C-c a` and `C-c P` are deliberately unbound (they were the agenda and promote-to-todo keys in the retired task workflow).
 
 ## Programming stack
 

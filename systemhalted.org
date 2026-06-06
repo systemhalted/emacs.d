@@ -469,14 +469,14 @@ visible because the buffer is indirect — no copy, no drift.
 a new alist entry here *and* a matching =**= heading elsewhere in this file
 whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
 open a heading it cannot find. The currently registered tutorials are the
-three subtrees in this document: =Tutorial: Using the Minimal Org Workflow=,
+three subtrees in this document: =Tutorial: Using the Org Second Brain=,
 =Using LSP and DAP=, and =Tutorial: Using LaTeX=.
 
 #+begin_src emacs-lisp
   (defvar systemhalted/tutorials
-    '(("Minimal Org workflow" . "Tutorial: Using the Minimal Org Workflow")
-      ("LSP and DAP"          . "Using LSP and DAP")
-      ("LaTeX"                . "Tutorial: Using LaTeX"))
+    '(("Org second brain" . "Tutorial: Using the Org Second Brain")
+      ("LSP and DAP"      . "Using LSP and DAP")
+      ("LaTeX"            . "Tutorial: Using LaTeX"))
     "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
 
   (defun systemhalted/tutorial ()
@@ -1146,9 +1146,9 @@ a recognized build file, or a =.projectile= marker — and exposes commands
 that operate over that scope as a unit: switch project, find file in
 project, kill project buffers, run the project's tests, search/replace
 across the project, etc. The full keymap lives under the conventional
-=C-c p= prefix. =systemhalted/promote-to-todo= takes =C-c P= (capital)
-because day-to-day project work happens far more often than backlog
-promotion, so the more frequent operation gets the easier chord.
+=C-c p= prefix, which is why other custom bindings in this config avoid
+lowercase =C-c p= entirely and take capitals (=C-c B=) or other letters
+(=C-c n=) instead.
 
 =projectile-completion-system 'default= keeps Projectile's prompts going
 through Emacs' standard completion — meaning Vertico + Orderless +
@@ -1184,7 +1184,7 @@ Common entry points (all under =C-c p=):
 
 ** compile — multiple compilation buffers
 
-Projectile's run commands (=C-c P u=) use Emacs' built-in =compile=
+Projectile's run commands (=C-c p u=) use Emacs' built-in =compile=
 infrastructure. By default, all compilation commands share a single
 =*compilation*= buffer, which means running a long-lived process like
 =mvn spring-boot:run= blocks any subsequent =mvn test= invocation.
@@ -1239,7 +1239,7 @@ keymap aid. Press a prefix key — =C-c=, =C-x=, =C-h=, =C-x 4=, =C-c p= for
 Projectile — and after a short idle delay a popup lists every continuation
 bound under that prefix together with the command it runs. This makes the
 rest of this section's bindings self-documenting: typing =C-c= and waiting
-reveals =C-c b=, =C-c s=, =C-c p=, =C-c r=, =C-c c=, =C-c a=, etc., without
+reveals =C-c b=, =C-c s=, =C-c p=, =C-c r=, =C-c c=, =C-c n=, etc., without
 having to remember or look them up.
 
 =which-key-idle-delay 0.4= is the wait before the popup appears. Short
@@ -1267,18 +1267,37 @@ wrapping. The popup still shrinks to fit when fewer keys are bound.
 
 * Org Mode
 
-Org is deliberately narrow here. The model is:
+Org is a second brain here — notes only, no task management. The single
+sorting rule, borrowed from [[https://systemhalted.in/2026/05/08/saving-private-notes/][Saving Private Notes]]:
 
 #+begin_example
-TODO    -> intentional execution
-BACKLOG -> passive exploration and consumption
-NOTES   -> thinking and writing output
+If it has a "done" state, it goes in Reminders.
+If it has a date, it goes in Calendar.
+Everything else goes in org.
 #+end_example
 
-That separation replaced the old GTD-heavy setup. Agenda views are useful only
-when they show actionable work, so =todo.org= is the only agenda file. Backlog
-and notes are protected from TODO drift with file-local validation. Promotion is
-manual through =C-c P= to force intent before something becomes work.
+That rule replaced the previous three-file TODO/BACKLOG/NOTES model (which
+itself replaced an older GTD-heavy setup). Tasks and scheduling now live
+entirely in Apple Reminders and Calendar; org models /knowledge/, organized as
+one file per numbered category under =~/org/=:
+
+#+begin_example
+00-inbox.org     -> unfiled captures, emptied weekly
+10-work.org      -> work notes
+20-personal.org  -> personal notes
+30-learning.org  -> Books / Articles / Videos / Courses
+40-writing.org   -> Ideas / Drafts / Articles / Poetry / Stories / Books / Published
+50-journal.org   -> datetree journal
+60-ideas.org     -> ideas worth keeping
+99-archive.org   -> done thinking, kept searchable
+#+end_example
+
+A note is just a heading. Capture (=C-c c=) files directly into a category, or
+into the inbox when filing would interrupt the thought. Apple Notes keeps
+exactly one folder — its Inbox — as the mobile capture point; a weekly
+half-hour sweep moves those items here and refiles =00-inbox.org= with
+=C-c C-w=. There is no agenda, no TODO lifecycle, and no promotion command —
+only a soft save-time warning when a task-shaped heading sneaks into =~/org/=.
 
 Jupyter support is opt-in. Normal Org startup should stay light and quiet; when a
 notebook workflow is needed, =C-c j= enables the Jupyter Babel integration for
@@ -1296,150 +1315,88 @@ HTML, and LaTeX source exports are written next to the Org file as
 =systemhalted.md=, =systemhalted.html=, and =systemhalted.tex=. PDF export uses
 the =latexmk= setup in the LaTeX section.
 
-** Tutorial: Using the Minimal Org Workflow
+** Tutorial: Using the Org Second Brain
 
-This workflow has three places for information. Use them literally:
-
-- =~/org/todo.org= is for execution: small work you intend to do.
-- =~/org/backlog.org= is for passive intake: articles, books, ideas, and things
-  you may explore later.
-- =~/org/notes.org= is for output: understanding, writing, and durable thinking.
-
-Do not start by asking "where can Org store this?" Ask what the item is.
-
-If it is something you will do, capture a todo:
+One rule decides where everything goes:
 
 #+begin_example
-C-c c t
+Has a "done" state -> Apple Reminders
+Has a date         -> Apple Calendar
+Everything else    -> org
 #+end_example
 
-This creates a =TODO= under =* Tasks= in =todo.org=. Use this only for work that
-belongs in the agenda. Keep the wording executable, for example:
+Org never holds tasks. "Buy milk" is a Reminder; "Why CRDTs converge" is a
+note. When in doubt, ask whether the item can ever be /finished/ — if yes, it
+does not belong here.
+
+*The files.* One file per numbered category in =~/org/=, mirroring the system
+described in /Saving Private Notes/:
 
 #+begin_example
-,* Tasks
-*,* TODO Review Kafka notes and decide next experiment
-*,* IN-PROGRESS Implement retry handling
-*,* DONE Update project README
+00-inbox.org     unfiled captures (emptied during the weekly sweep)
+10-work.org      work notes
+20-personal.org  personal notes
+30-learning.org  * Books / * Articles / * Videos / * Courses
+40-writing.org   * Ideas / * Drafts / * Articles / * Poetry / * Stories / * Books / * Published
+50-journal.org   journal entries in a datetree
+60-ideas.org     ideas worth keeping
+99-archive.org   done thinking, kept searchable
 #+end_example
 
-Use =C-c C-t= on a task to move it through the only allowed lifecycle:
+A note is a heading with prose under it. Empty category files are seeded with
+their top-level headings the first time they're opened, and missing files are
+created at startup.
+
+*Capture.* =C-c c= opens the menu; pick where the note belongs:
 
 #+begin_example
-TODO -> IN-PROGRESS -> DONE
+i -> Inbox    (file it later; for when deciding would interrupt the thought)
+w -> Work
+p -> Personal
+l -> Learning sub-menu: a Article / b Book / v Video / c Course
+r -> Writing  (lands under * Ideas in 40-writing.org)
+d -> Idea
+j -> Journal  (today's datetree entry in 50-journal.org)
+s -> Source note (see below)
 #+end_example
 
-If it is something you might consume or explore, capture backlog:
+(The =j= here is a key /inside/ the capture menu — it has nothing to do with
+the global =C-c j= Jupyter toggle.)
 
-#+begin_example
-C-c c b
-#+end_example
+*Source notes.* =C-c c s= is source-aware: if you launch it while point is on
+a heading in any other Org file, the note lands in =00-inbox.org= under a
+top-level heading dedicated to that source. The source heading gains an =:ID:=
+property the first time, the inbox heading gains a matching =:SOURCE_ID:=, and
+every future note captured from the same source joins the same subtree — even
+if the source is later renamed. From a non-Org buffer it falls back under the
+flat =* Inbox= heading. The captured body contains a backlink (=%a=) so
+=C-c C-o= jumps back to where you were reading.
 
-This opens a sub-menu so the item is filed by kind instead of dumped into one
-bucket. Pick one:
+*The weekly sweep.* Half an hour, once or twice a week:
 
-#+begin_example
-a -> Article
-b -> Book
-i -> Idea
-v -> Video
-c -> Course
-#+end_example
+1. Move anything in the Apple Notes Inbox into org (capture or paste).
+2. Open =00-inbox.org= and refile each heading with =C-c C-w=. Refile targets
+   are the top-level headings of every category file, completed through
+   vertico as =file/heading= paths — filing under =30-learning.org / Articles=
+   is a few keystrokes.
+3. Notes about finished thinking refile to =99-archive.org=.
 
-Backlog entries are plain headings, not tasks. The file is organized as passive
-categories:
+The inbox should be empty when the sweep ends. The system stays trustworthy
+because of this ritual, not because of any enforcement.
 
-#+begin_example
-,* Articles
-*,* Kafka exactly-once semantics
+*Retrieval.* =C-c n= runs a ripgrep search across =~/org/= only (=C-c s= is
+the general-purpose search that prompts for a directory). Inside a note,
+=C-c l= stores a link and =C-c C-l= inserts it, so durable cross-references
+between notes are cheap.
 
-,* Books
-*,* Designing Data-Intensive Applications
+*The soft warning.* Saving any file under =~/org/= that contains a =TODO= /
+=IN-PROGRESS= / =DONE= heading or a =SCHEDULED:= / =DEADLINE:= line prints a
+reminder that the item belongs in Reminders. The save always succeeds — the
+warning is a nudge, not a guard.
 
-,* Ideas
-*,* Event Gateway abstraction
-
-,* Videos
-*,* Jepsen talk on consistency
-
-,* Courses
-*,* MIT 6.824 Distributed Systems
-#+end_example
-
-Do not add =TODO=, =SCHEDULED=, or =DEADLINE= in backlog. If an item becomes real
-work, open the backlog item, place point inside its subtree, and promote it:
-
-#+begin_example
-C-c P
-#+end_example
-
-Promotion moves the subtree into =todo.org= under =* Tasks= and marks it =TODO=.
-This manual step is intentional. Backlog is allowed to be large and speculative;
-todo should stay small and committed.
-
-If it is something you learned, wrote, or want to develop as thinking, capture a
-note:
-
-#+begin_example
-C-c c n
-#+end_example
-
-Capture behavior is source-aware:
-
-- If you launch =C-c c n= while point is on a heading in =backlog.org= (or any
-  other Org file with a heading), the note is filed under a top-level heading
-  in =notes.org= dedicated to that source. The source heading gains an =:ID:=
-  property the first time, and the notes heading gains a matching =:SOURCE_ID:=.
-  Every future note captured from the same item joins the same subtree, even if
-  the source is later renamed in =backlog.org=.
-- If you launch =C-c c n= from a non-Org buffer (or from inside =notes.org=
-  itself), the note falls back under the flat top-level =* Notes= heading.
-
-Notes are not tasks. The captured body also contains a backlink (=%a=) so
-=C-c C-o= on it jumps back to the originating backlog item.
-
-#+begin_example
-* Designing Data-Intensive Applications
-  :PROPERTIES:
-  :SOURCE_ID: 7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a
-  :END:
-** Kafka delivery guarantees
-   Exactly-once is a coordination property, not just a producer setting.
-   =[[id:7d4f1b08-3a19-4c92-b5e1-2c8b9f0e1d7a][Designing Data-Intensive Applications]]=
-
-* Notes
-** A standalone thought captured from a code buffer
-#+end_example
-
-Use agenda only for execution:
-
-#+begin_example
-C-c a n
-#+end_example
-
-The custom =Now= agenda shows =IN-PROGRESS= first and then =TODO=. Because only
-=todo.org= is in =org-agenda-files=, the agenda cannot be polluted by notes or
-backlog material. Standard agenda commands still operate over the same restricted
-file set.
-
-The intended daily loop is:
-
-#+begin_example
-Capture -> Backlog -> manually promote -> Todo -> Done -> Notes
-#+end_example
-
-In practice:
-
-1. Capture quick thoughts without over-classifying them.
-2. Review backlog when you want new work or reading material.
-3. Promote only the item you are actually willing to execute.
-4. Use the agenda to work from =IN-PROGRESS= and =TODO=.
-5. Convert completed understanding into notes when it becomes useful knowledge.
-
-The guardrails are part of the workflow. If saving =backlog.org= errors because a
-TODO or scheduled item exists, either remove the task keyword/planning line or
-promote the item with =C-c P=. If saving =notes.org= errors because a TODO exists,
-move that work to =todo.org= or rewrite it as a plain note.
+*Migration.* The previous =todo.org=, =backlog.org=, and =notes.org= are not
+referenced, required, or touched by this configuration. Move their contents at
+your own pace: tasks into Reminders, everything else into the numbered files.
 
 For code and notebooks, Org Babel loads Emacs Lisp, Java, Python, and shell by
 default. Jupyter support is available on demand:
@@ -1451,25 +1408,37 @@ C-c j
 Use Jupyter only when an Org file needs notebook-style execution. Keeping it
 opt-in prevents normal Org startup from carrying notebook server state.
 
-** Path helpers and task-state vocabulary
+** Path helpers and category vocabulary
 
-These tiny pieces are the vocabulary every other Org guard speaks:
+These tiny pieces are the vocabulary the rest of the Org setup speaks:
 =systemhalted/org-file= resolves a name against =org-directory= (centralises
-the =~/org/= assumption so nothing else hard-codes it),
-=systemhalted/org-task-states= names the three keywords the workflow uses
-(=TODO=, =IN-PROGRESS=, =DONE=), =systemhalted/org-buffer-file-p= asks
-"is the current buffer this specific file?" using =file-truename= so symlinks
-into =~/org/= don't slip past the guards, and
-=systemhalted/org-buffer-has-task-heading-p= scans for any heading whose
-keyword is one of the reserved task states.
+the =~/org/= assumption so nothing else hard-codes it), and
+=systemhalted/org-buffer-file-p= asks "is the current buffer this specific
+file?" using =file-truename= so symlinks into =~/org/= behave like the real
+thing.
+
+=systemhalted/org-category-files= names the eight numbered files — the
+sort-by-prefix structure carried over from the Apple Notes system. The alist
+=systemhalted/org-file-structure= records which of them get seeded with
+top-level headings: =30-learning.org= and =40-writing.org= mirror their old
+subfolders, and =00-inbox.org= gets a single =* Inbox= heading that the
+fallback capture template and the source-aware capture both rely on. The rest
+stay flat — a note there is simply a top-level heading.
+
+=systemhalted/org-done-state-regexp= is the one definition of "task-shaped":
+a heading carrying =TODO= / =IN-PROGRESS= / =DONE=, or a =SCHEDULED:= /
+=DEADLINE:= planning line. Items matching it have a done state and therefore
+belong in Reminders, not here.
+
+=systemhalted/org-goto-or-create-heading= positions point at the end of a
+named top-level heading in the current buffer, creating it (with surrounding
+blank lines) when missing — capture targets use it so a heading never has to
+pre-exist.
 
 #+begin_src emacs-lisp
 (defun systemhalted/org-file (file)
   "Return FILE expanded inside `org-directory'."
   (expand-file-name file org-directory))
-
-(defconst systemhalted/org-task-states '("TODO" "IN-PROGRESS" "DONE")
-  "Org states that are reserved for todo.org only.")
 
 (defun systemhalted/org-buffer-file-p (file)
   "Return non-nil when the current buffer visits FILE in `org-directory'."
@@ -1477,86 +1446,23 @@ keyword is one of the reserved task states.
        (string= (file-truename buffer-file-name)
                 (file-truename (systemhalted/org-file file)))))
 
-(defun systemhalted/org-buffer-has-task-heading-p ()
-  "Return non-nil when the current buffer contains a task heading."
-  (save-excursion
-    (goto-char (point-min))
-    (re-search-forward
-     (concat "^\\*+ \\("
-             (regexp-opt systemhalted/org-task-states)
-             "\\)\\(?:[ \t]\\|$\\)")
-     nil t)))
-#+end_src
+(defconst systemhalted/org-category-files
+  '("00-inbox.org" "10-work.org" "20-personal.org" "30-learning.org"
+    "40-writing.org" "50-journal.org" "60-ideas.org" "99-archive.org")
+  "The numbered category files that make up the second brain.")
 
-** Three-file guards
+(defconst systemhalted/org-file-structure
+  '(("00-inbox.org"    . ("Inbox"))
+    ("30-learning.org" . ("Books" "Articles" "Videos" "Courses"))
+    ("40-writing.org"  . ("Ideas" "Drafts" "Articles" "Poetry" "Stories"
+                          "Books" "Published")))
+  "Top-level headings seeded into category files; unlisted files stay flat.")
 
-Four checks enforce the =todo.org= / =backlog.org= / =notes.org= boundary
-in different places:
+(defconst systemhalted/org-done-state-regexp
+  (concat "^\\*+ \\(?:TODO\\|IN-PROGRESS\\|DONE\\)\\(?:[ \t]\\|$\\)"
+          "\\|^[ \t]*\\(?:SCHEDULED\\|DEADLINE\\):")
+  "Matches task headings or planning lines — things that belong in Reminders.")
 
-- =systemhalted/validate-backlog= runs as a =before-save-hook= on
-  =backlog.org=. It rejects any task heading (so the file stays a passive
-  list of things to maybe read/watch/learn) and any =SCHEDULED:= or
-  =DEADLINE:= line (planning belongs in =todo.org=). The error message
-  points to =C-c P= as the legitimate exit ramp.
-- =systemhalted/validate-notes= runs as a =before-save-hook= on =notes.org=.
-  It rejects task headings; notes are durable thinking, not work items.
-- =systemhalted/restrict-todo-usage= runs as
-  =org-after-todo-state-change-hook=. If =C-c C-t= is pressed anywhere
-  outside =todo.org=, the hook silently reverts the state change and then
-  errors. =inhibit-message= keeps the revert silent because the error
-  message is the user-facing signal.
-- =systemhalted/assert-agenda-scope= runs at startup (and is wired into
-  =after-init-hook= further below) to confirm =org-agenda-files= still
-  contains only =todo.org=. If something else widens the agenda, startup
-  errors loudly rather than silently.
-
-#+begin_src emacs-lisp
-(defun systemhalted/validate-backlog ()
-  "Ensure backlog remains passive and never contains task entries."
-  (when (systemhalted/org-buffer-has-task-heading-p)
-    (error "Backlog must not contain TODO items; promote intentionally with C-c P"))
-  (save-excursion
-    (goto-char (point-min))
-    (when (re-search-forward "^[ \t]*\\(?:SCHEDULED\\|DEADLINE\\):" nil t)
-      (error "Backlog must not contain scheduled or deadline items"))))
-
-(defun systemhalted/validate-notes ()
-  "Ensure notes remain writing/thinking output, not tasks."
-  (when (systemhalted/org-buffer-has-task-heading-p)
-    (error "Notes must not contain TODO items")))
-
-(defun systemhalted/restrict-todo-usage ()
-  "Disallow TODO state changes outside todo.org."
-  (when (and org-state
-             (member org-state systemhalted/org-task-states)
-             (not (systemhalted/org-buffer-file-p "todo.org")))
-    (let ((inhibit-message t))
-      (org-todo 'none))
-    (error "TODO states are only allowed in todo.org")))
-
-(defun systemhalted/assert-agenda-scope ()
-  "Ensure the agenda only reads the execution file."
-  (unless (equal org-agenda-files
-                 (list (systemhalted/org-file "todo.org")))
-    (error "Agenda must only include todo.org")))
-#+end_src
-
-** Promotion: =C-c P= from backlog to todo
-
-Promotion is the only sanctioned path from passive backlog item to
-intentional work. =systemhalted/org-goto-or-create-heading= positions
-point at the end of a named top-level heading inside the current buffer,
-creating it (with surrounding blank lines) if it doesn't exist yet — used
-to make sure =* Tasks= is present in =todo.org= before pasting.
-
-=systemhalted/promote-to-todo= is the user-facing command (bound to
-=C-c P= in the main org configuration further below). It cuts the
-current subtree from wherever it is, opens =todo.org=, ensures =* Tasks=
-exists, pastes the subtree under it as a level-2 heading, and marks it
-=TODO=. =C-c p= is reserved for Projectile, which is why promotion takes
-the capital =P=.
-
-#+begin_src emacs-lisp
 (defun systemhalted/org-goto-or-create-heading (heading)
   "Move to the end of top-level HEADING, creating it when needed."
   (goto-char (point-min))
@@ -1572,75 +1478,93 @@ the capital =P=.
   (org-end-of-subtree t t)
   (unless (bolp)
     (insert "\n")))
-
-(defun systemhalted/promote-to-todo ()
-  "Move the current Org subtree to todo.org as a TODO."
-  (interactive)
-  (unless (derived-mode-p 'org-mode)
-    (user-error "Promotion only works from Org buffers"))
-  (org-back-to-heading t)
-  (org-cut-subtree)
-  (with-current-buffer (find-file-noselect (systemhalted/org-file "todo.org"))
-    ;; Promotions land in the execution bucket and are normalized as tasks.
-    (systemhalted/org-goto-or-create-heading "Tasks")
-    (let ((start (point)))
-      (org-paste-subtree 2)
-      (goto-char start)
-      (org-todo "TODO"))
-    (save-buffer))
-  (message "Promoted item to todo.org"))
 #+end_src
 
-** Backlog seeding and per-file constraint dispatch
+** Soft guardrail: tasks belong in Reminders
 
-=systemhalted/ensure-backlog-structure= runs on =find-file-hook=: the very
-first time =backlog.org= is opened (when it's still empty), it seeds the
-five passive categories — Articles, Books, Ideas, Videos, Courses — so
-the file isn't a blank canvas with no organizing principle.
-
-=systemhalted/apply-org-file-constraints= runs on =org-mode-hook= and
-dispatches per file: =backlog.org= gets the
-=systemhalted/validate-backlog= save hook; =notes.org= gets the
-=systemhalted/validate-notes= save hook /and/ has its
-=org-todo-keywords= cleared locally so =C-c C-t= becomes a no-op
-(belt-and-suspenders with =systemhalted/restrict-todo-usage=).
-=todo.org= gets nothing extra — it is the file where task states are
-allowed, so no guard is needed.
+The old three-file model enforced its boundaries with save-time /errors/.
+A second brain doesn't need that severity — there is only one rule, and
+breaking it hurts nobody but future-you. So the single remaining guard is a
+=before-save-hook= that /warns/ and never blocks: if a file under
+=org-directory= contains anything matching
+=systemhalted/org-done-state-regexp=, saving prints a reminder that the item
+has a done state and belongs in Reminders. The save itself always succeeds.
 
 #+begin_src emacs-lisp
-(defun systemhalted/ensure-backlog-structure ()
-  "Seed an empty backlog with passive categories."
-  (when (and (systemhalted/org-buffer-file-p "backlog.org")
-             (= (buffer-size) 0))
-    (insert "* Articles\n\n* Books\n\n* Ideas\n\n* Videos\n\n* Courses\n")))
-
-(defun systemhalted/apply-org-file-constraints ()
-  "Attach file-local guards for the minimal Org workflow."
-  (cond
-   ((systemhalted/org-buffer-file-p "backlog.org")
-    ;; Backlog is passive intake, so task states and planning lines are rejected.
-    (add-hook 'before-save-hook #'systemhalted/validate-backlog nil t))
-   ((systemhalted/org-buffer-file-p "notes.org")
-    ;; Notes are for thinking and writing output, so TODO cycling is disabled.
-    (setq-local org-todo-keywords nil)
-    (add-hook 'before-save-hook #'systemhalted/validate-notes nil t))))
+(defun systemhalted/org-warn-done-state ()
+  "Warn (never block) when a file under `org-directory' holds a task.
+Anything with TODO/IN-PROGRESS/DONE or SCHEDULED/DEADLINE has a done
+state and belongs in Reminders, not in the second brain."
+  (when (save-excursion
+          (goto-char (point-min))
+          (re-search-forward systemhalted/org-done-state-regexp nil t))
+    (message "Note: this has a \"done\" state; it belongs in Reminders, not org.")))
 #+end_src
 
-** Source-aware notes capture
+** Category file seeding and per-file hook dispatch
 
-=systemhalted/org-notes-target= is the =:function= callback for the =n=
-capture template defined further below. It decides /where/ in =notes.org=
+=systemhalted/ensure-org-structure= runs on =find-file-hook=: the first time
+an empty category file is opened, it seeds the top-level headings recorded in
+=systemhalted/org-file-structure= so the file isn't a blank canvas with no
+organizing principle.
+
+=systemhalted/apply-org-soft-guard= runs on =org-mode-hook= and attaches the
+soft done-state warning buffer-locally to any file under =org-directory= —
+including the old =todo.org= / =backlog.org= / =notes.org=, should they still
+be around, but nothing depends on those files existing.
+
+=systemhalted/ensure-org-files= creates any missing category files (seeded) up
+front. It is called from the main configuration's =:config= block, which runs
+the moment Org first loads, so the refile targets defined there always point
+at real files — even on a machine where =~/org/= doesn't exist yet.
+
+#+begin_src emacs-lisp
+(defun systemhalted/ensure-org-structure ()
+  "Seed an empty category file with its top-level headings."
+  (when (and buffer-file-name
+             (member (file-name-nondirectory buffer-file-name)
+                     systemhalted/org-category-files)
+             (= (buffer-size) 0))
+    (let ((headings (cdr (assoc (file-name-nondirectory buffer-file-name)
+                                systemhalted/org-file-structure))))
+      (when headings
+        (insert (mapconcat (lambda (h) (concat "* " h "\n")) headings "\n"))))))
+
+(defun systemhalted/apply-org-soft-guard ()
+  "Attach the soft done-state warning to files under `org-directory'."
+  (when (and buffer-file-name
+             (file-in-directory-p buffer-file-name org-directory))
+    (add-hook 'before-save-hook #'systemhalted/org-warn-done-state nil t)))
+
+(defun systemhalted/ensure-org-files ()
+  "Create any missing category files, seeding their structure."
+  (make-directory org-directory t)
+  (dolist (file systemhalted/org-category-files)
+    (let ((path (systemhalted/org-file file))
+          (headings (cdr (assoc file systemhalted/org-file-structure))))
+      (unless (file-exists-p path)
+        (with-temp-file path
+          (when headings
+            (insert (mapconcat (lambda (h) (concat "* " h "\n"))
+                               headings "\n"))))))))
+#+end_src
+
+** Source-aware inbox capture
+
+=systemhalted/org-notes-target= is the =:function= callback for the =s=
+capture template defined further below. It decides /where/ in =00-inbox.org=
 the new note lands based on the buffer capture was launched from:
 
-- If point was on a heading in any Org file other than =notes.org= (e.g.
-  a backlog item), the source heading gains an =:ID:= property (one-time,
+- If point was on a heading in any Org file other than the inbox (e.g. a
+  learning item), the source heading gains an =:ID:= property (one-time,
   via =org-id-get-create=), and the note lands under a top-level heading
-  in =notes.org= whose =:SOURCE_ID:= matches that ID. Repeated captures
+  in =00-inbox.org= whose =:SOURCE_ID:= matches that ID. Repeated captures
   from the same source all land under the same subtree — *even if the
-  source is later renamed*, because the link is by ID, not text.
-- Otherwise (capture from a code buffer, plain-text scratch, or
-  =notes.org= itself), the note falls back under the flat =* Notes=
-  heading created on demand by =systemhalted/org-goto-or-create-heading=.
+  source is later renamed*, because the link is by ID, not text. The
+  weekly sweep refiles the whole subtree in one motion.
+- Otherwise (capture from a code buffer, plain-text scratch, or the inbox
+  itself), the note falls back under the flat =* Inbox= heading created on
+  demand by =systemhalted/org-goto-or-create-heading=.
 
 The matching =:PROPERTIES:= drawer is written inline rather than going
 through Org's property API because the heading hasn't been created at
@@ -1648,19 +1572,19 @@ this point — we're writing it from scratch.
 
 #+begin_src emacs-lisp
 (defun systemhalted/org-notes-target ()
-  "Position point in notes.org for a `file+function' capture target.
-When capture is launched from an Org heading outside notes.org, ensure that
-heading has an :ID: and file the new note under a top-level heading in
-notes.org keyed by :SOURCE_ID:.  This groups every note about the same source
+  "Position point in 00-inbox.org for a `file+function' capture target.
+When capture is launched from an Org heading outside the inbox, ensure that
+heading has an :ID: and file the new note under a top-level heading in the
+inbox keyed by :SOURCE_ID:.  This groups every note about the same source
 under one subtree even after the source is renamed.  When capture is launched
-from anywhere else, fall back to the flat `* Notes' heading."
+from anywhere else, fall back to the flat `* Inbox' heading."
   (let* ((src-buf (org-capture-get :original-buffer))
          (src-info
           (when (and src-buf (buffer-live-p src-buf))
             (with-current-buffer src-buf
               (when (and (derived-mode-p 'org-mode)
                          buffer-file-name
-                         (not (systemhalted/org-buffer-file-p "notes.org"))
+                         (not (systemhalted/org-buffer-file-p "00-inbox.org"))
                          (ignore-errors (org-back-to-heading t) t))
                 (cons (org-get-heading t t t t)
                       (org-id-get-create)))))))
@@ -1683,7 +1607,7 @@ from anywhere else, fall back to the flat `* Notes' heading."
                   "  :SOURCE_ID: " id "\n"
                   "  :END:\n"))))
      (t
-      (systemhalted/org-goto-or-create-heading "Notes")))))
+      (systemhalted/org-goto-or-create-heading "Inbox")))))
 #+end_src
 
 ** Main Org configuration
@@ -1691,9 +1615,10 @@ from anywhere else, fall back to the flat `* Notes' heading."
 The =org= =use-package= form is where everything declared above gets
 wired together. The interesting clusters:
 
-- *Global keys.* =C-c a= for the agenda, =C-c c= for capture, =C-c l=
-  for =org-store-link=. The mode hook turns on =visual-line-mode= so long
-  paragraphs wrap softly in any Org buffer.
+- *Global keys.* =C-c c= for capture, =C-c l= for =org-store-link=.
+  There is deliberately no agenda binding — the agenda is a task view,
+  and org holds no tasks. The mode hook turns on =visual-line-mode= so
+  long paragraphs wrap softly in any Org buffer.
 - *Display.* =org-startup-indented t= renders headings with virtual
   indentation; =org-hide-emphasis-markers t= suppresses the surrounding
   =/= / =*= / === characters on inline emphasis (cleaner for reading,
@@ -1703,112 +1628,139 @@ wired together. The interesting clusters:
 - *Babel safety.* =org-confirm-babel-evaluate t= prompts before
   executing a code block — necessary because this file itself contains
   Babel blocks that get evaluated on tangle.
-- *Task vocabulary.* =org-todo-keywords= names exactly the three states
-  declared in =systemhalted/org-task-states= above.
+- *No task vocabulary.* =org-todo-keywords= is =nil= so =C-c C-t= has
+  nothing to offer. Anything with a done state goes to Reminders.
 
-The =:config= block sets four narrow choices and registers the four
-workflow hooks:
+The =:config= block wires the second-brain flow:
 
-- =org-agenda-files= is literally just =todo.org=. Agenda views show
-  /actionable/ work, never backlog reading or note thinking.
-- =org-refile-targets= is restricted to whatever is in
-  =org-agenda-files= so =C-c C-w= can never accidentally refile into
-  backlog or notes — promotion through =C-c P= is the only intentional
-  path from backlog to todo.
-- =org-capture-templates= defines =t= (single todo into =* Tasks=), a
-  =b=-prefixed sub-menu for backlog (Article/Book/Idea/Video/Course
-  routed to their respective headings), and =n= for notes (which
-  dispatches through =systemhalted/org-notes-target= above for
-  source-aware filing).
-- =org-agenda-custom-commands= adds one view, =n= for "Now", which
-  shows =IN-PROGRESS= first and then =TODO=. Most days that's the only
-  agenda view actually needed.
+- =org-refile-targets= covers the destination category files at
+  =:maxlevel 2= — the sweep's =C-c C-w= reaches every category heading.
+  The inbox and the journal are deliberately absent: nothing refiles
+  /into/ an inbox, and the journal is datetree-managed.
+  =org-refile-use-outline-path 'file= shows candidates as
+  =file/heading= paths, and =org-outline-path-complete-in-steps nil=
+  hands the whole path to vertico in one completion.
+- =org-capture-templates= routes directly by category: =i= Inbox
+  (fallback), =w= Work, =p= Personal, an =l= sub-menu for Learning
+  (Article/Book/Video/Course), =r= Writing ideas, =d= Idea, =j= Journal
+  (datetree), and =s= for source-aware notes through
+  =systemhalted/org-notes-target= above. The capture-menu =j= lives in
+  its own keymap and is unrelated to the global =C-c j= Jupyter toggle.
 
-Then the four hooks: =org-mode-hook= applies per-file constraints,
-=org-after-todo-state-change-hook= enforces the
-todo-only-in-todo-file rule, =find-file-hook= seeds backlog structure,
-and =after-init-hook= asserts the agenda scope at startup (plus an
-immediate call so it triggers even when the config is reloaded
-interactively rather than at init). =C-c P= is bound globally for
-promotion. Finally, Babel is loaded for Emacs Lisp, Java, Python, and
-shell — Jupyter is opt-in via its own subsection below.
+Then the hooks: =org-mode-hook= attaches the soft done-state warning and
+=find-file-hook= seeds empty category files.
+=systemhalted/ensure-org-files= is called directly from =:config=, which
+runs the moment Org first loads (capture, refile, or opening any =.org=
+file) — so the category files exist before anything could target them,
+without forcing Org into the startup path. =C-c a= and =C-c P= — the old
+agenda and promotion keys — are
+explicitly unbound so a config reload in a long-running session clears
+them. Finally, Babel is loaded for Emacs Lisp, Java, Python, and shell —
+Jupyter is opt-in via its own subsection below.
 
 #+begin_src emacs-lisp
 (use-package org
   :ensure nil
   :bind
-  (("C-c a" . org-agenda)
-   ("C-c c" . org-capture)
+  (("C-c c" . org-capture)
    ("C-c l" . org-store-link))
   :hook
   (org-mode . visual-line-mode)
   :custom
   (org-directory (expand-file-name "~/org/"))
-  (org-default-notes-file (systemhalted/org-file "notes.org"))
-  (org-log-done 'time)
+  (org-default-notes-file (systemhalted/org-file "00-inbox.org"))
   (org-ellipsis " ...")
   (org-startup-indented t)
   (org-hide-emphasis-markers t)
   (org-src-window-setup 'current-window)
   (org-confirm-babel-evaluate t)
-  (org-todo-keywords
-   '((sequence "TODO" "IN-PROGRESS" "|" "DONE")))
+  ;; Org models no tasks; anything with a done state goes to Reminders.
+  (org-todo-keywords nil)
+  (org-refile-use-outline-path 'file)
+  (org-outline-path-complete-in-steps nil)
   :config
-  ;; Agenda is only for execution. Backlog and notes stay out of the task view.
-  (setq org-agenda-files
-        (list (systemhalted/org-file "todo.org"))
-        ;; Refile stays narrow; promotion from backlog to todo is explicit below.
-        org-refile-targets '((org-agenda-files :maxlevel . 2))
-        ;; TODO is intentional work; backlog is passive consumption/exploration;
-        ;; notes are thinking and writing output. Promotion is manual by design.
+  ;; The weekly sweep refiles inbox items out to category headings.
+  (setq org-refile-targets
+        (mapcar (lambda (file)
+                  (cons (systemhalted/org-file file) '(:maxlevel . 2)))
+                '("10-work.org" "20-personal.org" "30-learning.org"
+                  "40-writing.org" "60-ideas.org" "99-archive.org"))
+        ;; Capture routes by category up front; the inbox is the fallback
+        ;; for when deciding would interrupt the thought.
         org-capture-templates
-        `(("t" "Todo" entry
-           (file+headline ,(systemhalted/org-file "todo.org") "Tasks")
-           "* TODO %?\n%U")
-          ;; Backlog is split by kind so passive intake routes into the right
-          ;; bucket instead of defaulting everything to Ideas. C-c c b shows the
-          ;; sub-menu; pick a, b, i, v, or c.
-          ("b" "Backlog")
-          ("ba" "Article" entry
-           (file+headline ,(systemhalted/org-file "backlog.org") "Articles")
+        `(("i" "Inbox" entry
+           (file+headline ,(systemhalted/org-file "00-inbox.org") "Inbox")
+           "* %?\n%U")
+          ("w" "Work" entry
+           (file ,(systemhalted/org-file "10-work.org"))
+           "* %?\n%U")
+          ("p" "Personal" entry
+           (file ,(systemhalted/org-file "20-personal.org"))
+           "* %?\n%U")
+          ;; Learning is split by kind so intake routes into the right
+          ;; bucket. C-c c l shows the sub-menu; pick a, b, v, or c.
+          ("l" "Learning")
+          ("la" "Article" entry
+           (file+headline ,(systemhalted/org-file "30-learning.org") "Articles")
            "* %?\n")
-          ("bb" "Book" entry
-           (file+headline ,(systemhalted/org-file "backlog.org") "Books")
+          ("lb" "Book" entry
+           (file+headline ,(systemhalted/org-file "30-learning.org") "Books")
            "* %?\n")
-          ("bi" "Idea" entry
-           (file+headline ,(systemhalted/org-file "backlog.org") "Ideas")
+          ("lv" "Video" entry
+           (file+headline ,(systemhalted/org-file "30-learning.org") "Videos")
            "* %?\n")
-          ("bv" "Video" entry
-           (file+headline ,(systemhalted/org-file "backlog.org") "Videos")
+          ("lc" "Course" entry
+           (file+headline ,(systemhalted/org-file "30-learning.org") "Courses")
            "* %?\n")
-          ("bc" "Course" entry
-           (file+headline ,(systemhalted/org-file "backlog.org") "Courses")
+          ("r" "Writing idea" entry
+           (file+headline ,(systemhalted/org-file "40-writing.org") "Ideas")
            "* %?\n")
-          ;; Notes are routed through a function so each backlog item linked-to
-          ;; gets its own subtree in notes.org, keyed by :SOURCE_ID:.  %a
+          ("d" "Idea" entry
+           (file ,(systemhalted/org-file "60-ideas.org"))
+           "* %?\n%U")
+          ("j" "Journal" entry
+           (file+olp+datetree ,(systemhalted/org-file "50-journal.org"))
+           "* %?\n%U")
+          ;; Source notes route through a function so each source linked-to
+          ;; gets its own subtree in the inbox, keyed by :SOURCE_ID:.  %a
           ;; embeds an inline backlink for one-keystroke navigation back.
-          ("n" "Note" entry
-           (file+function ,(systemhalted/org-file "notes.org")
+          ("s" "Source note" entry
+           (file+function ,(systemhalted/org-file "00-inbox.org")
                           systemhalted/org-notes-target)
-           "* %?\n%a"))
-        ;; One high-signal view: current work first, then intentional todo items.
-        org-agenda-custom-commands
-        '(("n" "Now"
-           ((todo "IN-PROGRESS")
-            (todo "TODO")))))
-  ;; These hooks preserve the Todo/Backlog/Notes boundaries over time.
-  (add-hook 'org-mode-hook #'systemhalted/apply-org-file-constraints)
-  (add-hook 'org-after-todo-state-change-hook #'systemhalted/restrict-todo-usage)
-  (add-hook 'find-file-hook #'systemhalted/ensure-backlog-structure)
-  (add-hook 'after-init-hook #'systemhalted/assert-agenda-scope)
-  (systemhalted/assert-agenda-scope)
-  (global-set-key (kbd "C-c P") #'systemhalted/promote-to-todo)
+           "* %?\n%a")))
+  ;; These hooks keep the category files seeded and the soft guard attached.
+  (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
+  (add-hook 'find-file-hook #'systemhalted/ensure-org-structure)
+  ;; Runs as soon as Org first loads, so refile/capture targets always exist.
+  (systemhalted/ensure-org-files)
+  ;; The agenda and promotion keys are gone; unbinding (rather than just not
+  ;; binding) clears stale bindings when the config is reloaded in place.
+  (global-unset-key (kbd "C-c a"))
+  (global-unset-key (kbd "C-c P"))
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((emacs-lisp . t)
      (java . t)
      (python . t)
      (shell . t))))
+#+end_src
+
+** Notes retrieval
+
+=C-c s= (consult-ripgrep, defined in the completion stack) is the
+general-purpose search that asks where to look. Retrieval from the second
+brain should be cheaper than that — one key, no directory prompt — so
+=systemhalted/notes-search= pins the search to =org-directory= and goes on
+=C-c n= globally: a half-remembered note is wanted from /any/ buffer, not
+just Org ones.
+
+#+begin_src emacs-lisp
+(defun systemhalted/notes-search ()
+  "Ripgrep across `org-directory' — search the second brain."
+  (interactive)
+  (consult-ripgrep org-directory))
+
+(global-set-key (kbd "C-c n") #'systemhalted/notes-search)
 #+end_src
 
 ** Org extensions and exporters
@@ -1913,13 +1865,13 @@ The other ingredients are already in place above: =org-startup-indented= for
 heading indentation, =org-hide-emphasis-markers= to drop the markup characters,
 and =visual-line-mode= for soft wrapping at the right margin.
 
-Activation is on-demand via =C-c B= (capital, since =C-c b= is =consult-buffer=,
-mirroring the =C-c P= convention used for =systemhalted/promote-to-todo=). The
-toggle is global rather than wired into =org-mode-hook= because the three-file
-model treats =todo.org= and =backlog.org= as workflow surfaces, not reading
-surfaces --- book view there would harm scanning. =notes.org=, tutorial
-buffers, and long-form drafts are where it belongs, and the keybinding makes it
-trivial to invoke wherever it helps.
+Activation is on-demand via =C-c B= (capital, since =C-c b= is
+=consult-buffer=). The toggle is global rather than wired into
+=org-mode-hook= because not every Org buffer is a reading surface — the
+inbox during a sweep is a sorting surface, where book view would harm
+scanning. Journal entries, long-form drafts in =40-writing.org=, tutorial
+buffers, and reading notes are where it belongs, and the keybinding makes
+it trivial to invoke wherever it helps.
 
 #+begin_src emacs-lisp
 (use-package olivetti
@@ -1937,8 +1889,8 @@ trivial to invoke wherever it helps.
   "Toggle a book-style reading view in the current buffer.
 Enables Olivetti centered margins and mixed-pitch body text;
 re-running disables both. Intended for org reading sessions
-(notes.org, tutorials, long-form drafts) --- task and capture
-workflow is unaffected unless invoked explicitly."
+(journal, writing drafts, tutorials, reading notes) --- capture
+and sweep workflow is unaffected unless invoked explicitly."
   (interactive)
   (let ((enabling (not (bound-and-true-p olivetti-mode))))
     (olivetti-mode (if enabling 1 -1))
