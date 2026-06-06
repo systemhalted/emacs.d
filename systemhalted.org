@@ -469,14 +469,14 @@ visible because the buffer is indirect — no copy, no drift.
 a new alist entry here *and* a matching =**= heading elsewhere in this file
 whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
 open a heading it cannot find. The currently registered tutorials are the
-three subtrees in this document: =Tutorial: Using the Org Second Brain=,
-=Using LSP and DAP=, and =Tutorial: Using LaTeX=.
+three subtrees in this document: =Tutorial: Organicely — Org-based Second
+Brain=, =Using LSP and DAP=, and =Tutorial: Using LaTeX=.
 
 #+begin_src emacs-lisp
   (defvar systemhalted/tutorials
-    '(("Org second brain" . "Tutorial: Using the Org Second Brain")
-      ("LSP and DAP"      . "Using LSP and DAP")
-      ("LaTeX"            . "Tutorial: Using LaTeX"))
+    '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
+      ("LSP and DAP" . "Using LSP and DAP")
+      ("LaTeX"       . "Tutorial: Using LaTeX"))
     "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
 
   (defun systemhalted/tutorial ()
@@ -1267,7 +1267,8 @@ wrapping. The popup still shrinks to fit when fewer keys are bound.
 
 * Org Mode
 
-Org is a second brain here — notes only, no task management. The single
+Org here is /Organicely/, an Org-based second brain — notes only, no task
+management. The single
 sorting rule, borrowed from [[https://systemhalted.in/2026/05/08/saving-private-notes/][Saving Private Notes]]:
 
 #+begin_example
@@ -1315,7 +1316,7 @@ HTML, and LaTeX source exports are written next to the Org file as
 =systemhalted.md=, =systemhalted.html=, and =systemhalted.tex=. PDF export uses
 the =latexmk= setup in the LaTeX section.
 
-** Tutorial: Using the Org Second Brain
+** Tutorial: Organicely — Org-based Second Brain
 
 One rule decides where everything goes:
 
@@ -1484,7 +1485,7 @@ saving is the usual =C-x C-s=.
 (defconst systemhalted/org-category-files
   '("00-inbox.org" "10-work.org" "20-personal.org" "30-learning.org"
     "40-writing.org" "50-journal.org" "60-ideas.org" "99-archive.org")
-  "The numbered category files that make up the second brain.")
+  "The numbered category files that make up Organicely.")
 
 (defconst systemhalted/org-file-structure
   '(("00-inbox.org"    . ("Inbox"))
@@ -1594,7 +1595,7 @@ has a done state and belongs in Reminders. The save itself always succeeds.
 (defun systemhalted/org-warn-done-state ()
   "Warn (never block) when a file under `org-directory' holds a task.
 Anything with TODO/IN-PROGRESS/DONE or SCHEDULED/DEADLINE has a done
-state and belongs in Reminders, not in the second brain."
+state and belongs in Reminders, not in Organicely."
   (when (save-excursion
           (goto-char (point-min))
           (re-search-forward systemhalted/org-done-state-regexp nil t))
@@ -1851,7 +1852,7 @@ just Org ones.
 
 #+begin_src emacs-lisp
 (defun systemhalted/notes-search ()
-  "Ripgrep across `org-directory' — search the second brain."
+  "Ripgrep across `org-directory' — search Organicely."
   (interactive)
   (consult-ripgrep org-directory))
 

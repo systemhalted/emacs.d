@@ -30,7 +30,7 @@ All custom functions are namespaced `systemhalted/...` (e.g. `systemhalted/notes
 
 Use `use-package` for every package, with explicit `:ensure t` for external packages and `:ensure nil` for built-ins. There is no `use-package-always-ensure` — implicit installs are deliberately disabled.
 
-## Org is a second brain — notes only, no tasks
+## Org is Organicely, an Org-based second brain — notes only, no tasks
 
 Org holds **no task management**. The rule: anything with a "done" state goes in Apple Reminders, anything with a date goes in Apple Calendar, everything else goes in org. There is no agenda, no TODO keywords (`org-todo-keywords` is nil), no task lifecycle.
 
