@@ -2574,6 +2574,18 @@ All four feed into =lsp-mode='s hook (the =js-mode rjsx-mode
 typescript-mode web-mode css-mode= group up above), so jump-to-def,
 rename, and completion work uniformly across the stack.
 
+The JS/TS/TSX buffers are served by =lsp-mode='s =ts-ls= client, which
+— like Pyright above — expects its binary on the =PATH= Emacs
+inherits: =typescript-language-server=, installed via npm. The global
+=typescript= alongside it is only a fallback; the server prefers a
+project's own =node_modules/typescript=, so per-project compiler
+versions still win. npm itself comes from MacPorts or Homebrew on
+macOS, =dnf install nodejs= on Fedora, =apt install npm= on Ubuntu.
+
+#+begin_src sh
+npm install -g typescript-language-server typescript
+#+end_src
+
 #+begin_src emacs-lisp
 (use-package web-mode
   :ensure t
@@ -2608,6 +2620,29 @@ rename, and completion work uniformly across the stack.
   (css-mode . lsp-deferred)
   :custom
   (css-indent-offset 2))
+#+end_src
+
+Besides type errors, =tsserver= publishes /hint/-severity nags — "Unreachable
+code detected." (7027) being the loudest — and they land in Flycheck looking
+like findings. The VS Code toggle for these
+(=lsp-typescript-suggestion-actions-enabled=) is *not honored* by
+=typescript-language-server= (verified empirically: the 7027 hint survives
+it). The knob the server does support is its =diagnostics.ignoredCodes=
+workspace setting, so the list below names the tsserver codes that must stay
+out of the buffer. Real errors are unaffected. To silence another nag, find
+its numeric code in the Flycheck message (e.g. 6133 — "declared but its
+value is never read"), add it to the vector (it must stay a vector — lists
+do not serialize to JSON arrays), and =C-c l R= to restart the workspace.
+
+#+begin_src emacs-lisp
+(defvar systemhalted/lsp-ts-ignored-diagnostic-codes [7027]
+  "tsserver diagnostic codes ts-ls must not publish.
+7027 is \"Unreachable code detected.\" — a hint, not an error.
+Vector, not list: it serializes to a JSON array.")
+
+(with-eval-after-load 'lsp-mode
+  (lsp-register-custom-settings
+   '(("diagnostics.ignoredCodes" systemhalted/lsp-ts-ignored-diagnostic-codes))))
 #+end_src
 
 ** Shell scripts and dotfiles
@@ -2741,6 +2776,7 @@ The LSP prefix is =C-c l=. The most-used commands:
 | =C-c l g r= | =lsp-find-references=    | list references                       |
 | =C-c l g i= | =lsp-find-implementation=| jump to implementation                |
 | =C-c l r r= | =lsp-rename=             | rename symbol across the workspace    |
+| =C-c l r o= | =lsp-organize-imports=   | sort imports, drop unused ones        |
 | =C-c l a a= | =lsp-execute-code-action=| quick fixes, imports, refactors       |
 | =C-c l h h= | =lsp-describe-thing-at-point= | hover docs                       |
 | =C-c l i=   | =corfu-popupinfo-toggle= | toggle completion docs for buffer     |
@@ -2781,6 +2817,46 @@ actions and =dap-java-debug-*= require the project model to be ready.
 Automatic build-configuration updates are interactive; after changing
 =pom.xml=, =build.gradle=, or dependency state outside Emacs, use =C-c l j u=
 to ask JDT LS to refresh the project model.
+
+*** TypeScript and JavaScript — auto-imports and project setup
+
+The JS/TS/TSX stack is served by =ts-ls= (the =typescript-language-server=
+binary on =PATH= — see the install note in the Web editing section). The
+first time a file from a new project is opened, =lsp-mode= prompts for the
+project root: answer =i= to import the suggested root (usually the git
+root). The choice is remembered in =.lsp-session-v1=; get it wrong and
+=M-x lsp-workspace-folders-remove= undoes it. The mode line shows
+=LSP[ts-ls]= once the server is up.
+
+Auto-import works two ways:
+
+1. /Completion-driven./ Type the symbol name and accept a Corfu candidate
+   that comes from another module — =ts-ls= attaches the =import= statement
+   as an additional edit, and =lsp-mode= inserts it at the top of the file
+   on accept. The completion popup deliberately hides the detail column
+   (=lsp-completion-show-detail nil=), so the source module is not shown
+   inline; toggle the Corfu docs panel with =C-c l i= when it matters which
+   module a candidate imports from.
+2. /Code-action-driven./ For a symbol already in the buffer that Flycheck
+   flags with "Cannot find name ...": put point on it and press =C-c l a a=,
+   then pick the "Add import from ..." action. This is the route for pasted
+   code.
+
+Housekeeping around imports:
+
+- =C-c l r o= (=lsp-organize-imports=) sorts the import block and removes
+  unused entries. It is manual by design — nothing in the config runs it on
+  save.
+- =C-c l r r= renames a symbol across every file the project's
+  =tsconfig.json= covers, imports included.
+
+Per-file compiler settings come from the nearest =tsconfig.json= above the
+file, resolved by =tsserver= itself. A project with several tsconfigs
+(say, root + =tsconfig.server.json= + =client/tsconfig.json=) needs no
+extra Emacs configuration — each buffer is checked against the config that
+governs it. The server also prefers the project's own
+=node_modules/typescript= over the globally installed compiler, so
+diagnostics match what =tsc= says in that repo.
 
 *** DAP — debugging Java
 
@@ -2852,6 +2928,22 @@ gitignored.
   with =npm install -g bash-language-server= and =brew install shellcheck=,
   then reopen the buffer (or =M-x lsp-workspace-restart=). =*lsp-log*= will
   name =bash-ls= explicitly when the language server is the missing piece.
+- /No completions or diagnostics in a JS, TS, or TSX buffer./ Same shape as
+  the shell case: =*lsp-log*= reports =ts-ls= not present (or "Command
+  typescript-language-server ... not found"). Install with
+  =npm install -g typescript-language-server typescript=, then reopen the
+  buffer (or =M-x lsp-workspace-restart=). The project's own
+  =node_modules/.bin/tsserver= does not count — that is the raw =tsserver=,
+  not the LSP wrapper =ts-ls= launches.
+- /ts-ls nags about non-issues (unreachable code, "declared but never
+  read")./ Those are =tsserver= hint diagnostics, and the fix is a setting,
+  not a different server. The ignore list is
+  =systemhalted/lsp-ts-ignored-diagnostic-codes= in the Web editing section
+  — a vector of numeric tsserver codes (7027, unreachable code, is already
+  in it). Add the code from the offending Flycheck message, =C-c r= to
+  reload the config, then =C-c l R= to restart the workspace. Note that
+  =lsp-typescript-suggestion-actions-enabled= does /not/ silence these —
+  =typescript-language-server= ignores that VS Code setting.
 
 * LaTeX
 
