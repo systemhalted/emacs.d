@@ -1287,7 +1287,7 @@ one file per numbered category under =~/org/=:
 20-personal.org  -> Career / Home / Health / Family / Finances / Purchases / Recommendations
 30-learning.org  -> AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
 40-writing.org   -> Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
-50-journal.org   -> Daily journal (datetree) / Old journal (migrated entries)
+50-journal.org   -> Daily journal (a heading per day) / Old journal (migrated entries)
 60-ideas.org     -> Apps and Tools / Business / Research questions
 99-archive.org   -> done thinking, kept searchable
 #+end_example
@@ -1338,7 +1338,7 @@ described in /Saving Private Notes/:
 20-personal.org  Career / Home / Health / Family / Finances / Purchases / Recommendations
 30-learning.org  AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
 40-writing.org   Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
-50-journal.org   Daily journal (datetree) / Old journal (migrated entries)
+50-journal.org   Daily journal (a heading per day) / Old journal (migrated entries)
 60-ideas.org     Apps and Tools / Business / Research questions
 99-archive.org   done thinking, kept searchable (flat)
 #+end_example
@@ -1356,7 +1356,7 @@ p -> Personal (prompts for the section: Career / Home / Health / ...)
 l -> Learning (prompts: AI Sessions / Articles / Books / Podcasts / ...)
 r -> Writing  (prompts: Concepts / Ideas / Drafts / ...)
 d -> Idea     (prompts: Apps and Tools / Business / Research questions)
-j -> Journal  (today's datetree entry under * Daily journal)
+j -> Journal  (files under today's heading, e.g. "5th June 2026, Friday")
 s -> Source note (see below)
 #+end_example
 
@@ -1448,6 +1448,14 @@ asks /which/ part of Personal the note belongs to. Typing a name that doesn't
 exist yet creates that section — the seeded structure is a starting point,
 not a cage.
 
+=systemhalted/org-journal-target= does the same for the journal, replacing
+Org's machine-formatted datetree (=2026 / 2026-06 June / 2026-06-05 Friday=)
+with one calendar heading per day, written the way a person says it:
+=5th June 2026, Friday=. The day heading is found or created at the end of
+the =* Daily journal= subtree, so days accumulate chronologically and every
+capture that day becomes an entry under it. =* Old journal= stays untouched
+for entries migrated from earlier systems.
+
 #+begin_src emacs-lisp
 (defun systemhalted/org-file (file)
   "Return FILE expanded inside `org-directory'."
@@ -1508,6 +1516,30 @@ name creates that section on the fly."
         (push (match-string-no-properties 1) headings)))
     (systemhalted/org-goto-or-create-heading
      (completing-read "Section: " (nreverse headings)))))
+
+(defun systemhalted/org-journal-target ()
+  "Position point on today's calendar heading under `* Daily journal'.
+The heading reads like \"5th June 2026, Friday\" and is created at the
+end of the Daily journal subtree on first use, so days accumulate in
+chronological order and each capture becomes an entry under its day."
+  (let* ((day (string-to-number (format-time-string "%d")))
+         (suffix (cond ((memq day '(11 12 13)) "th")
+                       ((= (% day 10) 1) "st")
+                       ((= (% day 10) 2) "nd")
+                       ((= (% day 10) 3) "rd")
+                       (t "th")))
+         (title (format "%d%s %s, %s" day suffix
+                        (format-time-string "%B %Y")
+                        (format-time-string "%A"))))
+    (systemhalted/org-goto-or-create-heading "Daily journal")
+    (let ((end (save-excursion (org-end-of-subtree t t) (point))))
+      (if (re-search-forward
+           (format "^\\*\\* %s[ \t]*$" (regexp-quote title)) end t)
+          (beginning-of-line)
+        (goto-char end)
+        (unless (bolp) (insert "\n"))
+        (insert "** " title "\n")
+        (forward-line -1)))))
 #+end_src
 
 ** Soft guardrail: tasks belong in Reminders
@@ -1675,8 +1707,9 @@ The =:config= block wires the second-brain flow:
 - =org-capture-templates= routes directly by category: =i= Inbox
   (fallback), =w= Work (flat), =p= Personal, =l= Learning, =r= Writing,
   and =d= Idea (each prompting for its section via
-  =systemhalted/org-section-target=), =j= Journal (datetree under
-  =* Daily journal=), and =s= for source-aware notes through
+  =systemhalted/org-section-target=), =j= Journal (today's calendar
+  heading under =* Daily journal= via
+  =systemhalted/org-journal-target=), and =s= for source-aware notes through
   =systemhalted/org-notes-target= above. The capture-menu =j= lives in
   its own keymap and is unrelated to the global =C-c j= Jupyter toggle.
 
@@ -1745,11 +1778,12 @@ Jupyter is opt-in via its own subsection below.
            (file+function ,(systemhalted/org-file "60-ideas.org")
                           systemhalted/org-section-target)
            "* %?\n%U")
-          ;; New journal entries grow the datetree under * Daily journal;
-          ;; * Old journal holds entries migrated from earlier systems.
+          ;; Journal entries file under today's calendar heading (created
+          ;; on first use) inside * Daily journal; * Old journal holds
+          ;; entries migrated from earlier systems.
           ("j" "Journal" entry
-           (file+olp+datetree ,(systemhalted/org-file "50-journal.org")
-                              "Daily journal")
+           (file+function ,(systemhalted/org-file "50-journal.org")
+                          systemhalted/org-journal-target)
            "* %?\n%U")
           ;; Source notes route through a function so each source linked-to
           ;; gets its own subtree in the inbox, keyed by :SOURCE_ID:.  %a
