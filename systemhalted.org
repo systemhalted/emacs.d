@@ -1284,11 +1284,11 @@ one file per numbered category under =~/org/=:
 #+begin_example
 00-inbox.org     -> unfiled captures, emptied weekly
 10-work.org      -> work notes
-20-personal.org  -> personal notes
-30-learning.org  -> Books / Articles / Videos / Courses
-40-writing.org   -> Ideas / Drafts / Articles / Poetry / Stories / Books / Published
-50-journal.org   -> datetree journal
-60-ideas.org     -> ideas worth keeping
+20-personal.org  -> Career / Home / Health / Family / Finances / Purchases / Recommendations
+30-learning.org  -> AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
+40-writing.org   -> Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
+50-journal.org   -> Daily journal (datetree) / Old journal (migrated entries)
+60-ideas.org     -> Apps and Tools / Business / Research questions
 99-archive.org   -> done thinking, kept searchable
 #+end_example
 
@@ -1334,13 +1334,13 @@ described in /Saving Private Notes/:
 
 #+begin_example
 00-inbox.org     unfiled captures (emptied during the weekly sweep)
-10-work.org      work notes
-20-personal.org  personal notes
-30-learning.org  * Books / * Articles / * Videos / * Courses
-40-writing.org   * Ideas / * Drafts / * Articles / * Poetry / * Stories / * Books / * Published
-50-journal.org   journal entries in a datetree
-60-ideas.org     ideas worth keeping
-99-archive.org   done thinking, kept searchable
+10-work.org      work notes (flat)
+20-personal.org  Career / Home / Health / Family / Finances / Purchases / Recommendations
+30-learning.org  AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
+40-writing.org   Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
+50-journal.org   Daily journal (datetree) / Old journal (migrated entries)
+60-ideas.org     Apps and Tools / Business / Research questions
+99-archive.org   done thinking, kept searchable (flat)
 #+end_example
 
 A note is a heading with prose under it. Empty category files are seeded with
@@ -1352,13 +1352,17 @@ created at startup.
 #+begin_example
 i -> Inbox    (file it later; for when deciding would interrupt the thought)
 w -> Work
-p -> Personal
-l -> Learning sub-menu: a Article / b Book / v Video / c Course
-r -> Writing  (lands under * Ideas in 40-writing.org)
-d -> Idea
-j -> Journal  (today's datetree entry in 50-journal.org)
+p -> Personal (prompts for the section: Career / Home / Health / ...)
+l -> Learning (prompts: AI Sessions / Articles / Books / Podcasts / ...)
+r -> Writing  (prompts: Concepts / Ideas / Drafts / ...)
+d -> Idea     (prompts: Apps and Tools / Business / Research questions)
+j -> Journal  (today's datetree entry under * Daily journal)
 s -> Source note (see below)
 #+end_example
+
+The section prompt completes over the file's /current/ top-level headings —
+typing a new name creates that section, so the structure can grow without
+touching the config.
 
 (The =j= here is a key /inside/ the capture menu — it has nothing to do with
 the global =C-c j= Jupyter toggle.)
@@ -1419,21 +1423,30 @@ thing.
 
 =systemhalted/org-category-files= names the eight numbered files — the
 sort-by-prefix structure carried over from the Apple Notes system. The alist
-=systemhalted/org-file-structure= records which of them get seeded with
-top-level headings: =30-learning.org= and =40-writing.org= mirror their old
-subfolders, and =00-inbox.org= gets a single =* Inbox= heading that the
-fallback capture template and the source-aware capture both rely on. The rest
-stay flat — a note there is simply a top-level heading.
+=systemhalted/org-file-structure= records the top-level headings each file is
+seeded with, mirroring the sub-folders each category had in Apple Notes.
+=00-inbox.org= gets a single =* Inbox= heading that the fallback capture
+template and the source-aware capture both rely on; =10-work.org= and
+=99-archive.org= stay flat — a note there is simply a top-level heading.
 
 =systemhalted/org-done-state-regexp= is the one definition of "task-shaped":
 a heading carrying =TODO= / =IN-PROGRESS= / =DONE=, or a =SCHEDULED:= /
 =DEADLINE:= planning line. Items matching it have a done state and therefore
 belong in Reminders, not here.
 
-=systemhalted/org-goto-or-create-heading= positions point at the end of a
-named top-level heading in the current buffer, creating it (with surrounding
-blank lines) when missing — capture targets use it so a heading never has to
-pre-exist.
+=systemhalted/org-goto-or-create-heading= moves point /onto/ a named
+top-level heading in the current buffer, creating it (with surrounding blank
+lines) when missing. Landing on the heading line matters: =org-capture=
+treats the heading at point as the parent entry and appends the capture to
+the end of its subtree — whereas point /past/ the subtree would sit on the
+next heading and misfile the note under it.
+
+=systemhalted/org-section-target= builds on it as a =file+function= capture
+callback for the categories with sections: it offers the file's existing
+top-level headings through =completing-read= (vertico applies), so =C-c c p=
+asks /which/ part of Personal the note belongs to. Typing a name that doesn't
+exist yet creates that section — the seeded structure is a starting point,
+not a cage.
 
 #+begin_src emacs-lisp
 (defun systemhalted/org-file (file)
@@ -1453,9 +1466,14 @@ pre-exist.
 
 (defconst systemhalted/org-file-structure
   '(("00-inbox.org"    . ("Inbox"))
-    ("30-learning.org" . ("Books" "Articles" "Videos" "Courses"))
-    ("40-writing.org"  . ("Ideas" "Drafts" "Articles" "Poetry" "Stories"
-                          "Books" "Published")))
+    ("20-personal.org" . ("Career" "Home" "Health" "Family" "Finances"
+                          "Purchases" "Recommendations"))
+    ("30-learning.org" . ("AI Sessions" "Articles" "Books" "Podcasts"
+                          "Courses" "Videos" "Subjects"))
+    ("40-writing.org"  . ("Concepts" "Ideas" "Drafts" "Articles" "Podcasts"
+                          "Poetry" "Stories" "Books" "Published"))
+    ("50-journal.org"  . ("Daily journal" "Old journal"))
+    ("60-ideas.org"    . ("Apps and Tools" "Business" "Research questions")))
   "Top-level headings seeded into category files; unlisted files stay flat.")
 
 (defconst systemhalted/org-done-state-regexp
@@ -1464,20 +1482,32 @@ pre-exist.
   "Matches task headings or planning lines — things that belong in Reminders.")
 
 (defun systemhalted/org-goto-or-create-heading (heading)
-  "Move to the end of top-level HEADING, creating it when needed."
+  "Move point onto top-level HEADING, creating it when needed.
+Leaves point on the heading line itself so `org-capture' treats it as
+the parent entry and appends the capture to the end of its subtree."
   (goto-char (point-min))
-  (unless (re-search-forward
-           (format "^\\* %s[ \t]*$" (regexp-quote heading)) nil t)
+  (if (re-search-forward
+       (format "^\\* %s[ \t]*$" (regexp-quote heading)) nil t)
+      (beginning-of-line)
     (goto-char (point-max))
     (unless (bolp)
       (insert "\n"))
     (unless (bobp)
       (insert "\n"))
-    (insert "* " heading "\n"))
-  (beginning-of-line)
-  (org-end-of-subtree t t)
-  (unless (bolp)
-    (insert "\n")))
+    (insert "* " heading "\n")
+    (forward-line -1)))
+
+(defun systemhalted/org-section-target ()
+  "Prompt for a top-level section of the capture file and move point there.
+Candidates are the file's existing top-level headings; entering a new
+name creates that section on the fly."
+  (let (headings)
+    (save-excursion
+      (goto-char (point-min))
+      (while (re-search-forward "^\\* \\(.+?\\)[ \t]*$" nil t)
+        (push (match-string-no-properties 1) headings)))
+    (systemhalted/org-goto-or-create-heading
+     (completing-read "Section: " (nreverse headings)))))
 #+end_src
 
 ** Soft guardrail: tasks belong in Reminders
@@ -1596,16 +1626,18 @@ from anywhere else, fall back to the flat `* Inbox' heading."
         (if (re-search-forward
              (format "^[ \t]*:SOURCE_ID:[ \t]+%s[ \t]*$" (regexp-quote id))
              nil t)
-            (progn
-              (org-back-to-heading t)
-              (org-end-of-subtree t t)
-              (unless (bolp) (insert "\n")))
+            ;; Stay on the heading line: org-capture appends the note to
+            ;; the end of this subtree (point past it would misfile the
+            ;; note under the next source heading).
+            (org-back-to-heading t)
           (goto-char (point-max))
           (unless (bolp) (insert "\n"))
-          (insert "* " title "\n"
-                  "  :PROPERTIES:\n"
-                  "  :SOURCE_ID: " id "\n"
-                  "  :END:\n"))))
+          (let ((start (point)))
+            (insert "* " title "\n"
+                    "  :PROPERTIES:\n"
+                    "  :SOURCE_ID: " id "\n"
+                    "  :END:\n")
+            (goto-char start)))))
      (t
       (systemhalted/org-goto-or-create-heading "Inbox")))))
 #+end_src
@@ -1641,9 +1673,10 @@ The =:config= block wires the second-brain flow:
   =file/heading= paths, and =org-outline-path-complete-in-steps nil=
   hands the whole path to vertico in one completion.
 - =org-capture-templates= routes directly by category: =i= Inbox
-  (fallback), =w= Work, =p= Personal, an =l= sub-menu for Learning
-  (Article/Book/Video/Course), =r= Writing ideas, =d= Idea, =j= Journal
-  (datetree), and =s= for source-aware notes through
+  (fallback), =w= Work (flat), =p= Personal, =l= Learning, =r= Writing,
+  and =d= Idea (each prompting for its section via
+  =systemhalted/org-section-target=), =j= Journal (datetree under
+  =* Daily journal=), and =s= for source-aware notes through
   =systemhalted/org-notes-target= above. The capture-menu =j= lives in
   its own keymap and is unrelated to the global =C-c j= Jupyter toggle.
 
@@ -1685,8 +1718,10 @@ Jupyter is opt-in via its own subsection below.
                   (cons (systemhalted/org-file file) '(:maxlevel . 2)))
                 '("10-work.org" "20-personal.org" "30-learning.org"
                   "40-writing.org" "60-ideas.org" "99-archive.org"))
-        ;; Capture routes by category up front; the inbox is the fallback
-        ;; for when deciding would interrupt the thought.
+        ;; Capture routes by category up front; categories with sections
+        ;; prompt for the section through `systemhalted/org-section-target'.
+        ;; The inbox is the fallback for when deciding would interrupt the
+        ;; thought.
         org-capture-templates
         `(("i" "Inbox" entry
            (file+headline ,(systemhalted/org-file "00-inbox.org") "Inbox")
@@ -1695,31 +1730,26 @@ Jupyter is opt-in via its own subsection below.
            (file ,(systemhalted/org-file "10-work.org"))
            "* %?\n%U")
           ("p" "Personal" entry
-           (file ,(systemhalted/org-file "20-personal.org"))
+           (file+function ,(systemhalted/org-file "20-personal.org")
+                          systemhalted/org-section-target)
            "* %?\n%U")
-          ;; Learning is split by kind so intake routes into the right
-          ;; bucket. C-c c l shows the sub-menu; pick a, b, v, or c.
-          ("l" "Learning")
-          ("la" "Article" entry
-           (file+headline ,(systemhalted/org-file "30-learning.org") "Articles")
+          ("l" "Learning" entry
+           (file+function ,(systemhalted/org-file "30-learning.org")
+                          systemhalted/org-section-target)
            "* %?\n")
-          ("lb" "Book" entry
-           (file+headline ,(systemhalted/org-file "30-learning.org") "Books")
-           "* %?\n")
-          ("lv" "Video" entry
-           (file+headline ,(systemhalted/org-file "30-learning.org") "Videos")
-           "* %?\n")
-          ("lc" "Course" entry
-           (file+headline ,(systemhalted/org-file "30-learning.org") "Courses")
-           "* %?\n")
-          ("r" "Writing idea" entry
-           (file+headline ,(systemhalted/org-file "40-writing.org") "Ideas")
+          ("r" "Writing" entry
+           (file+function ,(systemhalted/org-file "40-writing.org")
+                          systemhalted/org-section-target)
            "* %?\n")
           ("d" "Idea" entry
-           (file ,(systemhalted/org-file "60-ideas.org"))
+           (file+function ,(systemhalted/org-file "60-ideas.org")
+                          systemhalted/org-section-target)
            "* %?\n%U")
+          ;; New journal entries grow the datetree under * Daily journal;
+          ;; * Old journal holds entries migrated from earlier systems.
           ("j" "Journal" entry
-           (file+olp+datetree ,(systemhalted/org-file "50-journal.org"))
+           (file+olp+datetree ,(systemhalted/org-file "50-journal.org")
+                              "Daily journal")
            "* %?\n%U")
           ;; Source notes route through a function so each source linked-to
           ;; gets its own subtree in the inbox, keyed by :SOURCE_ID:.  %a

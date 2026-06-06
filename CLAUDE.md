@@ -34,11 +34,11 @@ Use `use-package` for every package, with explicit `:ensure t` for external pack
 
 Org holds **no task management**. The rule: anything with a "done" state goes in Apple Reminders, anything with a date goes in Apple Calendar, everything else goes in org. There is no agenda, no TODO keywords (`org-todo-keywords` is nil), no task lifecycle.
 
-`~/org/` is one file per numbered category (sorted by prefix): `00-inbox.org` (unfiled captures, swept weekly), `10-work.org`, `20-personal.org`, `30-learning.org` (`* Books/Articles/Videos/Courses`), `40-writing.org` (`* Ideas/Drafts/Articles/Poetry/Stories/Books/Published`), `50-journal.org` (datetree), `60-ideas.org`, `99-archive.org`. The file list is `systemhalted/org-category-files`; seed headings are in `systemhalted/org-file-structure`. Missing files are created at startup (`systemhalted/ensure-org-files`); empty ones are seeded on open.
+`~/org/` is one file per numbered category (sorted by prefix): `00-inbox.org` (unfiled captures, swept weekly), `10-work.org` (flat), `20-personal.org`, `30-learning.org`, `40-writing.org`, `60-ideas.org` (each with section headings), `50-journal.org` (datetree under `* Daily journal`), `99-archive.org` (flat). The file list is `systemhalted/org-category-files`; seed headings are in `systemhalted/org-file-structure`. Missing files are created when Org first loads (`systemhalted/ensure-org-files`); empty ones are seeded on open.
 
 Enforcement is **soft by design**: `systemhalted/org-warn-done-state` warns (never blocks) on save when a file under `~/org/` contains TODO/IN-PROGRESS/DONE headings or `SCHEDULED:`/`DEADLINE:` lines. Do not reintroduce hard guards, agenda config, or task keywords.
 
-Capture (`C-c c`) routes by category: `i` inbox, `w` work, `p` personal, `l` learning sub-menu (`a/b/v/c`), `r` writing idea, `d` idea, `j` journal datetree, `s` source-aware note (`systemhalted/org-notes-target` — groups notes in the inbox by the source heading's `:SOURCE_ID:`). Refile targets (`C-c C-w`) are all category files except inbox/journal, completed as `file/heading` paths.
+Capture (`C-c c`) routes by category: `i` inbox, `w` work, `p` personal, `l` learning, `r` writing, `d` idea (the last four prompt for a section via `systemhalted/org-section-target` — completing over the file's top-level headings, creating new ones on demand), `j` journal datetree, `s` source-aware note (`systemhalted/org-notes-target` — groups notes in the inbox by the source heading's `:SOURCE_ID:`). Refile targets (`C-c C-w`) are all category files except inbox/journal, completed as `file/heading` paths.
 
 The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: the config must never reference, require, or delete them.
 
