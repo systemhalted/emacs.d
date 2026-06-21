@@ -409,16 +409,27 @@ backtrace if =py-spy= happens to be installed.
 
 ** Small convenience keys and windmove
 
-Two micro-tweaks live alone because they don't belong with any package:
+These micro-tweaks live alone because they don't belong with any package:
 
 - =C-x k= rebinds =kill-buffer= → =kill-current-buffer=. The stock binding
   prompts even when point is in the buffer you want to kill, which adds a
   =RET= for nothing.
+- =s-u= binds =revert-buffer=, reloading the current buffer from disk. This
+  is handy when an external tool rewrites the file underneath you — rustfmt
+  on a cargo command, a git rebase, a generated file — since the recursive
+  LSP file-watchers are disabled (see the LSP-mode section), so such changes
+  don't refresh the buffer on their own. Note the Super key: on macOS
+  Command is Super by default (=ns-command-modifier=), so =s-u= is reachable;
+  on Linux desktops Super is usually grabbed by the window manager (e.g.
+  GNOME Activities), so the chord may not reach Emacs there — fall back to
+  =M-x revert-buffer= (or =C-x x g=, =revert-buffer-quick=, which skips the
+  confirmation prompt).
 - =windmove= is built-in and provides directional window navigation
   (=S-<arrow>= by default). The =use-package= form just enables it.
 
 #+begin_src emacs-lisp
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
+  (global-set-key (kbd "s-u") #'revert-buffer)
 
   ;; enable windmove, for easy navigation between open windows
   (use-package windmove)
@@ -2106,7 +2117,8 @@ Language intelligence is centered on =lsp-mode=: one protocol, one
 completion path through Corfu via =capf=, one diagnostics surface through
 Flycheck. =lsp-mode= owns the protocol, =lsp-ui= layers a few minimal
 in-buffer affordances, =lsp-java= drives JDT LS, =lsp-pyright= drives
-Pyright, and =dap-mode= reuses JDT LS for breakpoints in Java. The
+Pyright, =rustic= drives =rust-analyzer=, and =dap-mode= reuses JDT LS
+for breakpoints in Java. The
 subsections below introduce each piece next to its rationale; a usage
 tutorial for the everyday LSP/DAP commands lives at the end of this
 section under =Using LSP and DAP=.
@@ -2257,7 +2269,7 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
 
 [[https://emacs-lsp.github.io/lsp-mode/][lsp-mode]] is the protocol layer.
 It attaches to Java via =systemhalted/lsp-deferred-unless-excluded=
-(SDKMAN-aware) and to JS/TS/web/CSS via plain =lsp-deferred=. The
+(SDKMAN-aware) and to JS/TS/web/CSS/Rust via plain =lsp-deferred=. The
 non-default settings exist for two reasons:
 
 *Memory bounds.* A Java editing session previously pushed Emacs above
@@ -2307,7 +2319,7 @@ Java project model when the build file changes.
   (lsp lsp-deferred)
   :hook
   ((java-mode . systemhalted/lsp-deferred-unless-excluded)
-   ((js-mode rjsx-mode typescript-mode web-mode css-mode) . lsp-deferred))
+   ((js-mode rjsx-mode typescript-mode web-mode css-mode rustic-mode) . lsp-deferred))
   :bind
   (:map lsp-mode-map
         ("C-c C-f" . lsp-format-buffer)
@@ -2549,6 +2561,65 @@ would otherwise launch the wrong interpreter on =C-c C-p=.
   (python-shell-interpreter "python3"))
 #+end_src
 
+** Rust — rustic and rust-analyzer
+
+=rustic= is the major mode for =.rs= files — a cargo-integrated superset
+of =rust-mode= that adds the =C-c C-c= cargo bindings (run / test / build /
+clippy), a colorized compilation buffer, and rustfmt-on-save. Language
+intelligence comes from =lsp-mode='s built-in =rust-analyzer= client, so —
+exactly like =ts-ls= for TypeScript — there is *no separate lsp package* to
+install; the client ships with =lsp-mode=.
+
+=rustic= can start lsp on its own, but here that auto-setup is disabled
+(=rustic-lsp-client nil=) and =rustic-mode= is attached through =lsp-mode='s
+own =:hook= group with plain =lsp-deferred= (see the LSP-mode section above),
+the same way every other language is wired. Keeping all lsp-managed modes in
+that one list makes the stack discoverable, and it guarantees a single
+=rust-analyzer= process per workspace rather than one from rustic plus one
+from the shared hook.
+
+=lsp-rust-analyzer-cargo-watch-command "clippy"= makes rust-analyzer run
+*clippy* instead of plain =cargo check=, so clippy's richer idiomatic-Rust
+lints surface in Flycheck alongside ordinary type errors — worth the slightly
+slower check while learning the language. =rustic-format-trigger 'on-save=
+runs rustfmt over the buffer just before every save.
+
+The toolchain must be on the =PATH= =exec-path-from-shell= imports.
+=rustup= is the portable install (it drops =rustc=, =cargo=, and
+=rust-analyzer= under =~/.cargo/bin=, which must be on your shell =PATH=):
+
+#+begin_src sh
+# Portable: rustup installs rustc + cargo, then add the analyzer component.
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup component add rust-analyzer   # rustfmt + clippy ship in the default profile
+#+end_src
+
+Distro packages also work: macOS =sudo port install rust rust-analyzer=
+(MacPorts) or =brew install rustup rust-analyzer= then =rustup-init=
+(Homebrew); Fedora =dnf install rust cargo rust-analyzer rustfmt clippy=;
+Ubuntu =apt install rustup= then =rustup component add rust-analyzer=
+(Ubuntu's standalone =rust= packages lag — rustup is preferred).
+
+#+begin_src emacs-lisp
+(use-package rustic
+  :ensure t
+  :mode ("\\.rs\\'" . rustic-mode)
+  :custom
+  ;; Don't let rustic auto-start lsp; rustic-mode is hooked via lsp-mode's own
+  ;; :hook list like every other language, so all lsp-managed modes live in one
+  ;; place — and only one rust-analyzer starts per workspace.
+  (rustic-lsp-client nil)
+  ;; The format-on-save knob is `rustic-format-trigger', set to the symbol
+  ;; 'on-save (there is no `rustic-format-on-save'); rustfmt runs over the
+  ;; buffer just before each save via `rustic-format-on-save-method'.
+  (rustic-format-trigger 'on-save)
+  ;; rust-analyzer runs clippy (not plain cargo check) so its richer lints
+  ;; surface in Flycheck — valuable while learning idiomatic Rust. We set this
+  ;; directly because rustic's own lsp setup (which would force it back to
+  ;; "check") is disabled via `rustic-lsp-client nil' above.
+  (lsp-rust-analyzer-cargo-watch-command "clippy"))
+#+end_src
+
 ** Web editing — one mode per file type
 
 The web stack is intentionally split by file extension rather than
@@ -2753,10 +2824,11 @@ binds them.
 *** LSP — everyday code intelligence
 
 LSP attaches automatically to =java-mode=, =python-mode=, =js-mode=,
-=rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=, and =sh-mode= via the
-=lsp-deferred= hook on =lsp-mode=. The mode line shows =LSP[<server>]= once
-the server is up (=jdtls= for Java, =pyright= for Python, etc.). If it does
-not appear, the server probably failed to start — check =*lsp-log*=.
+=rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=, =rustic-mode=, and
+=sh-mode= via the =lsp-deferred= hook on =lsp-mode=. The mode line shows
+=LSP[<server>]= once the server is up (=jdtls= for Java, =pyright= for
+Python, =rust-analyzer= for Rust, etc.). If it does not appear, the server
+probably failed to start — check =*lsp-log*=.
 
 Jumping to a definition (the most common move, e.g. from a Java method call
 to its declaration): place point on the symbol and press =M-.=. =lsp-mode=
@@ -2857,6 +2929,61 @@ extra Emacs configuration — each buffer is checked against the config that
 governs it. The server also prefers the project's own
 =node_modules/typescript= over the globally installed compiler, so
 diagnostics match what =tsc= says in that repo.
+
+*** Rust — cargo commands and rust-analyzer assists
+
+Rust buffers are =rustic-mode= driven by =rust-analyzer= (the binary on
+=PATH= — see the install note in the Rust section above). The first time a
+file from a new crate is opened, =lsp-mode= prompts for the project root:
+answer =i= to import the suggested root — pick the directory holding the
+workspace =Cargo.toml=, so rust-analyzer indexes the whole Cargo workspace
+rather than a single crate. The mode line shows =LSP[rust-analyzer]= once it
+is up; on a large workspace the first index takes a moment, and code actions
+are unavailable until it finishes.
+
+Diagnostics come from *clippy*, not plain =cargo check= (the config sets
+=lsp-rust-analyzer-cargo-watch-command "clippy"=), so clippy's idiomatic-Rust
+lints land in Flycheck alongside type errors. Step through them with the same
+=C-c ! n= / =C-c ! p= / =C-c ! l= as every other language.
+
+*Generating code that doesn't exist yet* is rust-analyzer's most useful
+assist and runs through the standard =C-c l a a= (=lsp-execute-code-action=):
+
+- Call a method or function you have not written, e.g. =doc.reload();=.
+  Flycheck flags it; put point on the call and press =C-c l a a=, then choose
+  /"Generate a method `reload`"/ (or /"Generate function"/ for a free
+  function). rust-analyzer inserts a stub in the right =impl= block.
+- On an =impl Trait for T= header, =C-c l a a= → /"Implement missing
+  members"/ stubs out every required trait method.
+- The same menu offers /"Generate `new`"/, getters/setters, and
+  /"Import ..."/ for an unresolved path — the Rust analogue of the
+  TypeScript auto-import flow above.
+
+Formatting is automatic: =rustic-format-trigger 'on-save= runs rustfmt over
+the buffer just before each save, so there is rarely a need to format by
+hand (=C-c C-f= still does it on demand).
+
+Beyond LSP, =rustic= adds a cargo command layer on the =C-c C-c= prefix
+(=C-c C-p= opens =rustic-popup=, a transient that lists them all):
+
+| Keys          | Command                  | What it does                  |
+|---------------+--------------------------+-------------------------------|
+| =C-c C-c C-r= | =rustic-cargo-run=       | cargo run                     |
+| =C-c C-c C-t= | =rustic-cargo-test=      | cargo test (whole crate)      |
+| =C-c C-c C-c= | =rustic-cargo-current-test= | run the test at point      |
+| =C-c C-c C-b= | =rustic-cargo-build=     | cargo build                   |
+| =C-c C-c C-k= | =rustic-cargo-check=     | cargo check                   |
+| =C-c C-c C-l= | =rustic-cargo-clippy=    | cargo clippy                  |
+| =C-c C-c C-f= | =rustic-cargo-fmt=       | cargo fmt (whole project)     |
+| =C-c C-c C-u= | =rustic-compile=         | run an arbitrary cargo/shell command |
+| =C-c C-c a=   | =rustic-cargo-add=       | cargo add a dependency        |
+| =C-c C-p=     | =rustic-popup=           | transient menu of all of the above |
+
+For the =geditrs= workspace specifically, =rustic-cargo-run= / =-test=
+operate on the crate owning the current buffer; to target one workspace
+member explicitly (e.g. =cargo run -p tui=), use =C-c C-c C-u=
+(=rustic-compile=) and type the full command — the compilation buffer is
+colorized and its file:line references are clickable.
 
 *** DAP — debugging Java
 

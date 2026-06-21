@@ -58,6 +58,7 @@ Language intelligence is centralized on `lsp-mode` + `lsp-ui`. Older language-sp
 - `yasnippet` + `yasnippet-snippets` — snippets.
 - `lsp-java` — JDT LS, installed under `eclipse.jdt.ls/server/` (gitignored).
 - `lsp-pyright` — Python; requires the `pyright` binary on PATH.
+- `rustic` + `lsp-mode`'s built-in `rust-analyzer` client — Rust; requires the `rust-analyzer` binary on PATH (clippy diagnostics, rustfmt-on-save). `rustic` is the one deliberate cargo-integrated mode (its own lsp auto-setup is disabled via `rustic-lsp-client nil`; the buffer attaches through `lsp-mode`'s shared hook like every other language).
 
 Web editing is split by file type and is intentional: `web-mode` for `.html`/`.tsx`, `rjsx-mode` for `.jsx`/`.js`, `typescript-mode` for `.ts`, built-in `css-mode` for CSS. Do not collapse these onto a single mode.
 
