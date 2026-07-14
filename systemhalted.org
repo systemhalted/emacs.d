@@ -1291,7 +1291,7 @@ Everything else goes in org.
 That rule replaced the previous three-file TODO/BACKLOG/NOTES model (which
 itself replaced an older GTD-heavy setup). Tasks and scheduling now live
 entirely in Apple Reminders and Calendar; org models /knowledge/, organized as
-one file per numbered category under =~/org/=:
+one file per numbered category under =~/organicely/=:
 
 #+begin_example
 00-inbox.org     -> unfiled captures, emptied weekly
@@ -1309,7 +1309,7 @@ into the inbox when filing would interrupt the thought. Apple Notes keeps
 exactly one folder — its Inbox — as the mobile capture point; a weekly
 half-hour sweep moves those items here and refiles =00-inbox.org= with
 =C-c C-w=. There is no agenda, no TODO lifecycle, and no promotion command —
-only a soft save-time warning when a task-shaped heading sneaks into =~/org/=.
+only a soft save-time warning when a task-shaped heading sneaks into =~/organicely/=.
 
 Jupyter support is opt-in. Normal Org startup should stay light and quiet; when a
 notebook workflow is needed, =C-c j= enables the Jupyter Babel integration for
@@ -1341,7 +1341,7 @@ Org never holds tasks. "Buy milk" is a Reminder; "Why CRDTs converge" is a
 note. When in doubt, ask whether the item can ever be /finished/ — if yes, it
 does not belong here.
 
-*The files.* One file per numbered category in =~/org/=, mirroring the system
+*The files.* One file per numbered category in =~/organicely/=, mirroring the system
 described in /Saving Private Notes/:
 
 #+begin_example
@@ -1406,12 +1406,12 @@ flat =* Inbox= heading. The captured body contains a backlink (=%a=) so
 The inbox should be empty when the sweep ends. The system stays trustworthy
 because of this ritual, not because of any enforcement.
 
-*Retrieval.* =C-c n= runs a ripgrep search across =~/org/= only (=C-c s= is
+*Retrieval.* =C-c n= runs a ripgrep search across =~/organicely/= only (=C-c s= is
 the general-purpose search that prompts for a directory). Inside a note,
 =C-c l= stores a link and =C-c C-l= inserts it, so durable cross-references
 between notes are cheap.
 
-*The soft warning.* Saving any file under =~/org/= that contains a =TODO= /
+*The soft warning.* Saving any file under =~/organicely/= that contains a =TODO= /
 =IN-PROGRESS= / =DONE= heading or a =SCHEDULED:= / =DEADLINE:= line prints a
 reminder that the item belongs in Reminders. The save always succeeds — the
 warning is a nudge, not a guard.
@@ -1434,9 +1434,9 @@ opt-in prevents normal Org startup from carrying notebook server state.
 
 These tiny pieces are the vocabulary the rest of the Org setup speaks:
 =systemhalted/org-file= resolves a name against =org-directory= (centralises
-the =~/org/= assumption so nothing else hard-codes it), and
+the =~/organicely/= assumption so nothing else hard-codes it), and
 =systemhalted/org-buffer-file-p= asks "is the current buffer this specific
-file?" using =file-truename= so symlinks into =~/org/= behave like the real
+file?" using =file-truename= so symlinks into =~/organicely/= behave like the real
 thing.
 
 =systemhalted/org-category-files= names the eight numbered files — the
@@ -1628,7 +1628,7 @@ be around, but nothing depends on those files existing.
 =systemhalted/ensure-org-files= creates any missing category files (seeded) up
 front. It is called from the main configuration's =:config= block, which runs
 the moment Org first loads, so the refile targets defined there always point
-at real files — even on a machine where =~/org/= doesn't exist yet.
+at real files — even on a machine where =~/organicely/= doesn't exist yet.
 
 #+begin_src emacs-lisp
 (defun systemhalted/ensure-org-structure ()
@@ -1783,7 +1783,7 @@ Jupyter is opt-in via its own subsection below.
   :hook
   (org-mode . visual-line-mode)
   :custom
-  (org-directory (expand-file-name "~/org/"))
+  (org-directory (expand-file-name "~/organicely/"))
   (org-default-notes-file (systemhalted/org-file "00-inbox.org"))
   (org-ellipsis " ...")
   (org-startup-indented t)
