@@ -2111,13 +2111,58 @@ file uses plain =markdown-mode=. The GFM split matters because writing
 README bullets that render correctly on GitHub requires the GFM-specific
 parsing.
 
+Pipe tables are the sore spot. =markdown-mode= re-aligns a table *while you
+edit it* (=markdown-table-align-p= is =t= by default), but a table that was
+pasted or generated elsewhere — a blog post table, say — stays ragged in the
+buffer until you happen to touch a cell, so the columns don't line up and
+it's hard to read. =systemhalted/markdown-align-all-tables= closes that gap:
+it walks the buffer and runs =markdown-table-align= on every table. The
+=markdown-mode= hook wires it in at both ends — it runs once *when a file is
+visited*, so a freshly opened buffer shows neat columns straight away, and
+again on a buffer-local =before-save-hook=, so the aligned form is what lands
+on disk. The visit-time pass binds =buffer-undo-list= to =t= and restores the
+buffer's modified flag afterward, so opening a file neither dirties the buffer
+nor writes anything — the on-disk file is only rewritten by a *real* save.
+=markdown-table-align= is still there to align a single table on demand.
+Alignment is cosmetic whitespace only — Kramdown/GFM ignore it — so it never
+changes how the table renders on the published site.
+
 #+begin_src emacs-lisp
+(defun systemhalted/markdown-align-all-tables ()
+  "Re-align every pipe table in the current Markdown buffer.
+`markdown-mode' realigns a table as you edit it (`markdown-table-align-p'
+is t), but a pasted or generated table stays ragged until touched.  Walk
+the buffer and run `markdown-table-align' on each table so the columns
+line up.  Used on `before-save-hook'; also callable interactively."
+  (interactive)
+  (when (derived-mode-p 'markdown-mode)
+    (save-excursion
+      (goto-char (point-min))
+      (while (re-search-forward "^[ \t]*|" nil t)
+        (if (markdown-table-at-point-p)
+            (progn
+              (markdown-table-align)
+              (goto-char (markdown-table-end)))
+          (forward-line 1))))))
+
 (use-package markdown-mode
   :ensure t
   :mode
   (("README\\.md\\'" . gfm-mode)
    ("\\.md\\'" . markdown-mode)
-   ("\\.markdown\\'" . markdown-mode)))
+   ("\\.markdown\\'" . markdown-mode))
+  :hook
+  (markdown-mode . (lambda ()
+                     (add-hook 'before-save-hook
+                               #'systemhalted/markdown-align-all-tables nil t)
+                     ;; Align on visit too, so a freshly opened file shows neat
+                     ;; columns without waiting for a save.  Suppress undo and
+                     ;; keep the buffer's modified state so opening writes
+                     ;; nothing and leaves nothing to undo.
+                     (let ((was-modified (buffer-modified-p))
+                           (buffer-undo-list t))
+                       (systemhalted/markdown-align-all-tables)
+                       (unless was-modified (set-buffer-modified-p nil))))))
 #+end_src
 
 ** YAML mode — configuration files
