@@ -1167,9 +1167,20 @@ Marginalia all apply to project pickers too. =projectile-indexing-method
 'alien= delegates the file listing to external tools (=git ls-files=,
 =find=) instead of Emacs traversing directories itself; on large
 repositories this is the difference between instant and seconds-long
-listings. =projectile-project-search-path= seeds project discovery from
-=~/Workspace= so =C-c p p= shows known projects without first having to
-visit a file inside each one.
+listings.
+
+Projects here don't sit in one flat directory — they're nested a few
+levels deep under =~/Workspaces= (e.g. =~/Workspaces/Palak/products/…=).
+Projectile's built-in =projectile-project-search-path= only scans a
+single, fixed depth, so it can't find them without hardcoding how deep
+each one lives. Instead =systemhalted/discover-projects= walks
+=systemhalted/projects-root= (=~/Workspaces=) recursively to /any/ depth
+and registers every repo it finds — stopping the moment it hits a project
+root so it never descends into a repo's own file tree. It runs on startup,
+so =C-c p p= lists every project without first visiting a file inside each
+one, and it's guarded on the directory existing so it's a harmless no-op on
+machines without that tree. After adding a new repo, re-scan on the spot
+with =M-x systemhalted/discover-projects= — no restart needed.
 
 Common entry points (all under =C-c p=):
 
@@ -1188,9 +1199,28 @@ Common entry points (all under =C-c p=):
   (projectile-completion-system 'default)
   (projectile-indexing-method 'alien)
   :config
+  (defvar systemhalted/projects-root "~/Workspaces"
+    "Root directory under which every project is auto-registered with Projectile.")
+
+  (defun systemhalted/discover-projects (&optional root)
+    "Register every project found anywhere under ROOT with Projectile.
+Descends ROOT recursively (skipping dotfiles) and, for each directory
+Projectile recognizes as a project — one holding a `.git', a known build
+file, or a `.projectile' marker — adds its root to the known-projects
+list, then stops descending so subdirectories inside a repo aren't
+treated as separate projects.  ROOT defaults to `systemhalted/projects-root'."
+    (interactive)
+    (setq root (or root systemhalted/projects-root))
+    (when (file-directory-p root)
+      (dolist (dir (directory-files root t directory-files-no-dot-files-regexp))
+        (when (file-directory-p dir)
+          (if (projectile-project-p dir)
+              (projectile-add-known-project
+               (abbreviate-file-name (projectile-project-root dir)))
+            (systemhalted/discover-projects dir))))))
+
   (projectile-mode 1)
-  (when (file-directory-p "~/Workspace")
-    (setq projectile-project-search-path '("~/Workspace"))))
+  (systemhalted/discover-projects))
 #+end_src
 
 ** compile — multiple compilation buffers
