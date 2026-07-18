@@ -1321,25 +1321,27 @@ Everything else goes in org.
 That rule replaced the previous three-file TODO/BACKLOG/NOTES model (which
 itself replaced an older GTD-heavy setup). Tasks and scheduling now live
 entirely in Apple Reminders and Calendar; org models /knowledge/, organized as
-one file per numbered category under =~/organicely/=:
+a directory tree under =~/organicely/= — one file per note, in numbered areas
+that mirror the Apple Notes folders:
 
 #+begin_example
-00-inbox.org     -> unfiled captures, emptied weekly
-10-work.org      -> work notes
-20-personal.org  -> Career / Home / Health / Family / Finances / Purchases / Recommendations
-30-learning.org  -> AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
-40-writing.org   -> Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
-50-journal.org   -> Daily journal (a heading per day) / Old journal (migrated entries)
-60-ideas.org     -> Apps and Tools / Business / Research questions
-99-archive.org   -> done thinking, kept searchable
+00-inbox/      -> unfiled captures, emptied weekly
+10-work/       -> work notes
+20-personal/   -> career/ home/ health/ family/ finances/ purchases/ recommendations/
+30-learning/   -> ai-sessions/ articles/ books/ podcasts/ courses/ videos/ subjects/
+40-writing/    -> concepts/ ideas/ drafts/ articles/ podcasts/ poetry/ stories/ books/ published/
+50-journal/    -> daily/ (one file per day)   old/ (migrated entries)
+60-ideas/      -> apps-and-tools/ business/ research-questions/
+99-archive/    -> done thinking, kept searchable
 #+end_example
 
-A note is just a heading. Capture (=C-c c=) files directly into a category, or
-into the inbox when filing would interrupt the thought. Apple Notes keeps
-exactly one folder — its Inbox — as the mobile capture point; a weekly
-half-hour sweep moves those items here and refiles =00-inbox.org= with
-=C-c C-w=. There is no agenda, no TODO lifecycle, and no promotion command —
-only a soft save-time warning when a task-shaped heading sneaks into =~/organicely/=.
+A note is a file. Capture (=C-c c=) creates one directly in an area/section, or
+in the inbox when filing would interrupt the thought. Apple Notes keeps exactly
+one folder — its Inbox — as the mobile capture point; a weekly half-hour sweep
+moves those items here and refiles =00-inbox/= with =C-c C-w= (which relocates
+the note's file into place). There is no agenda, no TODO lifecycle, and no
+promotion command — only a soft save-time warning when a task-shaped heading
+sneaks into =~/organicely/=.
 
 Jupyter support is opt-in. Normal Org startup should stay light and quiet; when a
 notebook workflow is needed, =C-c j= enables the Jupyter Babel integration for
@@ -1371,84 +1373,79 @@ Org never holds tasks. "Buy milk" is a Reminder; "Why CRDTs converge" is a
 note. When in doubt, ask whether the item can ever be /finished/ — if yes, it
 does not belong here.
 
-*The files.* One file per numbered category in =~/organicely/=, mirroring the system
-described in /Saving Private Notes/:
+*The structure.* =~/organicely/= is a directory tree, and every note is its own
+file. The numbered areas mirror the folders from Apple Notes; each area holds
+section subdirectories, and a note is a single =.org= file with a =#+TITLE:= and
+prose under it:
 
 #+begin_example
-00-inbox.org     unfiled captures (emptied during the weekly sweep)
-10-work.org      work notes (flat)
-20-personal.org  Career / Home / Health / Family / Finances / Purchases / Recommendations
-30-learning.org  AI Sessions / Articles / Books / Podcasts / Courses / Videos / Subjects
-40-writing.org   Concepts / Ideas / Drafts / Articles / Podcasts / Poetry / Stories / Books / Published
-50-journal.org   Daily journal (a heading per day) / Old journal (migrated entries)
-60-ideas.org     Apps and Tools / Business / Research questions
-99-archive.org   done thinking, kept searchable (flat)
+00-inbox/      unfiled captures (emptied during the weekly sweep)
+10-work/       work notes
+20-personal/   career/ home/ health/ family/ finances/ purchases/ recommendations/
+30-learning/   ai-sessions/ articles/ books/ podcasts/ courses/ videos/ subjects/
+40-writing/    concepts/ ideas/ drafts/ articles/ podcasts/ poetry/ stories/ books/ published/
+50-journal/    daily/ (one file per day)   old/ (migrated entries)
+60-ideas/      apps-and-tools/ business/ research-questions/
+99-archive/    done thinking, kept searchable
 #+end_example
 
-A note is a heading with prose under it. Empty category files are seeded with
-their top-level headings the first time they're opened, and missing files are
-created at startup.
+Filenames are kebab-case slugs of the title (=creatine.org=, =idp-adapter.org=).
+Sections are just directories, so a new one appears the moment you file into it.
+The area and section directories are created at startup; nothing else is seeded.
 
-*Capture.* =C-c c= opens the menu; pick where the note belongs:
+*Capture.* =C-c c= (choose =c= Note) asks one question — where does this go? —
+then a title:
 
 #+begin_example
-i -> Inbox    (file it later; for when deciding would interrupt the thought)
-w -> Work
-p -> Personal (prompts for the section: Career / Home / Health / ...)
-l -> Learning (prompts: AI Sessions / Articles / Books / Podcasts / ...)
-r -> Writing  (prompts: Concepts / Ideas / Drafts / ...)
-d -> Idea     (prompts: Apps and Tools / Business / Research questions)
-s -> Source note (see below)
+Capture to:  Inbox              -> 00-inbox/<timestamp>.org  (title optional; file it later)
+             20-personal/health -> 20-personal/health/<title>.org
+             10-work/meetings   (type a new area/section to create it on the fly)
 #+end_example
 
-The section prompt completes over the file's /current/ top-level headings —
-typing a new name creates that section, so the structure can grow without
-touching the config.
+Pick =Inbox= when deciding would interrupt the thought; pick an area/section to
+file it straight away. Either way a fresh file is created with a
+=#+TITLE:=/=#+DATE:= header and left open to write; =C-c C-c= finishes, =C-c C-k=
+aborts.
 
-*Journaling.* The journal deliberately has no capture key — journaling is a
-writing session, not a quick capture. =C-c J= opens =50-journal.org= alone in
-the frame, narrowed to =* Daily journal= with every previous entry visible,
-creates today's heading (e.g. =5th June 2026, Friday=) when needed, puts
-point at its end, and switches on the book view. Write prose; save with
-=C-x C-s=; =C-c B= toggles the book view back off when done.
+*Journaling.* Journaling is a writing session, not a quick capture, so it keeps
+its own key. =C-c J= opens today's entry — =50-journal/daily/YYYY-MM-DD.org= —
+creating it (titled e.g. =5th June 2026, Friday=) if needed, alone in the frame
+with the book view on. Write prose; =C-x C-s= saves; =C-c B= toggles the book
+view back off when done.
 
-(The =j= here is a key /inside/ the capture menu — it has nothing to do with
-the global =C-c j= Jupyter toggle.)
-
-*Source notes.* =C-c c s= is source-aware: if you launch it while point is on
-a heading in any other Org file, the note lands in =00-inbox.org= under a
-top-level heading dedicated to that source. The source heading gains an =:ID:=
-property the first time, the inbox heading gains a matching =:SOURCE_ID:=, and
-every future note captured from the same source joins the same subtree — even
-if the source is later renamed. From a non-Org buffer it falls back under the
-flat =* Inbox= heading. The captured body contains a backlink (=%a=) so
-=C-c C-o= jumps back to where you were reading.
+*Source notes.* =C-c c s= is source-aware: launch it while point is on a heading
+in another Org file and the note lands in =00-inbox/sources.org= under a heading
+dedicated to that source. The source heading gains an =:ID:= the first time, the
+inbox heading a matching =:SOURCE_ID:=, and every future note from the same
+source joins the same subtree — even if the source is later renamed. From a
+non-Org buffer it falls back under the flat =* Inbox= heading. The body carries a
+backlink (=%a=) so =C-c C-o= jumps back to where you were reading.
 
 *The weekly sweep.* Half an hour, once or twice a week:
 
 1. Move anything in the Apple Notes Inbox into org (capture or paste).
-2. Open =00-inbox.org= and refile each heading with =C-c C-w=. Refile targets
-   are the top-level headings of every category file, completed through
-   vertico as =file/heading= paths — filing under =30-learning.org / Articles=
-   is a few keystrokes.
-3. Notes about finished thinking refile to =99-archive.org=.
+2. Open each file in =00-inbox/= and refile it with =C-c C-w= — this /moves the
+   file/ (and its attachments) into a chosen =area/section= directory, completed
+   through vertico. Filing into =30-learning/articles= is a few keystrokes; type
+   a directory that does not exist yet to create it.
+3. Notes about finished thinking move to =99-archive/=.
 
 The inbox should be empty when the sweep ends. The system stays trustworthy
 because of this ritual, not because of any enforcement.
 
-*Retrieval.* =C-c n= runs a ripgrep search across =~/organicely/= only (=C-c s= is
-the general-purpose search that prompts for a directory). Inside a note,
-=C-c l= stores a link and =C-c C-l= inserts it, so durable cross-references
-between notes are cheap.
+*Retrieval.* =C-c n= runs a ripgrep search across =~/organicely/= only (=C-c s=
+is the general-purpose search that prompts for a directory) — with one file per
+note it drops you straight into the note. Inside a note, =C-c l= stores a link
+and =C-c C-l= inserts it, so durable cross-references between notes are cheap.
 
 *The soft warning.* Saving any file under =~/organicely/= that contains a =TODO= /
 =IN-PROGRESS= / =DONE= heading or a =SCHEDULED:= / =DEADLINE:= line prints a
 reminder that the item belongs in Reminders. The save always succeeds — the
 warning is a nudge, not a guard.
 
-*Migration.* The previous =todo.org=, =backlog.org=, and =notes.org= are not
-referenced, required, or touched by this configuration. Move their contents at
-your own pace: tasks into Reminders, everything else into the numbered files.
+*Attachments.* A note's images and files live beside it in a
+=<note>-attachments/= directory and are linked from the note; =C-c C-w= carries
+them along when you refile.
 
 For code and notebooks, Org Babel loads Emacs Lisp, Java, Python, and shell by
 default. Jupyter support is available on demand:
@@ -1460,57 +1457,55 @@ C-c j
 Use Jupyter only when an Org file needs notebook-style execution. Keeping it
 opt-in prevents normal Org startup from carrying notebook server state.
 
-** Path helpers and category vocabulary
+** Path helpers and directory vocabulary
 
 These tiny pieces are the vocabulary the rest of the Org setup speaks:
-=systemhalted/org-file= resolves a name against =org-directory= (centralises
-the =~/organicely/= assumption so nothing else hard-codes it), and
-=systemhalted/org-buffer-file-p= asks "is the current buffer this specific
-file?" using =file-truename= so symlinks into =~/organicely/= behave like the real
-thing.
+=systemhalted/org-file= resolves a relative name against =org-directory=
+(centralises the =~/organicely/= assumption so nothing else hard-codes it — it
+takes =area/section= subpaths too), and =systemhalted/org-buffer-file-p= asks
+"is the current buffer this specific file?" using =file-truename= so symlinks
+into =~/organicely/= behave like the real thing.
 
-=systemhalted/org-category-files= names the eight numbered files — the
+=systemhalted/org-area-dirs= names the eight numbered area directories — the
 sort-by-prefix structure carried over from the Apple Notes system. The alist
-=systemhalted/org-file-structure= records the top-level headings each file is
-seeded with, mirroring the sub-folders each category had in Apple Notes.
-=00-inbox.org= gets a single =* Inbox= heading that the fallback capture
-template and the source-aware capture both rely on; =10-work.org= and
-=99-archive.org= stay flat — a note there is simply a top-level heading.
+=systemhalted/org-area-sections= records the section subdirectories seeded under
+each area, mirroring the sub-folders each area had in Apple Notes; areas not
+listed (=10-work=, =99-archive=) start flat. Sections are just directories, so
+new ones are created on demand when you capture or refile into them.
 
 =systemhalted/org-done-state-regexp= is the one definition of "task-shaped":
 a heading carrying =TODO= / =IN-PROGRESS= / =DONE=, or a =SCHEDULED:= /
 =DEADLINE:= planning line. Items matching it have a done state and therefore
 belong in Reminders, not here.
 
-=systemhalted/org-goto-or-create-heading= moves point /onto/ a named
-top-level heading in the current buffer, creating it (with surrounding blank
-lines) when missing. Landing on the heading line matters: =org-capture=
-treats the heading at point as the parent entry and appends the capture to
-the end of its subtree — whereas point /past/ the subtree would sit on the
-next heading and misfile the note under it.
+=systemhalted/org-slug= turns a title into a kebab-case filename (lowercase,
+hyphen-separated, Unicode letters kept) and =systemhalted/org-unique-file= adds
+a numeric suffix when that name is taken, so two notes never collide.
+=systemhalted/org-section-dirs= lists every =area= and =area/section= directory
+(skipping the =-attachments= folders) — the completion candidates that both
+capture and refile offer.
 
-=systemhalted/org-section-target= builds on it as a =file+function= capture
-callback for the categories with sections: it offers the file's existing
-top-level headings through =completing-read= (vertico applies), so =C-c c p=
-asks /which/ part of Personal the note belongs to. Typing a name that doesn't
-exist yet creates that section — the seeded structure is a starting point,
-not a cage.
+=systemhalted/org-capture-file= is the =C-c c= capture target: it asks for a
+destination (=Inbox=, or any =area/section= — a new one is created if typed),
+then a title (optional for the inbox, where the file is timestamped), creates
+the =.org= file with a =#+TITLE:=/=#+DATE:= header, and leaves point ready for
+the body. =systemhalted/refile-note= is its weekly-sweep counterpart: it moves
+the current note's file — and its =-attachments= folder — into a chosen
+=area/section=, the directory-model stand-in for =org-refile= (bound to =C-c C-w=
+in Org buffers).
 
-=systemhalted/org-journal-target= positions point for journaling: one
-calendar heading per day, written the way a person says it — =5th June 2026,
-Friday= — found or created at the end of the =* Daily journal= subtree, so
-days accumulate chronologically. =* Old journal= stays untouched for entries
-migrated from earlier systems.
+=systemhalted/org-goto-or-create-heading= moves point /onto/ a named top-level
+heading in the current buffer, creating it (with surrounding blank lines) when
+missing. It survives for the source-aware capture below, which groups every note
+about one source under a single heading in =00-inbox/sources.org=.
 
-=systemhalted/journal= (bound to =C-c J=) is the way in. Journaling is a
-sit-down writing session, not a capture: a capture popup shows only the new
-entry, but reading what the days before said is part of writing today's. So
-the command opens =50-journal.org= alone in the frame, narrows to the
-=* Daily journal= subtree with every previous entry unfolded, creates today's
-heading when needed, drops point at its end ready for prose, and turns on the
-book view (olivetti margins + mixed-pitch — defined at the end of this
-section) for distraction-free writing. =C-c B= toggles the view back off;
-saving is the usual =C-x C-s=.
+=systemhalted/journal= (bound to =C-c J=) is the way into journaling — a
+sit-down writing session, not a capture. Each day is its own file,
+=50-journal/daily/YYYY-MM-DD.org=; the command opens today's (creating it with a
+human-readable title like =5th June 2026, Friday= when needed) alone in the
+frame with the book view on (olivetti margins + mixed-pitch — defined at the end
+of this section) for distraction-free writing. =C-c B= toggles the view back
+off; saving is the usual =C-x C-s=.
 
 #+begin_src emacs-lisp
 (defun systemhalted/org-file (file)
@@ -1523,22 +1518,23 @@ saving is the usual =C-x C-s=.
        (string= (file-truename buffer-file-name)
                 (file-truename (systemhalted/org-file file)))))
 
-(defconst systemhalted/org-category-files
-  '("00-inbox.org" "10-work.org" "20-personal.org" "30-learning.org"
-    "40-writing.org" "50-journal.org" "60-ideas.org" "99-archive.org")
-  "The numbered category files that make up Organicely.")
+(defconst systemhalted/org-area-dirs
+  '("00-inbox" "10-work" "20-personal" "30-learning"
+    "40-writing" "50-journal" "60-ideas" "99-archive")
+  "The numbered area directories that make up Organicely.
+Each note is its own file inside one of these (optionally in a section subdir).")
 
-(defconst systemhalted/org-file-structure
-  '(("00-inbox.org"    . ("Inbox"))
-    ("20-personal.org" . ("Career" "Home" "Health" "Family" "Finances"
-                          "Purchases" "Recommendations"))
-    ("30-learning.org" . ("AI Sessions" "Articles" "Books" "Podcasts"
-                          "Courses" "Videos" "Subjects"))
-    ("40-writing.org"  . ("Concepts" "Ideas" "Drafts" "Articles" "Podcasts"
-                          "Poetry" "Stories" "Books" "Published"))
-    ("50-journal.org"  . ("Daily journal" "Old journal"))
-    ("60-ideas.org"    . ("Apps and Tools" "Business" "Research questions")))
-  "Top-level headings seeded into category files; unlisted files stay flat.")
+(defconst systemhalted/org-area-sections
+  '(("20-personal" . ("career" "home" "health" "family" "finances"
+                      "purchases" "recommendations"))
+    ("30-learning" . ("ai-sessions" "articles" "books" "podcasts"
+                      "courses" "videos" "subjects"))
+    ("40-writing"  . ("concepts" "ideas" "drafts" "articles" "podcasts"
+                      "poetry" "stories" "books" "published"))
+    ("50-journal"  . ("daily" "old"))
+    ("60-ideas"    . ("apps-and-tools" "business" "research-questions")))
+  "Section subdirectories seeded under each area; unlisted areas stay flat.
+Sections are just directories — new ones are created on demand at capture/refile.")
 
 (defconst systemhalted/org-done-state-regexp
   (concat "^\\*+ \\(?:TODO\\|IN-PROGRESS\\|DONE\\)\\(?:[ \t]\\|$\\)"
@@ -1561,24 +1557,89 @@ the parent entry and appends the capture to the end of its subtree."
     (insert "* " heading "\n")
     (forward-line -1)))
 
-(defun systemhalted/org-section-target ()
-  "Prompt for a top-level section of the capture file and move point there.
-Candidates are the file's existing top-level headings; entering a new
-name creates that section on the fly."
-  (let (headings)
-    (save-excursion
-      (goto-char (point-min))
-      (while (re-search-forward "^\\* \\(.+?\\)[ \t]*$" nil t)
-        (push (match-string-no-properties 1) headings)))
-    (systemhalted/org-goto-or-create-heading
-     (completing-read "Section: " (nreverse headings)))))
+(defun systemhalted/org-slug (s)
+  "Kebab-case slug from S: lowercase, non-alphanumeric runs -> hyphen; keeps Unicode letters."
+  (let ((x (downcase (string-trim s))))
+    (setq x (replace-regexp-in-string "[^[:alnum:]]+" "-" x))
+    (setq x (replace-regexp-in-string "-\\{2,\\}" "-" x))
+    (setq x (string-trim x "-+" "-+"))
+    (if (string-empty-p x) "note" x)))
 
-(defun systemhalted/org-journal-target ()
-  "Position point on today's calendar heading under `* Daily journal'.
-The heading reads like \"5th June 2026, Friday\" and is created at the
-end of the Daily journal subtree on first use, so days accumulate in
-chronological order.  Writing happens under the day heading via
-`systemhalted/journal'."
+(defun systemhalted/org-unique-file (dir stem)
+  "Return a non-colliding DIR/STEM.org path, adding -N on collision."
+  (let ((path (expand-file-name (concat stem ".org") dir)) (i 2))
+    (while (file-exists-p path)
+      (setq path (expand-file-name (format "%s-%d.org" stem i) dir))
+      (setq i (1+ i)))
+    path))
+
+(defun systemhalted/org-section-dirs ()
+  "Relative \"area\" and \"area/section\" directories under `org-directory'.
+These are the completion candidates for capture and refile."
+  (let (dirs)
+    (dolist (area systemhalted/org-area-dirs)
+      (push area dirs)
+      (let ((adir (systemhalted/org-file area)))
+        (when (file-directory-p adir)
+          (dolist (sub (directory-files adir nil "\\`[^.]"))
+            (when (and (file-directory-p (expand-file-name sub adir))
+                       (not (string-suffix-p "-attachments" sub))
+                       (not (string-suffix-p "(Attachments)" sub)))
+              (push (concat area "/" sub) dirs))))))
+    (nreverse dirs)))
+
+(defun systemhalted/org-capture-file ()
+  "Capture target: create a fresh note file and switch to it.
+Prompts for a destination — \"Inbox\" or any existing/new \"area/section\"
+directory — then a title (optional for Inbox, where the file is timestamped).
+Seeds a `#+TITLE:'/`#+DATE:' header and leaves point ready for the body."
+  (let* ((choice (completing-read "Capture to (Inbox, or area/section): "
+                                  (cons "Inbox" (systemhalted/org-section-dirs))))
+         (inbox (string-equal choice "Inbox"))
+         (reldir (if inbox "00-inbox" choice))
+         (dir (systemhalted/org-file reldir))
+         (title (string-trim (read-string (if inbox "Title (optional): " "Title: "))))
+         (stem (if (string-empty-p title)
+                   (format-time-string "%Y-%m-%d-%H%M")
+                 (systemhalted/org-slug title)))
+         (path (systemhalted/org-unique-file dir stem)))
+    (make-directory dir t)
+    (set-buffer (find-file-noselect path))
+    (goto-char (point-max))
+    (insert "#+TITLE: " (if (string-empty-p title) stem title) "\n"
+            "#+DATE: " (format-time-string "[%Y-%m-%d %a %H:%M]") "\n\n")
+    (goto-char (point-max))))
+
+(defun systemhalted/refile-note ()
+  "Move the current note file (and its attachments) into a chosen area/section.
+This is the directory-model replacement for `org-refile' — the weekly sweep
+moves an inbox note into place by relocating its file."
+  (interactive)
+  (unless (and buffer-file-name
+               (file-in-directory-p buffer-file-name org-directory))
+    (user-error "Not visiting a note under Organicely"))
+  (let* ((target-rel (completing-read "Move note to: "
+                                      (systemhalted/org-section-dirs) nil nil))
+         (target-dir (systemhalted/org-file target-rel))
+         (dest (systemhalted/org-unique-file
+                target-dir (file-name-base buffer-file-name)))
+         (old buffer-file-name)
+         (attach (concat (file-name-sans-extension old) "-attachments")))
+    (make-directory target-dir t)
+    (save-buffer)
+    (rename-file old dest)
+    (when (file-directory-p attach)
+      (rename-file attach (concat (file-name-sans-extension dest) "-attachments")))
+    (set-visited-file-name dest nil t)
+    (message "Moved to %s" (file-relative-name dest org-directory))))
+
+(defun systemhalted/journal ()
+  "Open (creating if needed) today's per-day journal file for writing.
+Journal entries are individual files under `50-journal/daily/' named
+`YYYY-MM-DD.org'; a fresh file is seeded with a human-readable title like
+\"5th June 2026, Friday\" and opened alone in book view for a distraction-free
+writing session."
+  (interactive)
   (let* ((day (string-to-number (format-time-string "%d")))
          (suffix (cond ((memq day '(11 12 13)) "th")
                        ((= (% day 10) 1) "st")
@@ -1587,37 +1648,18 @@ chronological order.  Writing happens under the day heading via
                        (t "th")))
          (title (format "%d%s %s, %s" day suffix
                         (format-time-string "%B %Y")
-                        (format-time-string "%A"))))
-    (systemhalted/org-goto-or-create-heading "Daily journal")
-    (let ((end (save-excursion (org-end-of-subtree t t) (point))))
-      (if (re-search-forward
-           (format "^\\*\\* %s[ \t]*$" (regexp-quote title)) end t)
-          (beginning-of-line)
-        (goto-char end)
-        (unless (bolp) (insert "\n"))
-        (insert "** " title "\n")
-        (forward-line -1)))))
-
-(defun systemhalted/journal ()
-  "Open the journal for a distraction-free writing session.
-Shows the `* Daily journal' subtree alone in the frame with previous
-entries unfolded, creates today's calendar heading when needed, places
-point at its end ready for prose, and enables the book view."
-  (interactive)
-  (find-file (systemhalted/org-file "50-journal.org"))
-  (delete-other-windows)
-  (widen)
-  (systemhalted/org-journal-target)
-  ;; Narrow to * Daily journal (today's heading is level 2 inside it),
-  ;; keeping earlier days readable and * Old journal out of sight.
-  (save-excursion
-    (org-up-heading-safe)
-    (org-narrow-to-subtree))
-  (org-fold-show-all)
-  (org-end-of-subtree t)
-  (unless (bolp) (insert "\n"))
-  (unless (bound-and-true-p olivetti-mode)
-    (systemhalted/book-view-toggle)))
+                        (format-time-string "%A")))
+         (dir (systemhalted/org-file "50-journal/daily")))
+    (make-directory dir t)
+    (find-file (expand-file-name (format-time-string "%Y-%m-%d.org") dir))
+    (delete-other-windows)
+    (when (= (buffer-size) 0)
+      (insert "#+TITLE: " title "\n"
+              "#+DATE: " (format-time-string "[%Y-%m-%d %a]") "\n\n"))
+    (goto-char (point-max))
+    (unless (bolp) (insert "\n"))
+    (unless (bound-and-true-p olivetti-mode)
+      (systemhalted/book-view-toggle))))
 
 (global-set-key (kbd "C-c J") #'systemhalted/journal)
 #+end_src
@@ -1643,35 +1685,22 @@ state and belongs in Reminders, not in Organicely."
     (message "Note: this has a \"done\" state; it belongs in Reminders, not org.")))
 #+end_src
 
-** Category file seeding and per-file hook dispatch
-
-=systemhalted/ensure-org-structure= runs on =find-file-hook=: the first time
-an empty category file is opened, it seeds the top-level headings recorded in
-=systemhalted/org-file-structure= so the file isn't a blank canvas with no
-organizing principle.
+** Directory seeding and per-file hook dispatch
 
 =systemhalted/apply-org-soft-guard= runs on =org-mode-hook= and attaches the
-soft done-state warning buffer-locally to any file under =org-directory= —
-including the old =todo.org= / =backlog.org= / =notes.org=, should they still
-be around, but nothing depends on those files existing.
+soft done-state warning buffer-locally to any file under =org-directory=, so a
+task-shaped heading gets a nudge no matter which note it lands in.
 
-=systemhalted/ensure-org-files= creates any missing category files (seeded) up
-front. It is called from the main configuration's =:config= block, which runs
-the moment Org first loads, so the refile targets defined there always point
-at real files — even on a machine where =~/organicely/= doesn't exist yet.
+=systemhalted/ensure-org-files= creates the area and section directories up
+front — the areas in =systemhalted/org-area-dirs=, each with the subdirectories
+listed in =systemhalted/org-area-sections= (unlisted areas stay flat). It is
+called from the main configuration's =:config= block, which runs the moment Org
+first loads, so capture and refile always have real directories to complete
+against — even on a machine where =~/organicely/= doesn't exist yet. There is no
+per-file seeding hook any more: a note is a file, not a heading in a shared
+file, so there is nothing to pre-populate when one is opened.
 
 #+begin_src emacs-lisp
-(defun systemhalted/ensure-org-structure ()
-  "Seed an empty category file with its top-level headings."
-  (when (and buffer-file-name
-             (member (file-name-nondirectory buffer-file-name)
-                     systemhalted/org-category-files)
-             (= (buffer-size) 0))
-    (let ((headings (cdr (assoc (file-name-nondirectory buffer-file-name)
-                                systemhalted/org-file-structure))))
-      (when headings
-        (insert (mapconcat (lambda (h) (concat "* " h "\n")) headings "\n"))))))
-
 (defun systemhalted/apply-org-soft-guard ()
   "Attach the soft done-state warning to files under `org-directory'."
   (when (and buffer-file-name
@@ -1679,42 +1708,45 @@ at real files — even on a machine where =~/organicely/= doesn't exist yet.
     (add-hook 'before-save-hook #'systemhalted/org-warn-done-state nil t)))
 
 (defun systemhalted/ensure-org-files ()
-  "Create any missing category files, seeding their structure."
+  "Create the Organicely area and section directories if missing.
+Areas listed in `systemhalted/org-area-sections' get their section subdirs;
+the rest are created flat.  New sections appear on demand via capture/refile."
   (make-directory org-directory t)
-  (dolist (file systemhalted/org-category-files)
-    (let ((path (systemhalted/org-file file))
-          (headings (cdr (assoc file systemhalted/org-file-structure))))
-      (unless (file-exists-p path)
-        (with-temp-file path
-          (when headings
-            (insert (mapconcat (lambda (h) (concat "* " h "\n"))
-                               headings "\n"))))))))
+  (dolist (area systemhalted/org-area-dirs)
+    (let ((sections (cdr (assoc area systemhalted/org-area-sections))))
+      (if sections
+          (dolist (sec sections)
+            (make-directory (systemhalted/org-file (concat area "/" sec)) t))
+        (make-directory (systemhalted/org-file area) t)))))
 #+end_src
 
 ** Source-aware inbox capture
 
 =systemhalted/org-notes-target= is the =:function= callback for the =s=
-capture template defined further below. It decides /where/ in =00-inbox.org=
-the new note lands based on the buffer capture was launched from:
+capture template defined further below. It decides /where/ in
+=00-inbox/sources.org= the new note lands based on the buffer capture was
+launched from:
 
-- If point was on a heading in any Org file other than the inbox (e.g. a
-  learning item), the source heading gains an =:ID:= property (one-time,
-  via =org-id-get-create=), and the note lands under a top-level heading
-  in =00-inbox.org= whose =:SOURCE_ID:= matches that ID. Repeated captures
-  from the same source all land under the same subtree — *even if the
-  source is later renamed*, because the link is by ID, not text. The
-  weekly sweep refiles the whole subtree in one motion.
-- Otherwise (capture from a code buffer, plain-text scratch, or the inbox
-  itself), the note falls back under the flat =* Inbox= heading created on
+- If point was on a heading in any Org file other than that sources file (e.g.
+  a learning note), the source heading gains an =:ID:= property (one-time, via
+  =org-id-get-create=), and the note lands under a top-level heading in
+  =00-inbox/sources.org= whose =:SOURCE_ID:= matches that ID. Repeated captures
+  from the same source all land under the same subtree — *even if the source is
+  later renamed*, because the link is by ID, not text, so a source's notes stay
+  grouped for review.
+- Otherwise (capture from a code buffer, plain-text scratch, or the sources
+  file itself), the note falls back under the flat =* Inbox= heading created on
   demand by =systemhalted/org-goto-or-create-heading=.
 
-The matching =:PROPERTIES:= drawer is written inline rather than going
-through Org's property API because the heading hasn't been created at
-this point — we're writing it from scratch.
+Source notes are the one deliberate exception to "a note is a file": grouping
+several notes about one source under a shared heading earns them a single shared
+file. The matching =:PROPERTIES:= drawer is written inline rather than through
+Org's property API because the heading hasn't been created at this point — we're
+writing it from scratch.
 
 #+begin_src emacs-lisp
 (defun systemhalted/org-notes-target ()
-  "Position point in 00-inbox.org for a `file+function' capture target.
+  "Position point in 00-inbox/sources.org for a `file+function' capture target.
 When capture is launched from an Org heading outside the inbox, ensure that
 heading has an :ID: and file the new note under a top-level heading in the
 inbox keyed by :SOURCE_ID:.  This groups every note about the same source
@@ -1726,7 +1758,7 @@ from anywhere else, fall back to the flat `* Inbox' heading."
             (with-current-buffer src-buf
               (when (and (derived-mode-p 'org-mode)
                          buffer-file-name
-                         (not (systemhalted/org-buffer-file-p "00-inbox.org"))
+                         (not (systemhalted/org-buffer-file-p "00-inbox/sources.org"))
                          (ignore-errors (org-back-to-heading t) t))
                 (cons (org-get-heading t t t t)
                       (org-id-get-create)))))))
@@ -1759,10 +1791,11 @@ from anywhere else, fall back to the flat `* Inbox' heading."
 The =org= =use-package= form is where everything declared above gets
 wired together. The interesting clusters:
 
-- *Global keys.* =C-c c= for capture, =C-c l= for =org-store-link=.
-  There is deliberately no agenda binding — the agenda is a task view,
-  and org holds no tasks. The mode hook turns on =visual-line-mode= so
-  long paragraphs wrap softly in any Org buffer.
+- *Global keys.* =C-c c= for capture, =C-c l= for =org-store-link=, and — in
+  Org buffers — =C-c C-w= rebound to =systemhalted/refile-note= (moving a file,
+  not refiling a subtree). There is deliberately no agenda binding — the agenda
+  is a task view, and org holds no tasks. The mode hook turns on
+  =visual-line-mode= so long paragraphs wrap softly in any Org buffer.
 - *Display.* =org-startup-indented t= renders headings with virtual
   indentation; =org-hide-emphasis-markers t= suppresses the surrounding
   =/= / =*= / === characters on inline emphasis (cleaner for reading,
@@ -1777,28 +1810,21 @@ wired together. The interesting clusters:
 
 The =:config= block wires the second-brain flow:
 
-- =org-refile-targets= covers the destination category files at
-  =:maxlevel 2= — the sweep's =C-c C-w= reaches every category heading.
-  The inbox and the journal are deliberately absent: nothing refiles
-  /into/ an inbox, and the journal is datetree-managed.
-  =org-refile-use-outline-path 'file= shows candidates as
-  =file/heading= paths, and =org-outline-path-complete-in-steps nil=
-  hands the whole path to vertico in one completion.
-- =org-capture-templates= routes directly by category: =i= Inbox
-  (fallback), =w= Work (flat), =p= Personal, =l= Learning, =r= Writing,
-  and =d= Idea (each prompting for its section via
-  =systemhalted/org-section-target=), and =s= for source-aware notes
-  through =systemhalted/org-notes-target= above. The journal has no
-  capture template on purpose — journaling goes through =C-c J=
-  (=systemhalted/journal=, defined with the helpers above), which is a
-  writing session rather than a popup.
+- =org-capture-templates= has two entries. =c= Note is the everyday capture:
+  its =systemhalted/org-capture-file= target asks for a destination — =Inbox= or
+  any =area/section= — and a title, then creates the file. =s= Source note runs
+  through =systemhalted/org-notes-target= above to group notes by their source in
+  =00-inbox/sources.org=. The journal has no template on purpose — journaling
+  goes through =C-c J= (=systemhalted/journal=), a writing session rather than a
+  popup. Refiling is not Org's =org-refile= at all: =C-c C-w= is rebound to
+  =systemhalted/refile-note=, which moves a note's file into a chosen directory,
+  so there are no =org-refile-targets= to maintain.
 
-Then the hooks: =org-mode-hook= attaches the soft done-state warning and
-=find-file-hook= seeds empty category files.
-=systemhalted/ensure-org-files= is called directly from =:config=, which
-runs the moment Org first loads (capture, refile, or opening any =.org=
-file) — so the category files exist before anything could target them,
-without forcing Org into the startup path. =C-c a= and =C-c P= — the old
+Then the hooks: =org-mode-hook= attaches the soft done-state warning.
+=systemhalted/ensure-org-files= is called directly from =:config=, which runs
+the moment Org first loads (capture, refile, or opening any =.org= file) — so the
+area and section directories exist before anything could target them, without
+forcing Org into the startup path. =C-c a= and =C-c P= — the old
 agenda and promotion keys — are
 explicitly unbound so a config reload in a long-running session clears
 them. Finally, Babel is loaded for Emacs Lisp, Java, Python, and shell —
@@ -1809,12 +1835,14 @@ Jupyter is opt-in via its own subsection below.
   :ensure nil
   :bind
   (("C-c c" . org-capture)
-   ("C-c l" . org-store-link))
+   ("C-c l" . org-store-link)
+   ;; The sweep moves a note file into place instead of refiling a subtree.
+   (:map org-mode-map ("C-c C-w" . systemhalted/refile-note)))
   :hook
   (org-mode . visual-line-mode)
   :custom
   (org-directory (expand-file-name "~/organicely/"))
-  (org-default-notes-file (systemhalted/org-file "00-inbox.org"))
+  (org-default-notes-file (systemhalted/org-file "00-inbox/sources.org"))
   (org-ellipsis " ...")
   (org-startup-indented t)
   (org-hide-emphasis-markers t)
@@ -1822,53 +1850,22 @@ Jupyter is opt-in via its own subsection below.
   (org-confirm-babel-evaluate t)
   ;; Org models no tasks; anything with a done state goes to Reminders.
   (org-todo-keywords nil)
-  (org-refile-use-outline-path 'file)
-  (org-outline-path-complete-in-steps nil)
   :config
-  ;; The weekly sweep refiles inbox items out to category headings.
-  (setq org-refile-targets
-        (mapcar (lambda (file)
-                  (cons (systemhalted/org-file file) '(:maxlevel . 2)))
-                '("10-work.org" "20-personal.org" "30-learning.org"
-                  "40-writing.org" "60-ideas.org" "99-archive.org"))
-        ;; Capture routes by category up front; categories with sections
-        ;; prompt for the section through `systemhalted/org-section-target'.
-        ;; The inbox is the fallback for when deciding would interrupt the
-        ;; thought.
-        org-capture-templates
-        `(("i" "Inbox" entry
-           (file+headline ,(systemhalted/org-file "00-inbox.org") "Inbox")
-           "* %?\n%U")
-          ("w" "Work" entry
-           (file ,(systemhalted/org-file "10-work.org"))
-           "* %?\n%U")
-          ("p" "Personal" entry
-           (file+function ,(systemhalted/org-file "20-personal.org")
-                          systemhalted/org-section-target)
-           "* %?\n%U")
-          ("l" "Learning" entry
-           (file+function ,(systemhalted/org-file "30-learning.org")
-                          systemhalted/org-section-target)
-           "* %?\n")
-          ("r" "Writing" entry
-           (file+function ,(systemhalted/org-file "40-writing.org")
-                          systemhalted/org-section-target)
-           "* %?\n")
-          ("d" "Idea" entry
-           (file+function ,(systemhalted/org-file "60-ideas.org")
-                          systemhalted/org-section-target)
-           "* %?\n%U")
-          ;; Source notes route through a function so each source linked-to
-          ;; gets its own subtree in the inbox, keyed by :SOURCE_ID:.  %a
-          ;; embeds an inline backlink for one-keystroke navigation back.
+  ;; Capture creates a fresh note file. `c' prompts for a destination
+  ;; (Inbox, or any area/section — new ones allowed) and a title; `s' files a
+  ;; source-linked note grouped by :SOURCE_ID: into 00-inbox/sources.org, with
+  ;; %a embedding an inline backlink for one-keystroke navigation back.
+  (setq org-capture-templates
+        `(("c" "Note" plain
+           (function systemhalted/org-capture-file)
+           "%?" :unnarrowed t)
           ("s" "Source note" entry
-           (file+function ,(systemhalted/org-file "00-inbox.org")
+           (file+function ,(systemhalted/org-file "00-inbox/sources.org")
                           systemhalted/org-notes-target)
            "* %?\n%a")))
-  ;; These hooks keep the category files seeded and the soft guard attached.
+  ;; Attach the soft done-state guard to any Organicely buffer.
   (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
-  (add-hook 'find-file-hook #'systemhalted/ensure-org-structure)
-  ;; Runs as soon as Org first loads, so refile/capture targets always exist.
+  ;; Runs as soon as Org first loads, so the area/section dirs always exist.
   (systemhalted/ensure-org-files)
   ;; The agenda and promotion keys are gone; unbinding (rather than just not
   ;; binding) clears stale bindings when the config is reloaded in place.
