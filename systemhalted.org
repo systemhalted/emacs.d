@@ -2124,6 +2124,10 @@ nor writes anything — the on-disk file is only rewritten by a *real* save.
 Alignment is cosmetic whitespace only — Kramdown/GFM ignore it — so it never
 changes how the table renders on the published site.
 
+For proportional fonts or mixed-width table content, =valign-mode= provides a
+visual overlay that keeps table columns lined up in the buffer without changing
+the file contents. It is enabled only in Markdown buffers.
+
 #+begin_src emacs-lisp
 (defun systemhalted/markdown-align-all-tables ()
   "Re-align every pipe table in the current Markdown buffer.
@@ -2160,6 +2164,11 @@ line up.  Used on `before-save-hook'; also callable interactively."
                            (buffer-undo-list t))
                        (systemhalted/markdown-align-all-tables)
                        (unless was-modified (set-buffer-modified-p nil))))))
+
+(use-package valign
+  :ensure t
+  :hook
+  (markdown-mode . valign-mode))
 #+end_src
 
 ** YAML mode — configuration files
