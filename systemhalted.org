@@ -542,7 +542,8 @@ Three small finishing touches:
 
   Our extended theme system supports:
   - **Cycling themes**: Pressing =C-c t= (runs =systemhalted/cycle-theme=)
-    cycles through Nord, all =ef-themes=, and all =doom-themes=.
+    cycles through Nord, Catppuccin (all four flavors: latte, frappé,
+    macchiato, mocha), all =ef-themes=, and all =doom-themes=.
   - **Selecting themes**: Pressing =C-c T= (runs =systemhalted/select-theme=)
     prompts you via the completion system (Vertico/Orderless) to select from
     the 100+ available themes.
@@ -560,12 +561,23 @@ Three small finishing touches:
       (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150)))
 
   (defun systemhalted/load-theme (&optional theme)
-    "Load THEME (defaulting to 'nord) without stacking themes on reload."
+    "Load THEME (defaulting to 'nord) without stacking themes on reload.
+When THEME is a catppuccin pseudo-symbol (catppuccin-latte, catppuccin-frappe,
+catppuccin-macchiato, catppuccin-mocha), set `catppuccin-flavor' and load
+the real `catppuccin' theme."
     (interactive)
-    (let ((t-to-load (or theme 'nord)))
+    (let* ((t-to-load (or theme 'nord))
+           (name (symbol-name t-to-load))
+           (catppuccin-prefix "catppuccin-")
+           (is-catppuccin (string-prefix-p catppuccin-prefix name)))
       (mapc #'disable-theme custom-enabled-themes)
-      (load-theme t-to-load t)
-      (message "Loaded theme: %s" t-to-load)))
+      (if is-catppuccin
+          (let ((flavor (intern (substring name (length catppuccin-prefix)))))
+            (setq catppuccin-flavor flavor)
+            (load-theme 'catppuccin t)
+            (message "Loaded theme: catppuccin (%s)" flavor))
+        (load-theme t-to-load t)
+        (message "Loaded theme: %s" t-to-load))))
 
   (use-package nord-theme
     :ensure t
@@ -580,6 +592,9 @@ Three small finishing touches:
   (use-package ef-themes
     :ensure t)
 
+  (use-package catppuccin-theme
+    :ensure t)
+
   (use-package doom-themes
     :ensure t
     :config
@@ -587,10 +602,10 @@ Three small finishing touches:
           doom-themes-enable-italic t))
 
   (defun systemhalted/get-theme-cycle-list ()
-    "Get the list of themes to cycle through, consisting of nord, all ef-themes, and all doom-themes."
+    "Get the list of themes to cycle through: nord, catppuccin flavors, ef-themes, and doom-themes."
     (let ((all-themes (custom-available-themes)))
       (append
-       '(nord)
+       '(nord catppuccin-latte catppuccin-frappe catppuccin-macchiato catppuccin-mocha)
        (seq-filter (lambda (x) (string-prefix-p "ef-" (symbol-name x))) all-themes)
        (seq-filter (lambda (x) (string-prefix-p "doom-" (symbol-name x))) all-themes))))
 
@@ -599,7 +614,12 @@ Three small finishing touches:
     (interactive)
     (let* ((themes (systemhalted/get-theme-cycle-list))
            (current (car custom-enabled-themes))
-           (next (or (cadr (member current themes))
+           ;; Map the real catppuccin theme back to its pseudo-symbol
+           (effective (if (and (eq current 'catppuccin)
+                               (boundp 'catppuccin-flavor))
+                          (intern (concat "catppuccin-" (symbol-name catppuccin-flavor)))
+                        current))
+           (next (or (cadr (member effective themes))
                      (car themes))))
       (systemhalted/load-theme next)))
 
