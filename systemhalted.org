@@ -540,6 +540,15 @@ Three small finishing touches:
   one face customization — selection in the bluer "frost" palette rather
   than the default muted gray.
 
+  Our extended theme system supports:
+  - **Cycling themes**: Pressing =C-c t= (runs =systemhalted/cycle-theme=)
+    cycles through Nord, all =ef-themes=, and all =doom-themes=.
+  - **Selecting themes**: Pressing =C-c T= (runs =systemhalted/select-theme=)
+    prompts you via the completion system (Vertico/Orderless) to select from
+    the 100+ available themes.
+  - **Checking the active theme**: You can run =C-h v custom-enabled-themes RET=
+    or evaluate =(car custom-enabled-themes)= via =M-:=.
+
 #+begin_src emacs-lisp
   (with-eval-after-load 'dired
     (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
@@ -550,10 +559,13 @@ Three small finishing touches:
     (when (find-font (font-spec :name "Cantarell"))
       (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150)))
 
-  (defun systemhalted/load-theme ()
-    "Load the preferred theme without stacking themes on reload."
-    (mapc #'disable-theme custom-enabled-themes)
-    (load-theme 'nord t))
+  (defun systemhalted/load-theme (&optional theme)
+    "Load THEME (defaulting to 'nord) without stacking themes on reload."
+    (interactive)
+    (let ((t-to-load (or theme 'nord)))
+      (mapc #'disable-theme custom-enabled-themes)
+      (load-theme t-to-load t)
+      (message "Loaded theme: %s" t-to-load)))
 
   (use-package nord-theme
     :ensure t
@@ -561,6 +573,46 @@ Three small finishing touches:
     (nord-region-highlight "frost")
     :config
     (systemhalted/load-theme))
+
+  (use-package modus-themes
+    :ensure t)
+
+  (use-package ef-themes
+    :ensure t)
+
+  (use-package doom-themes
+    :ensure t
+    :config
+    (setq doom-themes-enable-bold t
+          doom-themes-enable-italic t))
+
+  (defun systemhalted/get-theme-cycle-list ()
+    "Get the list of themes to cycle through, consisting of nord, all ef-themes, and all doom-themes."
+    (let ((all-themes (custom-available-themes)))
+      (append
+       '(nord)
+       (seq-filter (lambda (x) (string-prefix-p "ef-" (symbol-name x))) all-themes)
+       (seq-filter (lambda (x) (string-prefix-p "doom-" (symbol-name x))) all-themes))))
+
+  (defun systemhalted/cycle-theme ()
+    "Cycle to the next theme in `systemhalted/get-theme-cycle-list'."
+    (interactive)
+    (let* ((themes (systemhalted/get-theme-cycle-list))
+           (current (car custom-enabled-themes))
+           (next (or (cadr (member current themes))
+                     (car themes))))
+      (systemhalted/load-theme next)))
+
+  (defun systemhalted/select-theme ()
+    "Interactively select a theme from the filtered cycle list."
+    (interactive)
+    (let* ((themes (systemhalted/get-theme-cycle-list))
+           (theme-names (mapcar #'symbol-name themes))
+           (choice (completing-read "Select theme: " theme-names nil t)))
+      (systemhalted/load-theme (intern choice))))
+
+  (global-set-key (kbd "C-c t") #'systemhalted/cycle-theme)
+  (global-set-key (kbd "C-c T") #'systemhalted/select-theme)
 #+end_src
 
 ** Clipboard
