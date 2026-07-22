@@ -534,6 +534,16 @@ Three small finishing touches:
   are =150= (=15pt=) on both faces; the =find-font= guards make the block
   no-op when a font isn't installed instead of leaving a missing-font
   warning.
+- *Nerd Font fallback.* Shell prompts (Powerlevel10k, Starship, etc.) and
+  UI packages use glyphs from the Nerd Fonts Private Use Area that plain
+  Fira Code doesn't carry.  =set-fontset-font= registers a Nerd Font on
+  both the default fontset and the current frame's fontset so the icons
+  render correctly in Ghostel, Eshell, and anywhere else they appear.
+  The lookup order is =MesloLGS Nerd Font Mono= → =JetBrainsMono Nerd
+  Font Mono= → =MesloLGM Nerd Font Mono=; the first one found wins.
+  The =Mono= variant is essential: it forces Nerd Font glyphs to
+  single-cell width so powerline separators align correctly in Ghostel
+  and other terminal buffers.
 - *Theme.* Nord. =systemhalted/load-theme= disables every currently-enabled
   theme first because repeated config reloads otherwise stack faces or
   leave stale theme state behind. =nord-region-highlight 'frost= is the
@@ -558,8 +568,48 @@ Three small finishing touches:
     (when (find-font (font-spec :name "Fira Code"))
       (set-face-attribute 'default nil :font "Fira Code" :height 150))
     (when (find-font (font-spec :name "Cantarell"))
-      (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150)))
+      (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150))
 
+    ;; Nerd Font fallback for icon glyphs (Powerline, Devicons, etc.)
+    ;; Register on both the default fontset (t, inherited by future
+    ;; frames) AND the current frame's fontset (nil) so the Nerd Font
+    ;; takes priority over Fira Code's catch-all unicode mapping.
+    (let ((nerd-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                               '("MesloLGS Nerd Font Mono"
+                                 "JetBrainsMono Nerd Font Mono"
+                                 "MesloLGM Nerd Font Mono"))))
+      (when nerd-font
+        (dolist (range '((#xe000  . #xf8ff)    ; BMP Private Use Area (Powerline, Devicons)
+                         (#xf0000 . #xfffff)   ; Supplementary PUA-A (Material Design, etc.)
+                         (#x100000 . #x10ffff))) ; Supplementary PUA-B (Nerd Fonts v3)
+          (set-fontset-font t range nerd-font nil 'prepend)
+          (set-fontset-font nil range nerd-font nil 'prepend)))))
+#+end_src
+
+*Ligatures.* Fira Code ships with programming ligatures (=->= , ===== ,
+=!== , =<|>= , etc.) but Emacs doesn't compose them by default.  The
+[[https://github.com/mickeynp/ligature.el][ligature]] package sets up =composition-function-table= entries so Emacs
+renders them.  Ligatures are enabled globally — this covers
+=prog-mode=, =ghostel-mode=, Org source blocks, and everything else.
+
+#+begin_src emacs-lisp
+  (use-package ligature
+    :ensure t
+    :config
+    (ligature-set-ligatures
+     t
+     '("www" "**" "***" "**/" "*>" "*/" "\\\\" "\\\\\\" "{-" "[]" "::"
+       ":::" ":=" "!!" "!=" "!==" "-}" "--" "---" "-->" "->" "->>" "-<"
+       "-<<" "-~" "#{" "#[" "##" "###" "####" "#(" "#?" "#_" "#_(" ".-"
+       ".=" ".." "..<" "..." "?=" "??" ";;" "/*" "/**" "/=" "/==" "/>"
+       "//" "///" "&&" "||" "||=" "|=" "|>" "^=" "$>" "++" "+++" "+>"
+       "=:=" "==" "===" "==>" "=>" "=>>" "<=" "<==" "<=>" "<=<" "<>"
+       "<<" "<<-" "<<=" "<<<" "<+" "<+>" "<*" "<*>" "<-" "<->" "<--"
+       "</" "</>" "<|" "<||" "<|>" "<:" "~-" "~>" "~~" "~~>" "%%"))
+    (global-ligature-mode t))
+#+end_src
+
+#+begin_src emacs-lisp
   (defun systemhalted/load-theme (&optional theme)
     "Load THEME (defaulting to 'nord) without stacking themes on reload.
 When THEME is a catppuccin pseudo-symbol (catppuccin-latte, catppuccin-frappe,
@@ -2922,6 +2972,80 @@ Matching only well-known names avoids clobbering `sh-mode''s own detection
           (sh-set-shell "zsh" nil nil))
          ((string-match-p "\\`\\.?bash\\(?:rc\\|_profile\\|_login\\|_logout\\|_aliases\\)\\'" name)
           (sh-set-shell "bash" nil nil)))))))
+#+end_src
+
+** Terminal emulator — Ghostel
+
+[[https://github.com/dakra/ghostel][Ghostel]] is a modern terminal emulator for Emacs powered by
+[[https://ghostty.org/][Ghostty's]] =libghostty-vt= engine.  It replaces =vterm= / =ansi-term= with
+substantially better throughput (~75 MB/s), Kitty keyboard & graphics
+protocols, OSC 8 hyperlinks, synchronized output, and five switchable
+input modes (semi-char / char / Emacs / copy / line).
+
+The native dynamic module is *auto-downloaded* from GitHub Releases the
+first time you run =M-x ghostel= — no Zig toolchain or manual build
+step is needed.  Shell integration scripts for bash, zsh, fish, and
+nushell are injected automatically; no =.bashrc= / =.zshrc= changes
+required.
+
+=C-c m= opens a terminal; inside a project =C-x p m= opens one rooted
+at the project directory.  =C-s= is remapped to =consult-line= inside
+the terminal for consistency with the rest of this config.
+
+#+begin_src emacs-lisp
+  (use-package ghostel
+    :ensure t
+    :bind (("C-c m" . ghostel)
+           :map ghostel-semi-char-mode-map
+           ("C-s" . consult-line)
+           :map project-prefix-map
+           ("m" . ghostel-project))
+    :config
+    (add-to-list 'project-switch-commands '(ghostel-project "Ghostel") t)
+    (dolist (cmd '("magit-status-setup-buffer"
+                   "find-file-other-window"
+                   "dired-other-window"))
+      (add-to-list 'ghostel-eval-cmds
+                   (list cmd (intern cmd)))))
+#+end_src
+
+*** Eshell visual commands in Ghostel
+
+When Eshell encounters a "visual" command (=top=, =htop=, =less=, …) it
+normally delegates to =ansi-term=.  With =ghostel-eshell= those
+commands open in a full Ghostel terminal instead.
+
+#+begin_src emacs-lisp
+  (use-package ghostel-eshell
+    :ensure nil
+    :after ghostel
+    :hook (eshell-load . ghostel-eshell-visual-command-mode))
+#+end_src
+
+*** TTY-backed compilation — =ghostel-compile=
+
+Replaces the standard =M-x compile= pipeline with a Ghostel-backed TTY
+so compilation output renders ANSI colors, progress bars, and cursor
+movement faithfully.
+
+#+begin_src emacs-lisp
+  (use-package ghostel-compile
+    :ensure nil
+    :after ghostel
+    :hook (after-init . ghostel-compile-global-mode))
+#+end_src
+
+*** Better ANSI in comint — =ghostel-comint=
+
+Upgrades comint buffers (=M-x shell=, REPL modes, etc.) to use
+Ghostel's VT parser for ANSI rendering instead of the built-in
+=ansi-color= filter.
+
+#+begin_src emacs-lisp
+  (use-package ghostel-comint
+    :ensure nil
+    :after ghostel
+    :hook (after-init . ghostel-comint-global-mode))
 #+end_src
 
 ** JSON — built-in =js-json-mode= when available
