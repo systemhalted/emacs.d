@@ -476,19 +476,28 @@ code that binds them, the buffer renders as Org so tables, links, and
 verbatim keys stay legible, and edits to the source file are immediately
 visible because the buffer is indirect — no copy, no drift.
 
-=systemhalted/tutorials= is the registry. Adding a tutorial requires *both*
+=systemhalted/tutorials= is the registry. The variable is declared with
+an empty =defvar= and assigned with =setq= because =defvar= never
+overwrites an already-bound value — with the list inside the =defvar=,
+=C-c r= reloads would silently keep the session's old registry and newly
+added tutorials would not appear until a full restart.
+
+Adding a tutorial requires *both*
 a new alist entry here *and* a matching =**= heading elsewhere in this file
 whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
 open a heading it cannot find. The currently registered tutorials are the
-three subtrees in this document: =Tutorial: Organicely — Org-based Second
-Brain=, =Using LSP and DAP=, and =Tutorial: Using LaTeX=.
+four subtrees in this document: =Tutorial: Organicely — Org-based Second
+Brain=, =Using LSP and DAP=, =Tutorial: Using LaTeX=, and =Tutorial:
+Using Ghostel=.
 
 #+begin_src emacs-lisp
-  (defvar systemhalted/tutorials
-    '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
-      ("LSP and DAP" . "Using LSP and DAP")
-      ("LaTeX"       . "Tutorial: Using LaTeX"))
+  (defvar systemhalted/tutorials nil
     "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
+  (setq systemhalted/tutorials
+        '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
+          ("LSP and DAP" . "Using LSP and DAP")
+          ("LaTeX"       . "Tutorial: Using LaTeX")
+          ("Ghostel"     . "Tutorial: Using Ghostel")))
 
   (defun systemhalted/tutorial ()
     "Pick a tutorial subtree from systemhalted.org and view it read-only.
@@ -529,7 +538,10 @@ Three small finishing touches:
   stock binding for =dired-do-copy=, which uses =C= anyway). One-key file
   creation is the move most often made from a Dired listing.
 - *Fonts.* Fira Code for fixed-pitch (default face) and Cantarell for
-  variable-pitch when both are installed. =mixed-pitch-mode= consumes the
+  variable-pitch when both are installed. Where plain Fira Code isn't
+  installed but =FiraCode Nerd Font= is (the Fedora machine), the Nerd
+  Font build serves as the default face instead — it is a complete Fira
+  Code, ligatures included. =mixed-pitch-mode= consumes the
   variable-pitch face for the book-style reading view further down. Sizes
   are =150= (=15pt=) on both faces; the =find-font= guards make the block
   no-op when a font isn't installed instead of leaving a missing-font
@@ -539,8 +551,10 @@ Three small finishing touches:
   Fira Code doesn't carry.  =set-fontset-font= registers a Nerd Font on
   both the default fontset and the current frame's fontset so the icons
   render correctly in Ghostel, Eshell, and anywhere else they appear.
-  The lookup order is =MesloLGS Nerd Font Mono= → =JetBrainsMono Nerd
-  Font Mono= → =MesloLGM Nerd Font Mono=; the first one found wins.
+  The lookup order is =FiraCode Nerd Font Mono= → =MesloLGS NF= (the
+  family name Powerlevel10k's recommended font installs under) →
+  =MesloLGS Nerd Font Mono= → =JetBrainsMono Nerd Font Mono= →
+  =MesloLGM Nerd Font Mono=; the first one found wins.
   The =Mono= variant is essential: it forces Nerd Font glyphs to
   single-cell width so powerline separators align correctly in Ghostel
   and other terminal buffers.
@@ -565,23 +579,26 @@ Three small finishing touches:
     (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
 
   (when (display-graphic-p)
-    (when (find-font (font-spec :name "Fira Code"))
-      (set-face-attribute 'default nil :font "Fira Code" :height 150))
+    (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                               '("Fira Code" "FiraCode Nerd Font"))))
+      (when mono-font
+        (set-face-attribute 'default nil :font mono-font :height 150)))
     (when (find-font (font-spec :name "Cantarell"))
       (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150))
 
     ;; Nerd Font fallback for icon glyphs (Powerline, Devicons, etc.)
     ;; Register on both the default fontset (t, inherited by future
     ;; frames) AND the current frame's fontset (nil) so the Nerd Font
-    ;; takes priority over Fira Code's catch-all unicode mapping.
+    ;; takes priority over the default face's catch-all unicode mapping.
     (let ((nerd-font (seq-find (lambda (name) (find-font (font-spec :name name)))
-                               '("MesloLGS Nerd Font Mono"
+                               '("FiraCode Nerd Font Mono"
+                                 "MesloLGS NF"
+                                 "MesloLGS Nerd Font Mono"
                                  "JetBrainsMono Nerd Font Mono"
                                  "MesloLGM Nerd Font Mono"))))
       (when nerd-font
         (dolist (range '((#xe000  . #xf8ff)    ; BMP Private Use Area (Powerline, Devicons)
-                         (#xf0000 . #xfffff)   ; Supplementary PUA-A (Material Design, etc.)
-                         (#x100000 . #x10ffff))) ; Supplementary PUA-B (Nerd Fonts v3)
+                         (#xf0000 . #xfffff))) ; Supplementary PUA-A (Material Design, etc.)
           (set-fontset-font t range nerd-font nil 'prepend)
           (set-fontset-font nil range nerd-font nil 'prepend)))))
 #+end_src
@@ -3047,6 +3064,103 @@ Ghostel's VT parser for ANSI rendering instead of the built-in
     :after ghostel
     :hook (after-init . ghostel-comint-global-mode))
 #+end_src
+
+** Tutorial: Using Ghostel
+
+This tutorial is reachable from anywhere with =C-h T= -> /Ghostel/. It
+covers day-to-day terminal use assuming the blocks above are loaded;
+the native module downloads itself on first run, so there is nothing
+to build or install by hand.
+
+*Opening terminals.* =C-c m= opens the terminal, or switches to it if
+one already exists. =C-u C-c m= always creates an additional fresh
+terminal, and a numeric prefix (=M-3 C-c m=) opens or creates the
+numbered terminal =*ghostel*<3>= — handy for keeping a few
+long-running shells apart. Inside a project, =C-x p m= opens a
+terminal rooted at the project directory; /Ghostel/ also appears in
+the =C-x p p= project-switch menu.
+
+*Input modes.* Ghostel has five input modes; the mode line shows which
+one is active. *Semi-char* is the default: almost every key goes to
+the shell, but =C-c=, =C-x=, =M-x=, and friends stay with Emacs, so
+window commands keep working. *Char* mode sends /everything/ —
+needed for TUI apps that bind =C-c= or =C-x= themselves. *Emacs* mode
+sends nothing; the buffer behaves like a normal read-only buffer while
+the terminal keeps running underneath. *Copy* mode freezes the screen
+for selecting and killing text with ordinary motion keys. *Line* mode
+gives comint-style editing: compose a whole line in Emacs, send it
+with =RET=.
+
+| Keys      | Command                    | What it does                                  |
+|-----------+----------------------------+-----------------------------------------------|
+| =C-c C-j= | =ghostel-semi-char-mode=   | back to the default semi-char mode            |
+| =C-c M-d= | =ghostel-char-mode=        | char mode: every key goes to the terminal     |
+| =C-c C-e= | =ghostel-emacs-mode=       | Emacs mode: no keys go to the terminal        |
+| =C-c C-t= | =ghostel-copy-mode=        | copy mode: select/kill from the scrollback    |
+| =C-c C-l= | =ghostel-line-mode=        | line mode: comint-style line editing          |
+| =C-c C-c= | =ghostel-send-C-c=         | send a literal =C-c= (interrupt)              |
+| =C-c C-z= | =ghostel-send-C-z=         | send a literal =C-z= (suspend)                |
+| =C-c C-d= | =ghostel-send-C-d=         | send a literal =C-d= (EOF)                    |
+| =C-c C-q= | =ghostel-send-next-key=    | send the next key verbatim, whatever it is    |
+| =C-c C-y= | =ghostel-paste=            | paste into the terminal                       |
+| =C-y=     | =ghostel-yank=             | yank from the kill ring (semi-char mode)      |
+| =C-c M-w= | =ghostel-copy-all=         | copy the whole scrollback to the kill ring    |
+| =C-c M-l= | =ghostel-clear-scrollback= | clear the scrollback                          |
+| =C-c M-p= | =ghostel-previous-prompt=  | jump to the previous shell prompt (OSC 133)   |
+| =C-c M-n= | =ghostel-next-prompt=      | jump to the next shell prompt                 |
+| =C-c C-p= | =ghostel-previous-hyperlink= | jump to the previous link / file:line ref   |
+| =C-c C-n= | =ghostel-next-hyperlink=   | jump to the next link / file:line ref         |
+| =C-s=     | =consult-line=             | search the buffer (this config's remap)       |
+
+*Calling Emacs from the shell.* The auto-injected shell integration
+defines =ghostel_cmd FUNCTION [ARGS...]=, which calls an Elisp
+function whitelisted in =ghostel-eval-cmds=. With the additions in the
+config block above, these work straight from the prompt:
+
+#+begin_example
+ghostel_cmd magit-status-setup-buffer      # magit for the current directory
+ghostel_cmd find-file-other-window README.md
+ghostel_cmd dired-other-window .
+#+end_example
+
+*The three extras.* =ghostel-eshell= makes Eshell open "visual"
+commands (=top=, =htop=, =less=, …) in a full Ghostel terminal instead
+of =ansi-term=. =ghostel-compile= backs =M-x compile= with a real TTY,
+so build output renders ANSI colors and progress bars faithfully.
+=ghostel-comint= upgrades comint buffers (=M-x shell=, REPLs) to
+Ghostel's VT parser for ANSI rendering.
+
+*Powerline prompts and fonts.* Prompt themes like Powerlevel10k and
+Starship draw their separators and icons from the Nerd Fonts Private
+Use Area. The /Dired, fonts, and theme/ section registers a Nerd Font
+fontset fallback for exactly those codepoints, so the glyphs render at
+single-cell width inside Ghostel. It only works if one of the fonts in
+its lookup list is installed:
+
+- macOS: =brew install --cask font-fira-code-nerd-font= or =sudo port
+  install firacode-nerd-font-fonts= (Powerlevel10k's own =p10k
+  configure= can also install /MesloLGS NF/).
+- Fedora and Ubuntu/Debian: Nerd Fonts are not in the official repos —
+  download /FiraCode/ from [[https://www.nerdfonts.com/font-downloads][nerdfonts.com]], unzip into
+  =~/.local/share/fonts/=, and run =fc-cache -f=.
+
+*** Common failure modes
+
+- /=M-x ghostel= fails on first run with a download error./ The native
+  module is fetched from GitHub Releases on first use; check network
+  access to github.com and retry. =M-x ghostel-module-install= retries
+  the download explicitly.
+- /Prompt icons render as empty boxes./ No font in the fallback list
+  is installed, so the fontset registration no-opped. Install one of
+  the fonts above and restart Emacs (or re-run =C-c r= and open a new
+  frame).
+- /Separators render but overlap or double-width./ A non-Mono Nerd
+  Font variant is winning for the PUA range. The fallback list prefers
+  =Mono= variants precisely to force single-cell icon width; make sure
+  one is installed so it outranks the proportional variant.
+- /=ghostel_cmd= prints "unknown eval command"./ The function isn't
+  whitelisted — add it to =ghostel-eval-cmds= in the config block
+  above and reload.
 
 ** JSON — built-in =js-json-mode= when available
 
