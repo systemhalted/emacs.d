@@ -10,7 +10,7 @@ This is a compact Emacs configuration focused on Org mode, Java, Python and
 Jupyter notebooks, web programming, Git, and documentation formats.
 
 The guiding rule is simple: keep Emacs excellent at the work that happens here
-every day, and remove stacks that mainly preserve old habits. 
+every day. 
 
 The current direction favors composable packages that use Emacs' built-in
 completion and language APIs. Large, all-in-one frameworks were replaced where a
@@ -486,9 +486,9 @@ Adding a tutorial requires *both*
 a new alist entry here *and* a matching =**= heading elsewhere in this file
 whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
 open a heading it cannot find. The currently registered tutorials are the
-four subtrees in this document: =Tutorial: Organicely — Org-based Second
-Brain=, =Using LSP and DAP=, =Tutorial: Using LaTeX=, and =Tutorial:
-Using Ghostel=.
+five subtrees in this document: =Tutorial: Organicely — Org-based Second
+Brain=, =Using LSP and DAP=, =Tutorial: Using LaTeX=, =Tutorial:
+Using Ghostel=, and =Tutorial: Using Wordwise=.
 
 #+begin_src emacs-lisp
   (defvar systemhalted/tutorials nil
@@ -497,7 +497,8 @@ Using Ghostel=.
         '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
           ("LSP and DAP" . "Using LSP and DAP")
           ("LaTeX"       . "Tutorial: Using LaTeX")
-          ("Ghostel"     . "Tutorial: Using Ghostel")))
+          ("Ghostel"     . "Tutorial: Using Ghostel")
+          ("Wordwise"    . "Tutorial: Using Wordwise")))
 
   (defun systemhalted/tutorial ()
     "Pick a tutorial subtree from systemhalted.org and view it read-only.
@@ -2172,6 +2173,464 @@ and sweep workflow is unaffected unless invoked explicitly."
 
 (global-set-key (kbd "C-c B") #'systemhalted/book-view-toggle)
 #+end_src
+
+** Wordwise — Kindle-style inline vocabulary hints
+
+A reading aid inspired by Amazon Kindle's Word Wise feature.  When
+=systemhalted/wordwise-mode= is active, uncommon English words in the buffer
+get a short dictionary definition displayed on a phantom line above the
+word — exactly like Kindle shows hints above difficult vocabulary.
+
+The feature has five pieces:
+
+- A *bundled frequency list* (~9 500 common English words in five tiers)
+  determines which words are "common" and therefore need no annotation.
+- A *difficulty level* (1–5, default 3) controls how aggressively words
+  are annotated.  Level 1 annotates only very rare words (not in the top
+  10 000); level 5 annotates anything outside the top 1 000.
+- A *DICT protocol client* (direct TCP to dict.org) provides definitions.
+  Lookups are cached in a session-scoped hash table so each word is
+  fetched at most once.
+- A *visible-region scanner* runs when the mode is enabled and on every
+  scroll, doing a small batch of synchronous lookups per pass and
+  scheduling a timer for the rest.
+- The mode restricts itself to reading-oriented major modes: =org-mode=,
+  =nov-mode=, =markdown-mode=, =gfm-mode=, and =eww-mode=.
+
+Toggle with =C-c w=.  Change difficulty interactively with
+=M-x systemhalted/wordwise-set-difficulty=.
+
+#+begin_src emacs-lisp
+;; --- Wordwise: frequency data, face, cache, lookup, annotator, minor mode ---
+
+;; Load the tiered frequency table from the data directory.
+(load (expand-file-name "data/wordwise-common-words"
+                        user-emacs-directory)
+      'noerror 'nomessage)
+
+(defgroup systemhalted/wordwise nil
+  "Kindle-style inline vocabulary hints."
+  :group 'convenience
+  :prefix "systemhalted/wordwise-")
+
+(defcustom systemhalted/wordwise-difficulty 3
+  "How aggressively to annotate words (1-5).
+Level 1: only words absent from the entire frequency list.
+Level 2: words outside the top ~10 000.
+Level 3: words outside the top ~5 000.
+Level 4: words outside the top ~3 000.
+Level 5: words outside the top ~1 000 (most annotations)."
+  :type '(integer :tag "Difficulty" :match
+                  (lambda (_w value) (and (integerp value) (<= 1 value 5))))
+  :group 'systemhalted/wordwise)
+
+(defcustom systemhalted/wordwise-allowed-modes
+  '(org-mode nov-mode markdown-mode gfm-mode eww-mode)
+  "Major modes in which Wordwise annotations are permitted."
+  :type '(repeat symbol)
+  :group 'systemhalted/wordwise)
+
+(defcustom systemhalted/wordwise-max-hint-length 50
+  "Maximum character length of a hint string above a word."
+  :type 'integer
+  :group 'systemhalted/wordwise)
+
+(defcustom systemhalted/wordwise-ignored-words nil
+  "Words that Wordwise should never annotate.
+Use `systemhalted/wordwise-ignore-word' to add the word at point
+interactively, or customize this list directly."
+  :type '(repeat string)
+  :group 'systemhalted/wordwise)
+
+(defface systemhalted/wordwise-hint-face
+  '((t :inherit shadow :height 0.7))
+  "Face for the Wordwise hint text displayed above annotated words."
+  :group 'systemhalted/wordwise)
+
+;; Re-create the cache on every config reload so stale entries
+;; from earlier versions (which stored bare nil) are cleared.
+(setq systemhalted/wordwise-cache (make-hash-table :test #'equal :size 512))
+
+(defvar systemhalted/wordwise--skip-faces
+  '(org-block org-block-begin-line org-block-end-line
+    org-meta-line org-drawer org-property-value
+    org-special-keyword org-document-info-keyword
+    org-link org-tag org-code org-verbatim
+    markdown-pre-face markdown-inline-code-face
+    markdown-language-keyword-face markdown-code-face
+    markdown-url-face)
+  "Faces marking non-prose regions that Wordwise skips.")
+
+(defvar-local systemhalted/wordwise--timer nil
+  "Timer for processing background dictionary lookups.")
+
+;; --- Tier / difficulty logic ---
+
+(defun systemhalted/wordwise--tier-threshold ()
+  "Return the maximum tier that should be SKIPPED at the current difficulty."
+  (- 6 systemhalted/wordwise-difficulty))
+
+(defun systemhalted/wordwise--word-needs-annotation-p (word)
+  "Return non-nil if WORD should be annotated at the current difficulty."
+  (when (and (boundp 'systemhalted/wordwise-common-words)
+             systemhalted/wordwise-common-words
+             (not (member word systemhalted/wordwise-ignored-words)))
+    (let ((tier (gethash word systemhalted/wordwise-common-words)))
+      (if tier
+          (> tier (systemhalted/wordwise--tier-threshold))
+        t))))
+
+;; --- Prose detection and code-like word filter ---
+
+(defun systemhalted/wordwise--in-prose-p (pos)
+  "Return non-nil if POS is in a prose region suitable for annotation.
+Checks the face text property at POS; non-prose faces (source blocks,
+inline code, drawers, links, etc.) are listed in `--skip-faces'."
+  (let* ((face (get-text-property pos 'face))
+         (faces (cond ((null face) nil)
+                      ((listp face) face)
+                      (t (list face)))))
+    (not (seq-some (lambda (f)
+                     (memq f systemhalted/wordwise--skip-faces))
+                   faces))))
+
+(defun systemhalted/wordwise--code-like-p (word)
+  "Return non-nil if WORD looks like a code identifier rather than prose."
+  (let ((case-fold-search nil))
+    (or (string-match-p "[_/]" word)
+        (string-match-p "[a-z][A-Z]" word)
+        (string-match-p "\\`[A-Z]+\\'" word)
+        (string-match-p "\\`[A-Z][a-z]+[A-Z]" word))))
+
+;; --- Dictionary lookup ---
+
+(defun systemhalted/wordwise--lookup (word)
+  "Look up WORD and return a short definition string, or nil.
+Caches results; `none' marks a failed lookup so it is not retried."
+  (let ((cached (gethash word systemhalted/wordwise-cache 'miss)))
+    (cond
+     ((or (eq cached 'miss) (null cached))
+      (let ((def (systemhalted/wordwise--fetch-definition word)))
+        (puthash word (or def 'none) systemhalted/wordwise-cache)
+        def))
+     ((eq cached 'none) nil)
+     (t cached))))
+
+(defun systemhalted/wordwise--fetch-definition (word)
+  "Fetch a short definition for WORD from dict.org via the DICT protocol."
+  (condition-case nil
+      (let* ((proc (open-network-stream "wordwise-dict" " *wordwise-dict*"
+                                        "dict.org" 2628))
+             (buf (process-buffer proc))
+             result)
+        (unwind-protect
+            (progn
+              (accept-process-output proc 2)
+              (process-send-string proc (format "DEFINE * %s\r\n" word))
+              (let ((start (float-time)))
+                (while (and (< (- (float-time) start) 3)
+                            (process-live-p proc)
+                            (with-current-buffer buf
+                              (not (save-excursion
+                                     (goto-char (point-min))
+                                     (re-search-forward
+                                      "^\\(250\\|5[0-9][0-9]\\) " nil t)))))
+                  (accept-process-output proc 0.3)))
+              (process-send-string proc "QUIT\r\n")
+              (accept-process-output proc 0.5)
+              (with-current-buffer buf
+                (goto-char (point-min))
+                (when (re-search-forward "^151 " nil t)
+                  (forward-line 1)
+                  (let ((body-start (point)))
+                    (when (re-search-forward "^\\.\\s-*$" nil t)
+                      (setq result
+                            (systemhalted/wordwise--extract-first-sense
+                             (buffer-substring-no-properties
+                              body-start (line-beginning-position)))))))))
+          (when (process-live-p proc) (delete-process proc))
+          (when (buffer-live-p buf)
+            (let ((kill-buffer-query-functions nil))
+              (kill-buffer buf))))
+        result)
+    (error nil)))
+
+(defun systemhalted/wordwise--extract-first-sense (body)
+  "Extract the first sense from a DICT protocol definition BODY."
+  (when (and body (stringp body) (> (length body) 0))
+    (let* ((lines (split-string body "\n" t "[ \t]+"))
+           (def-line
+            (or (seq-find (lambda (l) (string-match-p "\\`[0-9]+\\." l)) lines)
+                (seq-find (lambda (l)
+                            (and (> (length l) 10)
+                                 (not (string-match-p "\\\\[A-Z]" l))
+                                 (not (string-match-p "\\`From " l))
+                                 (not (string-match-p "\\`\\[" l))))
+                          lines)))
+           (trimmed (when def-line
+                      (replace-regexp-in-string
+                       "\\`[0-9]+\\.\\s-*" ""
+                       (replace-regexp-in-string "\\\\[^\\\\]*\\\\" "" def-line)))))
+      (when (and trimmed (> (length (string-trim trimmed)) 0))
+        (let ((clean (string-trim trimmed)))
+          (if (> (length clean) systemhalted/wordwise-max-hint-length)
+              (concat (substring clean 0 (- systemhalted/wordwise-max-hint-length 3)) "...")
+            clean))))))
+
+;; --- Overlay management ---
+;;
+;; Two overlays per annotated word:
+;; 1. Display overlay at the visual-line beginning — its before-string
+;;    creates a phantom hint line, pixel-aligned to the word's screen
+;;    position via (space :align-to) so it works with proportional fonts
+;;    and wrapped lines.
+;; 2. Marker overlay spanning the word — for duplicate detection.
+
+(defun systemhalted/wordwise--make-overlay (beg end hint)
+  "Create Wordwise overlays: a phantom hint line above BEG and a marker on the word."
+  (save-excursion
+    (goto-char beg)
+    (let* ((visual-bol (progn (beginning-of-visual-line) (point)))
+           ;; Pixel-accurate alignment via posn-at-point; falls back to
+           ;; character column when no window position is available.
+           (posn (posn-at-point beg))
+           (x-pixel (when posn (car (posn-x-y posn))))
+           (padding (if x-pixel
+                        (propertize " " 'display
+                                    `(space :align-to (,x-pixel)))
+                      (make-string (- beg visual-bol) ?\s)))
+           (hint-line (concat padding
+                              (propertize hint
+                                          'face 'systemhalted/wordwise-hint-face)
+                              "\n"))
+           (display-ov (make-overlay visual-bol
+                                     (min (1+ visual-bol) (point-max))))
+           (marker-ov (make-overlay beg end nil t nil)))
+      (overlay-put display-ov 'before-string hint-line)
+      (overlay-put display-ov 'systemhalted/wordwise t)
+      (overlay-put marker-ov 'systemhalted/wordwise t)
+      (overlay-put marker-ov 'evaporate t))))
+
+(defun systemhalted/wordwise--already-annotated-p (beg end)
+  "Return non-nil if a Wordwise marker overlay spans BEG..END."
+  (seq-find (lambda (ov)
+              (and (overlay-get ov 'systemhalted/wordwise)
+                   (> (- (overlay-end ov) (overlay-start ov)) 0)))
+            (overlays-in beg end)))
+
+(defun systemhalted/wordwise--remove-overlays ()
+  "Remove all Wordwise overlays in the current buffer."
+  (remove-overlays (point-min) (point-max) 'systemhalted/wordwise t))
+
+;; --- Scan visible region (replaces jit-lock) ---
+
+(defun systemhalted/wordwise--scan-visible ()
+  "Scan the visible window region and annotate uncommon words."
+  (when (bound-and-true-p systemhalted/wordwise-mode)
+    (let ((win (get-buffer-window (current-buffer))))
+      (when win
+        (systemhalted/wordwise--scan-region
+         (window-start win) (window-end win t))))))
+
+(defun systemhalted/wordwise--scan-region (beg end)
+  "Scan BEG..END for uncommon prose words.
+Cached definitions get overlays immediately.  Up to 5 uncached words
+are looked up synchronously (giving instant feedback); any remaining
+words are deferred to a continuation timer that re-scans later."
+  (when (apply #'derived-mode-p systemhalted/wordwise-allowed-modes)
+    (let ((lookups 0)
+          (max-lookups 5)
+          (has-more nil))
+      (save-excursion
+        (goto-char beg)
+        (while (re-search-forward "\\b\\([a-zA-Z]\\{4,\\}\\)\\b" end t)
+          (let* ((word-beg (match-beginning 1))
+                 (word-end (match-end 1))
+                 (raw-word (match-string-no-properties 1))
+                 (word (downcase raw-word)))
+            (cond
+             ((not (systemhalted/wordwise--in-prose-p word-beg)) nil)
+             ((systemhalted/wordwise--already-annotated-p word-beg word-end) nil)
+             ((systemhalted/wordwise--code-like-p raw-word) nil)
+             ((not (systemhalted/wordwise--word-needs-annotation-p word)) nil)
+             (t
+              (let ((cached (gethash word systemhalted/wordwise-cache 'miss)))
+                (cond
+                 ((or (eq cached 'miss) (null cached))
+                  (if (< lookups max-lookups)
+                      (let ((def (systemhalted/wordwise--lookup word)))
+                        (cl-incf lookups)
+                        (when (stringp def)
+                          (systemhalted/wordwise--make-overlay
+                           word-beg word-end def)))
+                    (setq has-more t)))
+                 ((eq cached 'none) nil)
+                 ((stringp cached)
+                  (systemhalted/wordwise--make-overlay
+                   word-beg word-end cached)))))))))
+      (when has-more
+        (systemhalted/wordwise--ensure-timer)))))
+
+;; --- Continuation timer ---
+
+(defun systemhalted/wordwise--ensure-timer ()
+  "Schedule a timer to continue annotating words past the lookup limit."
+  (unless systemhalted/wordwise--timer
+    (let ((buf (current-buffer)))
+      (setq systemhalted/wordwise--timer
+            (run-with-timer
+             0.5 nil
+             (lambda ()
+               (when (buffer-live-p buf)
+                 (with-current-buffer buf
+                   (setq systemhalted/wordwise--timer nil)
+                   (systemhalted/wordwise--scan-visible)))))))))
+
+(defun systemhalted/wordwise--cancel-timer ()
+  "Cancel the continuation timer."
+  (when systemhalted/wordwise--timer
+    (cancel-timer systemhalted/wordwise--timer)
+    (setq systemhalted/wordwise--timer nil)))
+
+;; --- Scroll hook ---
+
+(defun systemhalted/wordwise--on-scroll (_win _start)
+  "Re-scan visible region after scrolling."
+  (systemhalted/wordwise--scan-visible))
+
+;; --- Minor mode ---
+
+(define-minor-mode systemhalted/wordwise-mode
+  "Kindle-style inline vocabulary hints.
+When enabled, uncommon English words in prose regions are annotated
+with a short dictionary definition on a phantom line above the word.
+Definitions are fetched from dict.org in the background, one word at
+a time, so Emacs stays responsive.  Difficulty level is controlled by
+`systemhalted/wordwise-difficulty' (1-5)."
+  :lighter " WordWise"
+  :group 'systemhalted/wordwise
+  (if systemhalted/wordwise-mode
+      (if (apply #'derived-mode-p systemhalted/wordwise-allowed-modes)
+          (progn
+            (add-hook 'window-scroll-functions
+                      #'systemhalted/wordwise--on-scroll nil t)
+            (systemhalted/wordwise--scan-visible)
+            (message "Wordwise enabled (difficulty %d)"
+                     systemhalted/wordwise-difficulty))
+        (setq systemhalted/wordwise-mode nil)
+        (message "Wordwise not available in %s" major-mode))
+    (remove-hook 'window-scroll-functions
+                 #'systemhalted/wordwise--on-scroll t)
+    (systemhalted/wordwise--cancel-timer)
+    (systemhalted/wordwise--remove-overlays)
+    (message "Wordwise disabled")))
+
+(defun systemhalted/wordwise-set-difficulty (level)
+  "Set Wordwise difficulty to LEVEL (1-5) and re-annotate."
+  (interactive
+   (list (read-number "Wordwise difficulty (1-5): "
+                      systemhalted/wordwise-difficulty)))
+  (unless (<= 1 level 5)
+    (user-error "Difficulty must be between 1 and 5"))
+  (setq systemhalted/wordwise-difficulty level)
+  (when (bound-and-true-p systemhalted/wordwise-mode)
+    (systemhalted/wordwise--cancel-timer)
+    (systemhalted/wordwise--remove-overlays)
+    (systemhalted/wordwise--scan-visible))
+  (message "Wordwise difficulty set to %d" level))
+
+(defun systemhalted/wordwise-ignore-word ()
+  "Add the word at point to the ignore list and remove its annotation.
+The word is saved to `systemhalted/wordwise-ignored-words' via
+Customize so it persists across sessions."
+  (interactive)
+  (let* ((bounds (bounds-of-thing-at-point 'word))
+         (raw (when bounds (buffer-substring-no-properties
+                            (car bounds) (cdr bounds))))
+         (word (when raw (downcase raw))))
+    (unless word (user-error "No word at point"))
+    (if (member word systemhalted/wordwise-ignored-words)
+        (message "Wordwise: '%s' is already ignored" word)
+      (customize-save-variable
+       'systemhalted/wordwise-ignored-words
+       (cons word systemhalted/wordwise-ignored-words))
+      ;; Clear all overlays and re-scan so the ignored word disappears
+      (when (bound-and-true-p systemhalted/wordwise-mode)
+        (systemhalted/wordwise--remove-overlays)
+        (systemhalted/wordwise--scan-visible))
+      (message "Wordwise: '%s' will no longer be annotated" word))))
+
+(global-set-key (kbd "C-c w") #'systemhalted/wordwise-mode)
+#+end_src
+
+** Tutorial: Using Wordwise
+
+This tutorial is reachable from anywhere with =C-h T= -> /Wordwise/. It
+explains the Kindle-style vocabulary hints that annotate uncommon words
+in reading-oriented buffers.
+
+*What it does.* Wordwise scans the visible portion of the buffer for
+English words that fall outside a bundled frequency list. Each uncommon
+word gets a short dictionary definition displayed on a faint line above
+it — the same pattern Kindle's Word Wise uses. Common words (the top
+several thousand in English) are left alone so the annotations never
+feel noisy.
+
+*Enabling the mode.* Press =C-c w= to toggle =systemhalted/wordwise-mode=.
+The first activation fetches definitions from dict.org over the network
+(a few words at a time, so Emacs stays responsive). Once a word is
+looked up its definition is cached for the rest of the session.
+
+*Supported modes.* Wordwise activates in =org-mode=, =nov-mode=,
+=markdown-mode=, =gfm-mode=, and =eww-mode=. In other modes =C-c w=
+prints a message and refuses to activate.
+
+*Adjusting difficulty.* The difficulty level (1–5, default 3) controls
+how many words are annotated:
+
+| Level | Annotates words outside the top… | Typical density        |
+|-------+----------------------------------+------------------------|
+|     1 | 10 000 (very rare only)          | fewest annotations     |
+|     2 | ~7 000                           |                        |
+|     3 | ~5 000 (default)                 | moderate               |
+|     4 | ~3 000                           |                        |
+|     5 | ~1 000 (most annotations)        | many annotations       |
+
+Change difficulty with =M-x systemhalted/wordwise-set-difficulty=.
+Existing annotations are immediately redrawn to match the new level.
+
+*How definitions appear.* Each annotated word gets a faint line above
+it showing the definition, indented to the word's column position:
+
+#+begin_example
+                    directing
+This is a guiding principle for our work.
+#+end_example
+
+The hint text uses a smaller, subdued face (=systemhalted/wordwise-hint-face=)
+so it stays unobtrusive.
+
+*Prose vs. code.* Wordwise only annotates text in prose regions.  It
+skips source blocks, inline code, drawers, property lines, links, and
+other Org/Markdown non-prose elements. It also skips code-like
+identifiers (camelCase, ALL_CAPS, words with underscores or slashes).
+
+*Scrolling.* When you scroll, Wordwise automatically scans the newly
+visible region. Cached definitions appear instantly; any new words are
+fetched in small batches from dict.org.
+
+*Ignoring words.* If you see an annotation you do not want, place
+the cursor on the word and run =M-x systemhalted/wordwise-ignore-word=.
+The word is added to =systemhalted/wordwise-ignored-words= and saved
+via Customize so it persists across sessions. You can also edit the
+list directly with =M-x customize-variable RET
+systemhalted/wordwise-ignored-words=.
+
+| Keys          | Command                                   |
+|---------------+-------------------------------------------|
+| =C-c w=       | Toggle Wordwise mode on/off                |
+| =M-x systemhalted/wordwise-set-difficulty= | Change annotation density |
+| =M-x systemhalted/wordwise-ignore-word=    | Ignore word at point      |
 
 * Git and Documentation
 
