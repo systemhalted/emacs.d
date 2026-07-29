@@ -80,6 +80,17 @@ Warnings buffer is silenced. Messages are still written to the
 (setq use-package-always-ensure nil)
 #+end_src
 
+* TrustRail — package inspector
+
+Display installed =package.el= packages in a sortable table buffer.
+
+#+begin_src emacs-lisp
+  (use-package trustrail
+    :load-path "/Users/palak.mathur/Workspaces/Personal/trustrail" 
+    :ensure nil
+    :commands trustrail-list-packages)
+#+end_src
+
 * Core Editing
 
 The editor baseline before any package loads: quiet startup, runtime files
@@ -470,25 +481,51 @@ the loop:
 
 ** Tutorial dispatcher
 
-=C-h T= mirrors =C-h t= (the built-in Emacs tutorial) but opens subtrees
-from /this/ file as read-only indirect buffers. The docs live next to the
-code that binds them, the buffer renders as Org so tables, links, and
-verbatim keys stay legible, and edits to the source file are immediately
-visible because the buffer is indirect — no copy, no drift.
+=C-h T= mirrors =C-h t= (the built-in Emacs tutorial) but serves a
+broader menu: hand-written tutorial subtrees from /this/ file /plus/
+auto-discovered documentation for every installed ELPA package that ships
+an Info manual or a README. The prompt annotates each entry with its type
+— =[Tutorial]=, =[Info]=, or =[README]= — so you know what kind of
+document you are about to open.
 
-=systemhalted/tutorials= is the registry. The variable is declared with
-an empty =defvar= and assigned with =setq= because =defvar= never
-overwrites an already-bound value — with the list inside the =defvar=,
-=C-c r= reloads would silently keep the session's old registry and newly
-added tutorials would not appear until a full restart.
+*** Custom tutorials
 
-Adding a tutorial requires *both*
-a new alist entry here *and* a matching =**= heading elsewhere in this file
-whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
-open a heading it cannot find. The currently registered tutorials are the
-five subtrees in this document: =Tutorial: Organicely — Org-based Second
-Brain=, =Using LSP and DAP=, =Tutorial: Using LaTeX=, =Tutorial:
-Using Ghostel=, and =Tutorial: Using Wordwise=.
+=systemhalted/tutorials= is the registry for the hand-written subtrees.
+The variable is declared with an empty =defvar= and assigned with =setq=
+because =defvar= never overwrites an already-bound value — with the list
+inside the =defvar=, =C-c r= reloads would silently keep the session's
+old registry and newly added tutorials would not appear until a full
+restart.
+
+Adding a tutorial requires *both* a new alist entry here *and* a matching
+=**= heading elsewhere in this file whose text equals the cdr of the
+entry; the dispatcher refuses to open a heading it cannot find. The
+currently registered tutorials are the five subtrees in this document:
+=Tutorial: Organicely — Org-based Second Brain=, =Using LSP and DAP=,
+=Tutorial: Using LaTeX=, =Tutorial: Using Ghostel=, and =Tutorial: Using
+Wordwise=.
+
+*** Package documentation discovery
+
+=systemhalted/package-doc-candidates= scans =package-user-dir= (the ELPA
+directory) and returns an alist of =(NAME . (TYPE . PATH))= entries for
+packages that ship discoverable docs. For each versioned directory it
+strips the version suffix to get the package name, then checks for:
+
+1. *Info manuals* — any =.info= file in the directory (type =info=).
+2. *README files* — =README.org=, =README.md=, =README.rst=,
+   =README.mdown=, =README=, or =README-elpa= (type =readme=).
+
+The first match wins per package. When multiple version directories exist
+for the same package name only the last (highest version) is kept.
+
+*** Dispatch
+
+| Source          | Action                                               |
+|-----------------+------------------------------------------------------|
+| Custom tutorial | Indirect-buffer narrowed to the Org heading          |
+| Info manual     | =info= on the =.info= file                          |
+| README file     | =find-file-read-only= on the README                 |
 
 #+begin_src emacs-lisp
   (defvar systemhalted/tutorials nil
@@ -500,34 +537,94 @@ Using Ghostel=, and =Tutorial: Using Wordwise=.
           ("Ghostel"     . "Tutorial: Using Ghostel")
           ("Wordwise"    . "Tutorial: Using Wordwise")))
 
+  (defun systemhalted/package-doc-candidates ()
+    "Scan `package-user-dir' for packages with Info manuals or READMEs.
+  Return an alist of (DISPLAY-NAME . (TYPE . PATH)) where TYPE is the
+  symbol `info' or `readme'.  When multiple version directories exist for
+  the same package name, the last one (highest version) wins."
+    (let ((readme-names '("README.org" "README.md" "README.rst"
+                          "README.mdown" "README" "README-elpa"))
+          result)
+      (when (and (boundp 'package-user-dir)
+                 (file-directory-p package-user-dir))
+        (dolist (dir (directory-files package-user-dir t "^[^.]"))
+          (when (file-directory-p dir)
+            (let* ((base (file-name-nondirectory dir))
+                   (pkg-name (replace-regexp-in-string
+                              "-\\([0-9]\\{8\\}\\.[0-9]+\\|[0-9]+\\(\\.[0-9]+\\)*\\)$"
+                              "" base))
+                   (info-file (car (directory-files dir t "\\.info\\'")))
+                   (readme (and (not info-file)
+                                (seq-find #'file-exists-p
+                                          (mapcar (lambda (f) (expand-file-name f dir))
+                                                  readme-names)))))
+              (when (or info-file readme)
+                (setf (alist-get pkg-name result nil nil #'string=)
+                      (if info-file
+                          (cons 'info info-file)
+                        (cons 'readme readme))))))))
+      (sort result (lambda (a b) (string< (car a) (car b))))))
+
   (defun systemhalted/tutorial ()
-    "Pick a tutorial subtree from systemhalted.org and view it read-only.
-  Mirrors `help-with-tutorial' (C-h t): a registry of named tutorials is
-  offered via `completing-read', and the chosen subtree is shown as a
-  narrowed, read-only indirect buffer over the literate config so edits
-  to the source remain visible without losing place."
+    "Pick a tutorial or package doc and open it.
+  Merges the hand-written tutorial registry with auto-discovered ELPA
+  package docs (Info manuals and READMEs).  Each candidate is annotated
+  with its type — [Tutorial], [Info], or [README] — in the minibuffer."
     (interactive)
-    (let* ((choice (completing-read "Tutorial: "
-                                    (mapcar #'car systemhalted/tutorials)
-                                    nil t))
-           (heading (cdr (assoc choice systemhalted/tutorials)))
-           (buf-name (format "*Tutorial: %s*" choice)))
-      (if-let ((existing (get-buffer buf-name)))
-          (pop-to-buffer existing)
-        (let* ((org-file (expand-file-name "systemhalted.org" user-emacs-directory))
-               (base (find-file-noselect org-file))
-               (pos (with-current-buffer base
-                      (org-find-exact-headline-in-buffer heading))))
-          (unless pos
-            (user-error "Tutorial heading %S not found in %s" heading org-file))
-          (let ((indirect (make-indirect-buffer base buf-name t)))
-            (with-current-buffer indirect
-              (goto-char pos)
-              (org-narrow-to-subtree)
-              (org-show-subtree)
-              (goto-char (point-min))
-              (read-only-mode 1))
-            (pop-to-buffer indirect))))))
+    (let* ((entries nil)
+           ;; Custom tutorials -> (NAME . (tutorial . HEADING))
+           (_ (dolist (tut systemhalted/tutorials)
+                (push (cons (car tut) (cons 'tutorial (cdr tut))) entries)))
+           ;; Package docs -> (NAME . (info|readme . PATH))
+           (_ (dolist (pkg (systemhalted/package-doc-candidates))
+                (unless (assoc (car pkg) entries)
+                  (push pkg entries))))
+           (entries (sort entries (lambda (a b) (string< (car a) (car b)))))
+           (names (mapcar #'car entries))
+           (annotator (lambda (cand)
+                        (let* ((entry (assoc cand entries))
+                               (type  (cadr entry)))
+                          (pcase type
+                            ('tutorial "  [Tutorial]")
+                            ('info     "  [Info]")
+                            ('readme   "  [README]")
+                            (_         "")))))
+           (choice (completing-read
+                    "Tutorial: " 
+                    (lambda (string pred action)
+                      (if (eq action 'metadata)
+                          `(metadata (annotation-function . ,annotator))
+                        (complete-with-action action names string pred)))
+                    nil t))
+           (entry (cdr (assoc choice entries)))
+           (type  (car entry))
+           (payload (cdr entry)))
+      (pcase type
+        ('tutorial
+         (let ((buf-name (format "*Tutorial: %s*" choice)))
+           (if-let ((existing (get-buffer buf-name)))
+               (pop-to-buffer existing)
+             (let* ((org-file (expand-file-name "systemhalted.org"
+                                                user-emacs-directory))
+                    (base (find-file-noselect org-file))
+                    (pos (with-current-buffer base
+                           (org-find-exact-headline-in-buffer payload))))
+               (unless pos
+                 (user-error "Tutorial heading %S not found in %s"
+                             payload org-file))
+               (let ((indirect (make-indirect-buffer base buf-name t)))
+                 (with-current-buffer indirect
+                   (goto-char pos)
+                   (org-narrow-to-subtree)
+                   (org-show-subtree)
+                   (goto-char (point-min))
+                   (read-only-mode 1))
+                 (pop-to-buffer indirect))))))
+        ('info
+         (info payload))
+        ('readme
+         (find-file-read-only payload)))))
+
   (global-set-key (kbd "C-h T") #'systemhalted/tutorial)
 #+end_src
 
