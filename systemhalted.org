@@ -947,7 +947,8 @@ the others.
 
 [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Minibuffer-History.html][Savehist]] persists minibuffer history across restarts. It is the substrate
 the rest of this section sits on: =vertico= sorts candidates by recency,
-=consult-yank-pop= reads =kill-ring=, and =corfu-history= persists itself
+=consult-yank-pop= reads =kill-ring=, and =corfu-history= and the
+Wordwise definition cache (see the Org section) persist themselves
 through =savehist-additional-variables=. Bumping =history-length= to 200
 keeps enough recent entries to be useful without bloating =history=.
 
@@ -2308,11 +2309,13 @@ The feature has five pieces:
   are annotated.  Level 1 annotates only very rare words (not in the top
   10 000); level 5 annotates anything outside the top 1 000.
 - A *DICT protocol client* (direct TCP to dict.org) provides definitions.
-  Lookups are cached in a session-scoped hash table so each word is
-  fetched at most once. The cache lives in its =defvar= — which =C-c r=
-  reloads never overwrite — so a config reload doesn't throw away
-  fetched definitions; =M-x systemhalted/wordwise-clear-cache= flushes
-  it explicitly (useful to retry lookups that failed offline).
+  Lookups are cached in a hash table so each word is fetched at most
+  once. The cache lives in its =defvar= — which =C-c r= reloads never
+  overwrite — and persists across Emacs restarts through savehist
+  (landing in the same permission-600 =history= file as the kill ring).
+  Failed lookups are session-scoped: they're pruned when the config
+  loads, so a word that failed offline is retried next session.
+  =M-x systemhalted/wordwise-clear-cache= flushes everything explicitly.
 - A *visible-region scanner* runs when the mode is enabled and on every
   scroll, doing a small batch of synchronous lookups per pass and
   scheduling a timer for the rest. The scanner fontifies the region
@@ -2388,6 +2391,20 @@ lookups failed (cached as `none' — e.g. attempted while offline)."
     (systemhalted/wordwise--remove-overlays)
     (systemhalted/wordwise--scan-visible))
   (message "Wordwise cache cleared"))
+
+;; Persist fetched definitions across Emacs restarts through savehist —
+;; the same mechanism that already keeps kill-ring and corfu-history.
+;; Savehist restores the table before this section loads, so the defvar
+;; above leaves the restored value in place.  Failed lookups (`none')
+;; are pruned here at load time: a word that failed offline is retried
+;; next session instead of staying unannotated forever, while words
+;; dict.org genuinely has no entry for cost one retry per session.
+(with-eval-after-load 'savehist
+  (add-to-list 'savehist-additional-variables 'systemhalted/wordwise-cache))
+(maphash (lambda (word def)
+           (when (eq def 'none)
+             (remhash word systemhalted/wordwise-cache)))
+         systemhalted/wordwise-cache)
 
 (defvar systemhalted/wordwise--skip-faces
   '(org-block org-block-begin-line org-block-end-line
@@ -2725,7 +2742,8 @@ feel noisy.
 *Enabling the mode.* Press =C-c w= to toggle =systemhalted/wordwise-mode=.
 The first activation fetches definitions from dict.org over the network
 (a few words at a time, so Emacs stays responsive). Once a word is
-looked up its definition is cached for the rest of the session.
+looked up its definition is cached, and successful lookups persist
+across Emacs restarts; failed ones are retried in the next session.
 
 *Supported modes.* Wordwise activates in =org-mode=, =nov-mode=,
 =markdown-mode=, =gfm-mode=, and =eww-mode=. In other modes =C-c w=
