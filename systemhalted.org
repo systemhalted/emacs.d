@@ -2309,7 +2309,10 @@ The feature has five pieces:
   10 000); level 5 annotates anything outside the top 1 000.
 - A *DICT protocol client* (direct TCP to dict.org) provides definitions.
   Lookups are cached in a session-scoped hash table so each word is
-  fetched at most once.
+  fetched at most once. The cache lives in its =defvar= — which =C-c r=
+  reloads never overwrite — so a config reload doesn't throw away
+  fetched definitions; =M-x systemhalted/wordwise-clear-cache= flushes
+  it explicitly (useful to retry lookups that failed offline).
 - A *visible-region scanner* runs when the mode is enabled and on every
   scroll, doing a small batch of synchronous lookups per pass and
   scheduling a timer for the rest. The scanner fontifies the region
@@ -2369,11 +2372,22 @@ interactively, or customize this list directly."
   "Face for the Wordwise hint text displayed above annotated words."
   :group 'systemhalted/wordwise)
 
-(defvar systemhalted/wordwise-cache nil
-  "Session cache mapping a word to its definition, or `none' on lookup failure.")
-;; Re-create the cache on every config reload so stale entries
-;; from earlier versions (which stored bare nil) are cleared.
-(setq systemhalted/wordwise-cache (make-hash-table :test #'equal :size 512))
+(defvar systemhalted/wordwise-cache (make-hash-table :test #'equal :size 512)
+  "Session cache mapping a word to its definition, or `none' on lookup failure.
+Held in the `defvar' so `C-c r' reloads keep it — every entry costs a
+network round-trip to dict.org, and flushing on reload would cold-start
+annotation.  Flush explicitly with `systemhalted/wordwise-clear-cache'.")
+
+(defun systemhalted/wordwise-clear-cache ()
+  "Empty the Wordwise definition cache and re-annotate the buffer.
+Use after changing the lookup/extraction code, or to retry words whose
+lookups failed (cached as `none' — e.g. attempted while offline)."
+  (interactive)
+  (clrhash systemhalted/wordwise-cache)
+  (when (bound-and-true-p systemhalted/wordwise-mode)
+    (systemhalted/wordwise--remove-overlays)
+    (systemhalted/wordwise--scan-visible))
+  (message "Wordwise cache cleared"))
 
 (defvar systemhalted/wordwise--skip-faces
   '(org-block org-block-begin-line org-block-end-line
