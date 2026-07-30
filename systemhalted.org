@@ -543,7 +543,7 @@ to the source remain visible without losing place.  Quit with `q'."
           (with-current-buffer indirect
             (goto-char pos)
             (org-narrow-to-subtree)
-            (org-show-subtree)
+            (org-fold-show-subtree)
             (goto-char (point-min))
             (read-only-mode 1)
             ;; Org binds `q' to self-insert, which only errors in a read-only
