@@ -2777,12 +2777,25 @@ stop you killing the buffer out from under =git=.
 
 ** Markdown mode — README and prose docs
 
-Three file globs: =README.md= opens in =gfm-mode= (GitHub-flavored Markdown,
-which renders =\n= as line breaks and supports task-list checkboxes) since
-that's where the README convention lives; every other =.md= or =.markdown=
-file uses plain =markdown-mode=. The GFM split matters because writing
-README bullets that render correctly on GitHub requires the GFM-specific
-parsing.
+Three file globs: =README.md= opens in =gfm-mode= since that's what GitHub
+renders it as; every other =.md= or =.markdown= file uses plain
+=markdown-mode=. =gfm-mode= is a thin derived mode over =markdown-mode= —
+same keymap, same fontification, same table commands — that adds GFM alert
+blocks (=> [!NOTE]=, =[!WARNING]= and friends) to =paragraph-separate=,
+electric closing of =```= fences, hyphens rather than underscores when
+generating anchors, and =markdown-gfm-parse-buffer-for-languages=, which
+registers the languages named on fence lines so fenced code is highlighted
+natively.
+
+*Ordering matters here, in a way that is easy to get wrong.* =use-package=
+expands =:mode= into one =add-to-list= per entry, and =add-to-list=
+/prepends/ — so the list ends up *reversed* in =auto-mode-alist=, and the
+most specific pattern has to come *last* to win. With =README\.md\'= written
+first, =\.md\'= is prepended after it, shadows it, and every README quietly
+opens in plain =markdown-mode= with the =gfm-mode= entry never reached. The
+generic globs therefore come first in the list below and =README\.md\'= last.
+Both still precede =markdown-mode='s own =auto-mode-alist= autoload, because
+that is installed at =package-initialize= time and these prepend after it.
 
 Pipe tables are the sore spot. =markdown-mode= re-aligns a table *while you
 edit it* (=markdown-table-align-p= is =t= by default), but a table that was
@@ -2825,9 +2838,12 @@ line up.  Used on `before-save-hook'; also callable interactively."
 (use-package markdown-mode
   :ensure t
   :mode
-  (("README\\.md\\'" . gfm-mode)
+  ;; `:mode' becomes one `add-to-list' per entry and `add-to-list' prepends, so
+  ;; this list lands reversed in `auto-mode-alist': most specific goes LAST.
+  ;; With README first, "\\.md\\'" would be prepended over it and shadow it.
+  (("\\.markdown\\'" . markdown-mode)
    ("\\.md\\'" . markdown-mode)
-   ("\\.markdown\\'" . markdown-mode))
+   ("README\\.md\\'" . gfm-mode))
   :hook
   (markdown-mode . (lambda ()
                      (add-hook 'before-save-hook
