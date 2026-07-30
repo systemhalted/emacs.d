@@ -86,6 +86,58 @@ Warnings buffer is silenced. Messages are still written to the
 (setq use-package-always-ensure nil)
 #+end_src
 
+** Process I/O and shell environment
+
+Two startup-time settings that later sections depend on:
+
+- =read-process-output-max= controls the largest chunk Emacs reads from a
+  subprocess in one go. The default (4 KiB on most systems) is fine for
+  =grep= but pathological for =lsp-mode=, which streams large JSON
+  responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
+  per-response syscall count by ~250×, which is the single biggest
+  responsiveness win for Java buffers.
+- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=,
+  =SDKMAN_EL_DIR=, =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= from a login
+  + interactive shell
+  on startup. GUI Emacs
+  (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
+  terminal) does *not* inherit the interactive shell environment, so
+  SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
+  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR=,
+  =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= are imported for the same
+  reason: each points its
+  section at a local checkout of a package maintained in this
+  account, and without the import a GUI Emacs would never see them and
+  would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
+  (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
+  arguments are =-l -i= — both flags are needed to source the full
+  shell startup. The =:if= guard skips this in headless batch runs where
+  there's no shell to spawn.
+
+This section lives in the startup chapter deliberately: the import must
+run before any section that reads environment variables at load time.
+The Wordwise block resolves =WORDWISE_EL_DIR= the moment it is
+evaluated, and when this import sat later in the file (its old home in
+the Programming chapter) a GUI Emacs was still blind to the variable at
+that point and silently fell back to the GitHub install.
+
+#+begin_src emacs-lisp
+(setq read-process-output-max (* 1024 1024))
+
+(use-package exec-path-from-shell
+  :ensure t
+  :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
+  :init
+  (setq exec-path-from-shell-variables
+        '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR" "TRUSTRAIL_EL_DIR"
+          "WORDWISE_EL_DIR"))
+  ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
+  ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
+  (setq exec-path-from-shell-arguments '("-l" "-i"))
+  :config
+  (exec-path-from-shell-initialize))
+#+end_src
+
 * Core Editing
 
 The editor baseline before any package loads: quiet startup, runtime files
@@ -2654,51 +2706,6 @@ section under =Tutorial: Using LSP and DAP=.
 This replaces older language-specific stacks (Elpy, Tide, company-*) — see
 =CLAUDE.md= for the deliberate-removal note. The goal is fewer parallel
 systems doing the same job.
-
-** Process I/O and shell environment
-
-Two startup-time settings that the rest of the section depends on:
-
-- =read-process-output-max= controls the largest chunk Emacs reads from a
-  subprocess in one go. The default (4 KiB on most systems) is fine for
-  =grep= but pathological for =lsp-mode=, which streams large JSON
-  responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
-  per-response syscall count by ~250×, which is the single biggest
-  responsiveness win for Java buffers.
-- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=,
-  =SDKMAN_EL_DIR=, =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= from a login
-  + interactive shell
-  on startup. GUI Emacs
-  (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
-  terminal) does *not* inherit the interactive shell environment, so
-  SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
-  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR=,
-  =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= are imported for the same
-  reason: each points its
-  section at a local checkout of a package maintained in this
-  account, and without the import a GUI Emacs would never see them and
-  would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
-  (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
-  arguments are =-l -i= — both flags are needed to source the full
-  shell startup. The =:if= guard skips this in headless batch runs where
-  there's no shell to spawn.
-
-#+begin_src emacs-lisp
-(setq read-process-output-max (* 1024 1024))
-
-(use-package exec-path-from-shell
-  :ensure t
-  :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
-  :init
-  (setq exec-path-from-shell-variables
-        '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR" "TRUSTRAIL_EL_DIR"
-          "WORDWISE_EL_DIR"))
-  ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
-  ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
-  (setq exec-path-from-shell-arguments '("-l" "-i"))
-  :config
-  (exec-path-from-shell-initialize))
-#+end_src
 
 ** Flycheck — diagnostics in =prog-mode=
 
