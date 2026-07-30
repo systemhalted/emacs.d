@@ -19,7 +19,12 @@ system for thinking, consuming, and executing, not as a maximal task manager.
 
 * Startup and Package Management
 
-Startup is intentionally boring. Package archives are current and explicit:
+Startup is intentionally boring. A two-line =early-init.el= sets
+=package-enable-at-startup= to nil — since Emacs 27 the automatic activation
+pass runs /before/ init.el, so disabling it there (and only there; setting the
+variable in this file would be too late) makes the explicit
+=package-initialize= below the single activation per startup. Package archives
+are current and explicit:
 GNU/Nongnu provide core ecosystem packages, MELPA provides actively maintained
 tooling, and MELPA Stable remains lower priority. =use-package= is used only to
 make package ownership and configuration boundaries obvious. External packages
@@ -61,8 +66,9 @@ Warnings buffer is silenced. Messages are still written to the
   (load custom-file))
 
 (require 'package)
-(setq package-enable-at-startup nil
-      package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
+;; `package-enable-at-startup' is set to nil in early-init.el — it must be
+;; off before startup's automatic activation pass, which precedes this file.
+(setq package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
                          ("nongnu" . "https://elpa.nongnu.org/nongnu/")
                          ("melpa" . "https://melpa.org/packages/")
                          ("melpa-stable" . "https://stable.melpa.org/packages/"))
@@ -111,9 +117,15 @@ One =setq= block establishes the boring baseline; the clusters it covers:
 - *Versioned backups.* =backup-by-copying=, =delete-old-versions=, and the
   =kept-new=/=kept-old= caps keep a small rolling history per file.
 
-After the =setq=, =y-or-n-p= replaces =yes-or-no-p= globally (one-key
-confirmation), and UTF-8 is asserted across coding system, language
-environment, and default I/O.
+After the =setq=, =use-short-answers= makes every yes/no prompt accept a
+one-key =y= / =n= (the Emacs 28+ replacement for the old
+=(fset 'yes-or-no-p #'y-or-n-p)= trick). The one deliberate exception is
+the kill-Emacs guard: =use-short-answers= would reduce it to a single
+keypress too, which defeats the point of guarding =C-x C-c= against stray
+chords, so =systemhalted/confirm-kill-emacs= rebinds =use-short-answers=
+to nil around that one prompt and a typed "yes" is required to quit.
+Finally, UTF-8 is asserted across coding system, language environment,
+and default I/O.
 
 #+begin_src emacs-lisp
   (setq inhibit-startup-screen t
@@ -121,7 +133,7 @@ environment, and default I/O.
         initial-major-mode 'org-mode
         ring-bell-function 'ignore
         echo-keystrokes 0.01
-        confirm-kill-emacs #'yes-or-no-p
+        confirm-kill-emacs #'systemhalted/confirm-kill-emacs
         backup-by-copying t
         backup-directory-alist `(("." . ,(expand-file-name "backups/" user-emacs-directory)))
         auto-save-file-name-transforms `((".*" ,(expand-file-name "auto-save-list/" user-emacs-directory) t))
@@ -131,7 +143,15 @@ environment, and default I/O.
         kept-old-versions 2
         version-control t)
 
-  (fset 'yes-or-no-p #'y-or-n-p)
+  (setq use-short-answers t)
+
+  (defun systemhalted/confirm-kill-emacs (prompt)
+    "Ask PROMPT requiring a typed \"yes\", even with `use-short-answers' on.
+A single-key confirmation would defeat `confirm-kill-emacs' as a guard
+against stray chords."
+    (let ((use-short-answers nil))
+      (yes-or-no-p prompt)))
+
   (prefer-coding-system 'utf-8)
   (set-language-environment 'utf-8)
   (set-default-coding-systems 'utf-8)
@@ -316,14 +336,19 @@ buffer size and longest-line sample, active minor modes, LSP state, live
 timer counts, GC counter, and a memory summary into a single alist for
 inspection or capture into a notes buffer.
 
-=systemhalted/emergency-ui-reset= (bound to =C-c !=) is the actual
-turn-it-off button. It disables line numbers everywhere, stops
+=systemhalted/emergency-ui-reset= (bound to =C-c E=) is the actual
+turn-it-off button. The capital follows this config's collision-avoidance
+convention, and here the collision is real: =C-c != is Org's
+=org-timestamp-inactive= and Flycheck's entire command prefix (=C-c ! n=
+and friends), and mode maps beat the global map — a reset bound there
+would be unreachable in exactly the Org and prog-mode buffers that get
+heavy. It disables line numbers everywhere, stops
 =global-auto-revert-mode=, and walks every buffer killing Flycheck, LSP,
 =mixed-pitch=, and =olivetti= modes where they are active; then it forces a
 GC and prints the resulting memory summary. Cheap to invoke, completely
 reversible — re-opening a file re-runs the relevant hooks.
 
-If Emacs is unresponsive enough that =C-c != itself doesn't fire, sample
+If Emacs is unresponsive enough that =C-c E= itself doesn't fire, sample
 the process from a terminal (macOS):
 
 #+begin_src sh
@@ -404,7 +429,9 @@ backtrace if =py-spy= happens to be installed.
     (garbage-collect)
     (message "Emergency UI reset complete: %S" (systemhalted/memory-summary)))
 
-  (global-set-key (kbd "C-c !") #'systemhalted/emergency-ui-reset)
+  ;; Not C-c !: that is Org's timestamp key and Flycheck's command prefix,
+  ;; and their mode maps would shadow the global binding.
+  (global-set-key (kbd "C-c E") #'systemhalted/emergency-ui-reset)
 #+end_src
 
 ** Small convenience keys and windmove
@@ -424,15 +451,19 @@ These micro-tweaks live alone because they don't belong with any package:
   GNOME Activities), so the chord may not reach Emacs there — fall back to
   =M-x revert-buffer= (or =C-x x g=, =revert-buffer-quick=, which skips the
   confirmation prompt).
-- =windmove= is built-in and provides directional window navigation
-  (=S-<arrow>= by default). The =use-package= form just enables it.
+- =windmove= is built-in and provides directional window navigation on
+  =S-<arrow>=. Loading the library alone binds nothing —
+  =windmove-default-keybindings= is what installs the shift-arrow keys.
 
 #+begin_src emacs-lisp
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
   (global-set-key (kbd "s-u") #'revert-buffer)
 
   ;; enable windmove, for easy navigation between open windows
-  (use-package windmove)
+  (use-package windmove
+    :ensure nil
+    :config
+    (windmove-default-keybindings))
 #+end_src
 
 ** Reload and visit the literate file
@@ -877,9 +908,9 @@ intent — "make this one line" — at different scales.
 
 #+begin_src emacs-lisp
   (define-key global-map (kbd "C-c k")
-  (defun systemhalted/join-following-line (arg)
-    "Joins the following line or the whole selected region"
-    (interactive "P")
+  (defun systemhalted/join-following-line ()
+    "Join the following line, or unwrap the whole selected region."
+    (interactive)
     (if (use-region-p)
         (let ((fill-column (point-max)))
           (fill-region (region-beginning) (region-end)))
@@ -1052,7 +1083,7 @@ package, so =:ensure nil :after vertico= is correct — no separate install.
 
 Pressing =M-h= inside any file prompt flips visibility of dotfiles for the
 current and subsequent prompts. The implementation is small:
-=systemhalted-vertico-show-hidden-files= is a global flag (defaults to =t=
+=systemhalted/vertico-show-hidden-files= is a global flag (defaults to =t=
 to match plain =read-file-name= behavior — show everything). An =:around=
 advice on =read-file-name= installs a wrapping predicate that drops dotfiles
 when the flag is nil, /except/ when the basename being typed in the prompt
@@ -1070,38 +1101,38 @@ guards itself with =minibuffer-completing-file-name= so pressing =M-h= in a
 buffer / command / variable prompt is a clear no-op rather than a surprise.
 
 #+begin_src emacs-lisp
-(defvar systemhalted-vertico-show-hidden-files t
+(defvar systemhalted/vertico-show-hidden-files t
   "When non-nil, file-name completion shows hidden files (dotfiles).
 Toggle with `systemhalted/vertico-toggle-hidden-files' inside a file prompt.")
 
-(defun systemhalted--file-name-hidden-p (file)
+(defun systemhalted/vertico--file-name-hidden-p (file)
   "Return non-nil if FILE's basename is a dotfile (excluding `.' and `..')."
   (let ((name (file-name-nondirectory (directory-file-name file))))
     (and (string-prefix-p "." name)
          (not (member name '("." ".."))))))
 
-(defun systemhalted--read-file-name-with-hidden-filter
+(defun systemhalted/vertico--read-file-name-with-hidden-filter
     (orig prompt &optional dir default-filename mustmatch initial predicate)
   "Around-advice for `read-file-name' that hides dotfiles per the toggle."
   (let ((merged
          (lambda (f)
-           (and (or systemhalted-vertico-show-hidden-files
+           (and (or systemhalted/vertico-show-hidden-files
                     (string-prefix-p
                      "."
                      (file-name-nondirectory
                       (or (and (minibufferp)
                                (minibuffer-contents-no-properties))
                           "")))
-                    (not (systemhalted--file-name-hidden-p f)))
+                    (not (systemhalted/vertico--file-name-hidden-p f)))
                 (or (null predicate) (funcall predicate f))))))
     (funcall orig prompt dir default-filename mustmatch initial merged)))
 
 (advice-add 'read-file-name :around
-            #'systemhalted--read-file-name-with-hidden-filter)
+            #'systemhalted/vertico--read-file-name-with-hidden-filter)
 
 (defun systemhalted/vertico-toggle-hidden-files ()
   "Toggle visibility of hidden files in the current minibuffer file prompt.
-Flips `systemhalted-vertico-show-hidden-files' and refreshes Vertico in
+Flips `systemhalted/vertico-show-hidden-files' and refreshes Vertico in
 place when called from inside an active file prompt. No-op on non-file
 prompts so the keybinding does not surprise in `M-x' or buffer prompts."
   (interactive)
@@ -1109,14 +1140,14 @@ prompts so the keybinding does not surprise in `M-x' or buffer prompts."
    ((and (minibufferp) (not minibuffer-completing-file-name))
     (message "Hidden-file toggle only applies to file prompts"))
    (t
-    (setq systemhalted-vertico-show-hidden-files
-          (not systemhalted-vertico-show-hidden-files))
+    (setq systemhalted/vertico-show-hidden-files
+          (not systemhalted/vertico-show-hidden-files))
     (when (and (minibufferp) (boundp 'vertico--input))
       (setq vertico--input t)
       (when (fboundp 'vertico--exhibit)
         (vertico--exhibit)))
     (message "Hidden files: %s"
-             (if systemhalted-vertico-show-hidden-files "shown" "hidden")))))
+             (if systemhalted/vertico-show-hidden-files "shown" "hidden")))))
 
 (with-eval-after-load 'vertico
   (define-key vertico-map (kbd "M-h")
@@ -1417,7 +1448,9 @@ treated as separate projects.  ROOT defaults to `systemhalted/projects-root'."
     (interactive)
     (setq root (or root systemhalted/projects-root))
     (when (file-directory-p root)
-      (dolist (dir (directory-files root t directory-files-no-dot-files-regexp))
+      ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
+      ;; trees (.cache, .venv, ...) are never projects and can be huge.
+      (dolist (dir (directory-files root t "\\`[^.]"))
         (when (file-directory-p dir)
           (if (projectile-project-p dir)
               (projectile-add-known-project
@@ -1435,10 +1468,18 @@ infrastructure. By default, all compilation commands share a single
 =*compilation*= buffer, which means running a long-lived process like
 =mvn spring-boot:run= blocks any subsequent =mvn test= invocation.
 
-Setting =compilation-buffer-name-function= to generate unique buffer names
-allows multiple compilation processes to run in parallel. Each buffer is
-named after the command that spawned it, making it easy to identify which
-process is which when switching buffers.
+Naming each compilation buffer after its command lets different commands run
+in parallel — =mvn spring-boot:run= keeps serving while =mvn test= gets its
+own buffer — while the /same/ command reuses its buffer, so recompiles don't
+pile up =*compilation*<2>=, =<3>=, … and =next-error= keeps pointing at the
+live buffer.
+
+Getting at the command takes one indirection: the name function runs
+/before/ the compilation buffer exists, so the buffer-local
+=compilation-arguments= isn't available yet (it is nil in the buffer where
+=compile= was invoked). A thin =:around= advice on =compilation-start=
+therefore captures the command into a dynamic variable for the duration of
+the call, and the name function reads it from there.
 
 #+begin_src emacs-lisp
 (use-package compile
@@ -1446,15 +1487,28 @@ process is which when switching buffers.
   :custom
   (compilation-scroll-output t)
   :config
+  (defvar systemhalted/compilation--command nil
+    "Command of the compilation being started, for buffer naming.
+Bound around `compilation-start' because the name function runs before
+the compilation buffer (and its local `compilation-arguments') exists.")
+
+  (define-advice compilation-start
+      (:around (orig command &rest args) systemhalted/capture-command)
+    "Expose COMMAND to `systemhalted/compilation-buffer-name'."
+    (let ((systemhalted/compilation--command command))
+      (apply orig command args)))
+
   (defun systemhalted/compilation-buffer-name (mode)
-    "Generate a unique compilation buffer name based on the command.
-MODE is the major mode name passed by `compilation-start'."
-    (let* ((cmd (or compilation-arguments "compile"))
+    "Name the compilation buffer after the command being run.
+MODE is the major-mode name passed by `compilation-start'.  The same
+command reuses its buffer; different commands run in parallel in
+buffers of their own."
+    (let* ((cmd (or systemhalted/compilation--command "compile"))
            ;; Truncate long commands for readability
            (short-cmd (if (> (length cmd) 40)
                           (concat (substring cmd 0 37) "...")
                         cmd)))
-      (generate-new-buffer-name (format "*%s: %s*" mode short-cmd))))
+      (format "*%s: %s*" mode short-cmd)))
   (setq compilation-buffer-name-function #'systemhalted/compilation-buffer-name))
 #+end_src
 
@@ -2208,7 +2262,7 @@ Activation is on-demand via =C-c B= (capital, since =C-c b= is
 =consult-buffer=). The toggle is global rather than wired into
 =org-mode-hook= because not every Org buffer is a reading surface — the
 inbox during a sweep is a sorting surface, where book view would harm
-scanning. Journal entries, long-form drafts in =40-writing.org=, tutorial
+scanning. Journal entries, long-form drafts under =40-writing/=, tutorial
 buffers, and reading notes are where it belongs, and the keybinding makes
 it trivial to invoke wherever it helps. =systemhalted/journal= (=C-c J=)
 turns it on automatically for writing sessions.
@@ -2312,6 +2366,8 @@ interactively, or customize this list directly."
   "Face for the Wordwise hint text displayed above annotated words."
   :group 'systemhalted/wordwise)
 
+(defvar systemhalted/wordwise-cache nil
+  "Session cache mapping a word to its definition, or `none' on lookup failure.")
 ;; Re-create the cache on every config reload so stale entries
 ;; from earlier versions (which stored bare nil) are cleared.
 (setq systemhalted/wordwise-cache (make-hash-table :test #'equal :size 512))
@@ -2823,9 +2879,12 @@ the file contents. It is enabled only in Markdown buffers.
 `markdown-mode' realigns a table as you edit it (`markdown-table-align-p'
 is t), but a pasted or generated table stays ragged until touched.  Walk
 the buffer and run `markdown-table-align' on each table so the columns
-line up.  Used on `before-save-hook'; also callable interactively."
+line up.  Used on `before-save-hook'; also callable interactively.
+No-op in read-only buffers — the visit-time pass would otherwise signal
+`buffer-read-only' from inside the mode hook on unwritable files."
   (interactive)
-  (when (derived-mode-p 'markdown-mode)
+  (when (and (derived-mode-p 'markdown-mode)
+             (not buffer-read-only))
     (save-excursion
       (goto-char (point-min))
       (while (re-search-forward "^[ \t]*|" nil t)
@@ -2868,9 +2927,11 @@ line up.  Used on `before-save-hook'; also callable interactively."
 YAML is whitespace-significant, so tab handling matters. =yaml-mode= covers
 both =.yml= and =.yaml=, plus the project-specific =Bogiefile= which is
 plain YAML under a non-standard name. The mode hook locks =tab-width= to
-=2= (the de facto YAML convention) and rebinds =RET= to
-=newline-and-indent= so a new key stays at the correct indent depth
-instead of dropping to column 0.
+=2= (the de facto YAML convention) buffer-locally; =RET= is rebound once
+in =yaml-mode-map= (a keymap edit is mode-wide, so it belongs in
+=:config=, not re-run per buffer from the hook) to =newline-and-indent=
+so a new key stays at the correct indent depth instead of dropping to
+column 0.
 
 #+begin_src emacs-lisp
 (use-package yaml-mode
@@ -2880,8 +2941,9 @@ instead of dropping to column 0.
    ("Bogiefile\\'" . yaml-mode))
   :hook
   (yaml-mode . (lambda ()
-                 (setq-local tab-width 2)
-                 (define-key yaml-mode-map (kbd "RET") #'newline-and-indent))))
+                 (setq-local tab-width 2)))
+  :config
+  (define-key yaml-mode-map (kbd "RET") #'newline-and-indent))
 #+end_src
 
 * Programming
@@ -3588,11 +3650,21 @@ When Eshell encounters a "visual" command (=top=, =htop=, =less=, …) it
 normally delegates to =ansi-term=.  With =ghostel-eshell= those
 commands open in a full Ghostel terminal instead.
 
+This and the two extensions below enable their global modes directly in
+=:config=, which runs when Ghostel itself first loads (the =:after
+ghostel= gate).  Hooking them on =after-init= — the obvious-looking
+alternative — would never fire: Ghostel is autoloaded and loads on the
+first =C-c m=, long after =after-init-hook= has already run, so the hook
+would be added to a hook that never runs again.  The modes are cheap
+advice/hook installers, safe to enable before their target features
+(eshell, compile, comint) load.
+
 #+begin_src emacs-lisp
   (use-package ghostel-eshell
     :ensure nil
     :after ghostel
-    :hook (eshell-load . ghostel-eshell-visual-command-mode))
+    :config
+    (ghostel-eshell-visual-command-mode 1))
 #+end_src
 
 *** TTY-backed compilation — =ghostel-compile=
@@ -3605,7 +3677,8 @@ movement faithfully.
   (use-package ghostel-compile
     :ensure nil
     :after ghostel
-    :hook (after-init . ghostel-compile-global-mode))
+    :config
+    (ghostel-compile-global-mode 1))
 #+end_src
 
 *** Better ANSI in comint — =ghostel-comint=
@@ -3618,7 +3691,8 @@ Ghostel's VT parser for ANSI rendering instead of the built-in
   (use-package ghostel-comint
     :ensure nil
     :after ghostel
-    :hook (after-init . ghostel-comint-global-mode))
+    :config
+    (ghostel-comint-global-mode 1))
 #+end_src
 
 ** Tutorial: Using Ghostel
@@ -3722,24 +3796,17 @@ its lookup list is installed:
 
 Emacs 29 ships =js-json-mode= as a separate JSON-only major mode (faster
 than reusing =js-mode= for JSON). When it's available, =.json= files use
-it and get LSP through =lsp-deferred= — the bash-language-server stack
-also handles JSON schema validation through =vscode-json-languageserver=
-when that binary is installed via =npm install -g
-vscode-langservers-extracted=. The =fboundp= guard means Emacs 28 and
-earlier silently keep the previous behavior (=javascript-mode= or
-=js-mode= via the default =auto-mode-alist=).
-
-The trailing =;;; systemhalted.el ends here= comment is the conventional
-file footer; it's emitted here at the end of this code chunk because of
-how the original monolithic block tangled, but it does not mark the
-literal end of the tangled file (more code follows in later sections).
+it and get LSP through =lsp-deferred=; the language server is
+=vscode-json-languageserver=, which also provides JSON-schema validation
+when installed via =npm install -g vscode-langservers-extracted=. The
+=fboundp= guard means Emacs 28 and earlier silently keep the previous
+behavior (=javascript-mode= or =js-mode= via the default
+=auto-mode-alist=).
 
 #+begin_src emacs-lisp
 (when (fboundp 'js-json-mode)
   (add-to-list 'auto-mode-alist '("\\.json\\'" . js-json-mode))
   (add-hook 'js-json-mode-hook #'lsp-deferred))
-
-;;; systemhalted.el ends here
 #+end_src
 
 ** JDK source filename association
@@ -4177,6 +4244,8 @@ converge on references or citations. Replacing
 (with-eval-after-load 'ox-latex
   (setq org-latex-pdf-process
         '("latexmk -pdf -interaction=nonstopmode -output-directory=%o %f")))
+
+;;; systemhalted.el ends here
 #+end_src
 
 ** Tutorial: Using LaTeX
