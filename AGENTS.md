@@ -13,7 +13,7 @@ This repository is a personal Emacs configuration. `init.el` is the entry point:
 
 ## Coding Style & Naming Conventions
 
-Use Emacs Lisp conventions: two-space indentation, lowercase kebab-case symbols, and namespaced custom functions with the `systemhalted/` prefix (e.g., `systemhalted/config-reload`, `systemhalted/promote-to-todo`). Do not introduce a second namespace.
+Use Emacs Lisp conventions: two-space indentation, lowercase kebab-case symbols, and namespaced custom functions with the `systemhalted/` prefix (e.g., `systemhalted/config-reload`, `systemhalted/notes-search`; internals use `systemhalted/<feature>--<name>`). Do not introduce a second namespace.
 
 Use `use-package` for every package with explicit `:ensure t` for external packages and `:ensure nil` for built-ins. There is no `use-package-always-ensure`—implicit installs are deliberately disabled.
 
@@ -21,19 +21,17 @@ Keep literate explanations near the relevant source block in `systemhalted.org`;
 
 ## Org Workflow Guardrails
 
-The Org setup enforces a three-file model and will signal errors if violated:
+Org is **Organicely**, a notes-only second brain — no task management. The rule: anything with a "done" state goes in Apple Reminders, anything with a date goes in Apple Calendar, everything else goes in org. There is no agenda, no TODO keywords (`org-todo-keywords` is nil), no task lifecycle.
 
-- `~/org/todo.org` — execution. The **only** file in `org-agenda-files`. Allowed states: `TODO → IN-PROGRESS → DONE`.
-- `~/org/backlog.org` — passive intake. A `before-save-hook` rejects any TODO/IN-PROGRESS/DONE heading or `SCHEDULED:`/`DEADLINE:` line.
-- `~/org/notes.org` — durable thinking. `org-todo-keywords` is set to nil locally; a save hook rejects task headings.
+`~/organicely/` is a directory tree, one file per note, in numbered areas (`00-inbox/`, `10-work/`, `20-personal/`, `30-learning/`, `40-writing/`, `50-journal/`, `60-ideas/`, `99-archive/`); areas and section subdirectories are listed in `systemhalted/org-area-dirs` / `systemhalted/org-area-sections` and created by `systemhalted/ensure-org-files` when Org first loads. Capture (`C-c c`) creates a note file directly (`c` Note) or a source-grouped entry in `00-inbox/sources.org` (`s`); in Org buffers `C-c C-w` is rebound to `systemhalted/refile-note`, which moves the note's file (plus its `-attachments/` directory) into a chosen `area/section`. Journaling is `C-c J` (`systemhalted/journal`), one file per day under `50-journal/daily/`.
 
-Promotion from backlog → todo is intentionally manual via `C-c P` (`systemhalted/promote-to-todo`). Do not widen `org-agenda-files`, add task keywords to `backlog.org`/`notes.org`, or add capture templates that route tasks anywhere except `todo.org`.
+Enforcement is **soft by design**: `systemhalted/org-warn-done-state` warns (never blocks) on save when a file under `~/organicely/` contains task-shaped headings or `SCHEDULED:`/`DEADLINE:` lines. Do not reintroduce hard guards, agenda config, task keywords, or a promotion command. The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: never reference, require, or delete them.
 
 ## Keybinding Conventions
 
-`C-c p` is the Projectile command prefix (the conventional default). `systemhalted/promote-to-todo` lives at `C-c P` (capital P). Keep this convention — `C-c p *` belongs to Projectile, `C-c P` is reserved for promote-to-todo.
+`C-c p` is the Projectile command prefix (the conventional default) — `C-c p *` belongs to Projectile. Custom bindings take capitals (`C-c B`, `C-c J`, `C-c E`) or other letters; check for major/minor-mode collisions before binding anything new (Org and Flycheck both claim keys under `C-c`). `C-c a` and `C-c P` are deliberately unbound (retired agenda/promote keys).
 
-Notable bindings: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c a` agenda, `C-c l` LSP prefix, `C-c j` enable Jupyter, `C-c b` consult-buffer, `C-c s` consult-ripgrep, `C-x g` magit-status.
+Notable bindings: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c J` journal, `C-c n` notes search, `C-c l` LSP prefix (and `org-store-link` globally), `C-c j` enable Jupyter (Org only), `C-c b` consult-buffer, `C-c B` book view, `C-c w` wordwise, `C-c s` consult-ripgrep, `C-c E` emergency UI reset, `C-c m` Ghostel terminal, `C-x g` magit-status, `C-h T` tutorials.
 
 ## Programming & Completion Stack
 
