@@ -46,7 +46,7 @@ The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: the config mu
 
 `C-c p` is the Projectile command prefix (the conventional default) — `C-c p *` belongs to Projectile. Custom bindings take capitals (`C-c B`) or other letters; check for collisions before binding anything new.
 
-Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c l` store-link, `C-c n` `systemhalted/notes-search` (consult-ripgrep over `~/org/`), `C-c J` `systemhalted/journal` (distraction-free journal session), `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c w` `systemhalted/wordwise-mode` (Kindle-style inline vocabulary hints with difficulty 1–5), `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer; registry is `systemhalted/tutorials`). `C-c a` and `C-c P` are deliberately unbound (they were the agenda and promote-to-todo keys in the retired task workflow).
+Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c l` store-link, `C-c n` `systemhalted/notes-search` (consult-ripgrep over `~/org/`), `C-c J` `systemhalted/journal` (distraction-free journal session), `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c w` `systemhalted/wordwise-mode` (Kindle-style inline vocabulary hints with difficulty 1–5), `C-c s` consult-ripgrep, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer, quit with `q`; registry is `systemhalted/tutorials`). `C-c a` and `C-c P` are deliberately unbound (they were the agenda and promote-to-todo keys in the retired task workflow).
 
 ## Programming stack
 
@@ -69,7 +69,15 @@ The minibuffer/in-buffer completion is the small-package stack: `vertico` + `ord
 
 ## Tutorials
 
-All tutorials are managed through indirect-org buffer. `systemhalted/tutorials` maintains the list of tutorials available within the org file and `systemhalted/tutorial` renders the tutorial as a separate buffer. The heading of the tutorial must match the one in the `systemhalted/tutorials`. The tutorial is mapped to `C-h T`.
+All tutorials are managed through indirect-org buffer. `systemhalted/tutorials` maintains the list of tutorials available within the org file and `systemhalted/tutorial` renders the tutorial as a separate buffer. The heading of the tutorial must match the one in the `systemhalted/tutorials`. The tutorial is mapped to `C-h T`. The buffer is read-only and quits with `q` (bound via a composed keymap so Org's `TAB` and `RET` still work).
+
+**`C-h T` is for hand-written tutorials only — do not extend it to package documentation.** Emacs already dispatches that: `C-h R` (`info-display-manual`) completes over every Info manual, built-in *and* package, since `package.el` writes a `dir` file into each package directory and registers it on `Info-directory-list`; `C-h P` (`describe-package`) covers a package's own description; `C-h i` browses the Info directory; `M-x info-apropos` searches all manual indices. A version of this dispatcher that merged in ELPA `.info` files and READMEs was added and then reverted — it found a fraction of what `C-h R` offers, missed every built-in manual, and kept only one manual per package (dropping AUCTeX's `preview-latex`).
+
+## Locally-maintained packages (`sdkman.el`, `trustrail.el`)
+
+Packages maintained in this account are loaded with a hybrid pattern, not a hardcoded path. An environment variable names a local checkout when one exists (`SDKMAN_EL_DIR`, `TRUSTRAIL_EL_DIR`); that directory goes on `load-path` so edits take effect on the next `C-c r`. When the variable is unset or points nowhere real, `use-package`'s `:vc` keyword has `package-vc` install from GitHub with `:rev :newest`.
+
+Follow this pattern for any further self-maintained package, and add its variable to `exec-path-from-shell-variables` — GUI Emacs does not inherit the shell environment, so without that import it would never see the local checkout. Never commit a `:load-path` pointing at a developer-specific absolute path; one committed config has to work on macOS, Fedora and Ubuntu.
 
 ## What not to commit
 

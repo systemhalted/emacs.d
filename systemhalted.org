@@ -80,17 +80,6 @@ Warnings buffer is silenced. Messages are still written to the
 (setq use-package-always-ensure nil)
 #+end_src
 
-* TrustRail — package inspector
-
-Display installed =package.el= packages in a sortable table buffer.
-
-#+begin_src emacs-lisp
-  (use-package trustrail
-    :load-path "/Users/palak.mathur/Workspaces/Personal/trustrail" 
-    :ensure nil
-    :commands trustrail-list-packages)
-#+end_src
-
 * Core Editing
 
 The editor baseline before any package loads: quiet startup, runtime files
@@ -481,151 +470,130 @@ the loop:
 
 ** Tutorial dispatcher
 
-=C-h T= mirrors =C-h t= (the built-in Emacs tutorial) but serves a
-broader menu: hand-written tutorial subtrees from /this/ file /plus/
-auto-discovered documentation for every installed ELPA package that ships
-an Info manual or a README. The prompt annotates each entry with its type
-— =[Tutorial]=, =[Info]=, or =[README]= — so you know what kind of
-document you are about to open.
+=C-h T= mirrors =C-h t= (the built-in Emacs tutorial) but opens subtrees
+from /this/ file as read-only indirect buffers. The docs live next to the
+code that binds them, the buffer renders as Org so tables, links, and
+verbatim keys stay legible, and edits to the source file are immediately
+visible because the buffer is indirect — no copy, no drift.
 
-*** Custom tutorials
+=systemhalted/tutorials= is the registry. The variable is declared with
+an empty =defvar= and assigned with =setq= because =defvar= never
+overwrites an already-bound value — with the list inside the =defvar=,
+=C-c r= reloads would silently keep the session's old registry and newly
+added tutorials would not appear until a full restart.
 
-=systemhalted/tutorials= is the registry for the hand-written subtrees.
-The variable is declared with an empty =defvar= and assigned with =setq=
-because =defvar= never overwrites an already-bound value — with the list
-inside the =defvar=, =C-c r= reloads would silently keep the session's
-old registry and newly added tutorials would not appear until a full
-restart.
+Adding a tutorial requires *both*
+a new alist entry here *and* a matching =**= heading elsewhere in this file
+whose text equals the cdr of the entry; =systemhalted/tutorial= refuses to
+open a heading it cannot find. The currently registered tutorials are the
+five subtrees in this document: =Tutorial: Organicely — Org-based Second
+Brain=, =Tutorial: Using LSP and DAP=, =Tutorial: Using LaTeX=, =Tutorial:
+Using Ghostel=, and =Tutorial: Using Wordwise=.
 
-Adding a tutorial requires *both* a new alist entry here *and* a matching
-=**= heading elsewhere in this file whose text equals the cdr of the
-entry; the dispatcher refuses to open a heading it cannot find. The
-currently registered tutorials are the five subtrees in this document:
-=Tutorial: Organicely — Org-based Second Brain=, =Using LSP and DAP=,
-=Tutorial: Using LaTeX=, =Tutorial: Using Ghostel=, and =Tutorial: Using
-Wordwise=.
+The menu covers hand-written tutorials only. Package documentation is not
+merged in, because Emacs already dispatches it: =C-h R=
+(=info-display-manual=) completes over every Info manual, built-in /and/
+package — =package.el= writes a =dir= file into each package directory and
+registers it on =Info-directory-list= — while =C-h P= (=describe-package=)
+covers a package's own description, =C-h i= browses the Info directory, and
+=M-x info-apropos= searches every manual index at once.
 
-*** Package documentation discovery
-
-=systemhalted/package-doc-candidates= scans =package-user-dir= (the ELPA
-directory) and returns an alist of =(NAME . (TYPE . PATH))= entries for
-packages that ship discoverable docs. For each versioned directory it
-strips the version suffix to get the package name, then checks for:
-
-1. *Info manuals* — any =.info= file in the directory (type =info=).
-2. *README files* — =README.org=, =README.md=, =README.rst=,
-   =README.mdown=, =README=, or =README-elpa= (type =readme=).
-
-The first match wins per package. When multiple version directories exist
-for the same package name only the last (highest version) is kept.
-
-*** Dispatch
-
-| Source          | Action                                               |
-|-----------------+------------------------------------------------------|
-| Custom tutorial | Indirect-buffer narrowed to the Org heading          |
-| Info manual     | =info= on the =.info= file                          |
-| README file     | =find-file-read-only= on the README                 |
+The buffer is dismissed with =q=, the way read-only buffers are everywhere
+else in Emacs. That needs saying explicitly because Org binds =q= to
+self-insert, which in a read-only buffer raises "Buffer is read-only"
+instead of quitting. Composing a one-key map holding =q= → =quit-window=
+/over/ the major mode's map — rather than replacing it — leaves =TAB=
+folding and =RET= link-following intact. The local map is per-buffer, so the
+indirect buffer picks =q= up without touching the keymap of the
+=systemhalted.org= buffer behind it. =quit-window= buries rather than kills,
+which pairs with the buffer reuse above: reopening a tutorial returns to
+where you left it.
 
 #+begin_src emacs-lisp
-  (defvar systemhalted/tutorials nil
-    "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
-  (setq systemhalted/tutorials
-        '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
-          ("LSP and DAP" . "Using LSP and DAP")
-          ("LaTeX"       . "Tutorial: Using LaTeX")
-          ("Ghostel"     . "Tutorial: Using Ghostel")
-          ("Wordwise"    . "Tutorial: Using Wordwise")))
+(defvar systemhalted/tutorials nil
+  "Alist of (DISPLAY-NAME . ORG-HEADING) tutorial subtrees in systemhalted.org.")
+(setq systemhalted/tutorials
+      '(("Organicely"  . "Tutorial: Organicely — Org-based Second Brain")
+        ("LSP and DAP" . "Tutorial: Using LSP and DAP")
+        ("LaTeX"       . "Tutorial: Using LaTeX")
+        ("Ghostel"     . "Tutorial: Using Ghostel")
+        ("Wordwise"    . "Tutorial: Using Wordwise")))
 
-  (defun systemhalted/package-doc-candidates ()
-    "Scan `package-user-dir' for packages with Info manuals or READMEs.
-  Return an alist of (DISPLAY-NAME . (TYPE . PATH)) where TYPE is the
-  symbol `info' or `readme'.  When multiple version directories exist for
-  the same package name, the last one (highest version) wins."
-    (let ((readme-names '("README.org" "README.md" "README.rst"
-                          "README.mdown" "README" "README-elpa"))
-          result)
-      (when (and (boundp 'package-user-dir)
-                 (file-directory-p package-user-dir))
-        (dolist (dir (directory-files package-user-dir t "^[^.]"))
-          (when (file-directory-p dir)
-            (let* ((base (file-name-nondirectory dir))
-                   (pkg-name (replace-regexp-in-string
-                              "-\\([0-9]\\{8\\}\\.[0-9]+\\|[0-9]+\\(\\.[0-9]+\\)*\\)$"
-                              "" base))
-                   (info-file (car (directory-files dir t "\\.info\\'")))
-                   (readme (and (not info-file)
-                                (seq-find #'file-exists-p
-                                          (mapcar (lambda (f) (expand-file-name f dir))
-                                                  readme-names)))))
-              (when (or info-file readme)
-                (setf (alist-get pkg-name result nil nil #'string=)
-                      (if info-file
-                          (cons 'info info-file)
-                        (cons 'readme readme))))))))
-      (sort result (lambda (a b) (string< (car a) (car b))))))
+(defun systemhalted/tutorial ()
+  "Pick a tutorial subtree from systemhalted.org and view it read-only.
+Mirrors `help-with-tutorial' (C-h t): a registry of named tutorials is
+offered via `completing-read', and the chosen subtree is shown as a
+narrowed, read-only indirect buffer over the literate config so edits
+to the source remain visible without losing place.  Quit with `q'."
+  (interactive)
+  (let* ((choice (completing-read "Tutorial: "
+                                  (mapcar #'car systemhalted/tutorials)
+                                  nil t))
+         (heading (cdr (assoc choice systemhalted/tutorials)))
+         (buf-name (format "*Tutorial: %s*" choice)))
+    (if-let ((existing (get-buffer buf-name)))
+        (pop-to-buffer existing)
+      (let* ((org-file (expand-file-name "systemhalted.org" user-emacs-directory))
+             (base (find-file-noselect org-file))
+             (pos (with-current-buffer base
+                    (org-find-exact-headline-in-buffer heading))))
+        (unless pos
+          (user-error "Tutorial heading %S not found in %s" heading org-file))
+        (let ((indirect (make-indirect-buffer base buf-name t)))
+          (with-current-buffer indirect
+            (goto-char pos)
+            (org-narrow-to-subtree)
+            (org-show-subtree)
+            (goto-char (point-min))
+            (read-only-mode 1)
+            ;; Org binds `q' to self-insert, which only errors in a read-only
+            ;; buffer.  Compose `q' -> `quit-window' over the mode's own map so
+            ;; Org keeps TAB for folding and RET for links.
+            (use-local-map
+             (make-composed-keymap
+              (let ((map (make-sparse-keymap)))
+                (define-key map (kbd "q") #'quit-window)
+                map)
+              (current-local-map))))
+          (pop-to-buffer indirect))))))
+(global-set-key (kbd "C-h T") #'systemhalted/tutorial)
+#+end_src
 
-  (defun systemhalted/tutorial ()
-    "Pick a tutorial or package doc and open it.
-  Merges the hand-written tutorial registry with auto-discovered ELPA
-  package docs (Info manuals and READMEs).  Each candidate is annotated
-  with its type — [Tutorial], [Info], or [README] — in the minibuffer."
-    (interactive)
-    (let* ((entries nil)
-           ;; Custom tutorials -> (NAME . (tutorial . HEADING))
-           (_ (dolist (tut systemhalted/tutorials)
-                (push (cons (car tut) (cons 'tutorial (cdr tut))) entries)))
-           ;; Package docs -> (NAME . (info|readme . PATH))
-           (_ (dolist (pkg (systemhalted/package-doc-candidates))
-                (unless (assoc (car pkg) entries)
-                  (push pkg entries))))
-           (entries (sort entries (lambda (a b) (string< (car a) (car b)))))
-           (names (mapcar #'car entries))
-           (annotator (lambda (cand)
-                        (let* ((entry (assoc cand entries))
-                               (type  (cadr entry)))
-                          (pcase type
-                            ('tutorial "  [Tutorial]")
-                            ('info     "  [Info]")
-                            ('readme   "  [README]")
-                            (_         "")))))
-           (choice (completing-read
-                    "Tutorial: " 
-                    (lambda (string pred action)
-                      (if (eq action 'metadata)
-                          `(metadata (annotation-function . ,annotator))
-                        (complete-with-action action names string pred)))
-                    nil t))
-           (entry (cdr (assoc choice entries)))
-           (type  (car entry))
-           (payload (cdr entry)))
-      (pcase type
-        ('tutorial
-         (let ((buf-name (format "*Tutorial: %s*" choice)))
-           (if-let ((existing (get-buffer buf-name)))
-               (pop-to-buffer existing)
-             (let* ((org-file (expand-file-name "systemhalted.org"
-                                                user-emacs-directory))
-                    (base (find-file-noselect org-file))
-                    (pos (with-current-buffer base
-                           (org-find-exact-headline-in-buffer payload))))
-               (unless pos
-                 (user-error "Tutorial heading %S not found in %s"
-                             payload org-file))
-               (let ((indirect (make-indirect-buffer base buf-name t)))
-                 (with-current-buffer indirect
-                   (goto-char pos)
-                   (org-narrow-to-subtree)
-                   (org-show-subtree)
-                   (goto-char (point-min))
-                   (read-only-mode 1))
-                 (pop-to-buffer indirect))))))
-        ('info
-         (info payload))
-        ('readme
-         (find-file-read-only payload)))))
+** TrustRail — installed-package inspector
 
-  (global-set-key (kbd "C-h T") #'systemhalted/tutorial)
+=trustrail.el= displays the installed =package.el= packages in a sortable
+table buffer — =M-x trustrail-list-packages=. It sits next to the tutorial
+dispatcher because the two answer neighbouring questions: /what is
+installed/ and /what does it document/.
+
+Loading is hybrid, the same arrangement the SDKMAN section uses and for the
+same reason — this is a package maintained in this account, so a development
+machine wants the live checkout while every other machine should just fetch
+it. =TRUSTRAIL_EL_DIR= names a local checkout when there is one, and that
+directory goes on =load-path= directly so edits take effect on the next
+=C-c r=. When the variable is unset or points nowhere real, =package-vc=
+installs from =github.com/systemhalted/trustrail.el= with =:rev :newest=
+(=use-package-vc-prefer-newest= is nil by default, which would otherwise pin
+to a release tag). One committed config works on macOS, Fedora and Ubuntu
+alike; the only per-machine choice is whether to export =TRUSTRAIL_EL_DIR=.
+Because GUI Emacs doesn't inherit the shell environment,
+=exec-path-from-shell= imports that variable alongside =PATH= — see
+/Process I/O and shell environment/ below.
+
+#+begin_src emacs-lisp
+  (defvar systemhalted/trustrail-local-checkout
+    (let ((dir (getenv "TRUSTRAIL_EL_DIR")))
+      (and dir (file-directory-p dir) (file-name-as-directory dir)))
+    "Local trustrail.el checkout from $TRUSTRAIL_EL_DIR, or nil to install from GitHub.")
+
+  (if systemhalted/trustrail-local-checkout
+      ;; Development machine: load the live checkout so edits take effect on reload.
+      (use-package trustrail
+        :preface (add-to-list 'load-path systemhalted/trustrail-local-checkout)
+        :commands trustrail-list-packages)
+    (use-package trustrail
+      :vc (:url "https://github.com/systemhalted/trustrail.el" :rev :newest)
+      :commands trustrail-list-packages))
 #+end_src
 
 ** Dired, fonts, and theme
@@ -2910,7 +2878,7 @@ Pyright, =rustic= drives =rust-analyzer=, and =dap-mode= reuses JDT LS
 for breakpoints in Java. The
 subsections below introduce each piece next to its rationale; a usage
 tutorial for the everyday LSP/DAP commands lives at the end of this
-section under =Using LSP and DAP=.
+section under =Tutorial: Using LSP and DAP=.
 
 This replaces older language-specific stacks (Elpy, Tide, company-*) — see
 =CLAUDE.md= for the deliberate-removal note. The goal is fewer parallel
@@ -2926,15 +2894,17 @@ Two startup-time settings that the rest of the section depends on:
   responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
   per-response syscall count by ~250×, which is the single biggest
   responsiveness win for Java buffers.
-- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=, and
-  =SDKMAN_EL_DIR= from a login + interactive shell on startup. GUI Emacs
+- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=,
+  =SDKMAN_EL_DIR= and =TRUSTRAIL_EL_DIR= from a login + interactive shell
+  on startup. GUI Emacs
   (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
   terminal) does *not* inherit the interactive shell environment, so
   SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
-  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR= is imported
-  for the same reason: it points the SDKMAN section below at a local
-  =sdkman.el= checkout, and without this import a GUI Emacs would never
-  see it and would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
+  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR= and
+  =TRUSTRAIL_EL_DIR= are imported for the same reason: each points its
+  section below at a local checkout of a package maintained in this
+  account, and without the import a GUI Emacs would never see them and
+  would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
   (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
   arguments are =-l -i= — both flags are needed to source the full
   shell startup. The =:if= guard skips this in headless batch runs where
@@ -2947,7 +2917,8 @@ Two startup-time settings that the rest of the section depends on:
   :ensure t
   :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
   :init
-  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR"))
+  (setq exec-path-from-shell-variables
+        '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR" "TRUSTRAIL_EL_DIR"))
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
@@ -3774,7 +3745,7 @@ explicitly.
 
 #+end_src
 
-** Using LSP and DAP
+** Tutorial: Using LSP and DAP
 
 This sub-section is documentation, not configuration; nothing here tangles
 into =systemhalted.el=. It captures the day-to-day workflow for the LSP and
