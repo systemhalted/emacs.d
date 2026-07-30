@@ -2312,7 +2312,10 @@ The feature has five pieces:
   fetched at most once.
 - A *visible-region scanner* runs when the mode is enabled and on every
   scroll, doing a small batch of synchronous lookups per pass and
-  scheduling a timer for the rest.
+  scheduling a timer for the rest. The scanner fontifies the region
+  before reading it: prose-vs-code detection is face-based, and the
+  scroll hook can outrun jit-lock into not-yet-fontified text, where a
+  source block would otherwise scan as prose.
 - The mode restricts itself to reading-oriented major modes: =org-mode=,
   =nov-mode=, =markdown-mode=, =gfm-mode=, and =eww-mode=.
 
@@ -2559,6 +2562,14 @@ Cached definitions get overlays immediately.  Up to 5 uncached words
 are looked up synchronously (giving instant feedback); any remaining
 words are deferred to a continuation timer that re-scans later."
   (when (apply #'derived-mode-p systemhalted/wordwise-allowed-modes)
+    ;; Prose detection reads `face' text properties, which exist only after
+    ;; font-lock has fontified the text — and the scroll hook fires before
+    ;; jit-lock reaches newly exposed regions.  Fontify first, or source
+    ;; blocks scan as prose.  Gated on `font-lock-defaults': shr-rendered
+    ;; modes (nov, eww) don't use font-lock, their faces are already in
+    ;; place, and `font-lock-ensure' would strip them.
+    (when font-lock-defaults
+      (font-lock-ensure beg end))
     (let ((lookups 0)
           (max-lookups 5)
           (has-more nil))
