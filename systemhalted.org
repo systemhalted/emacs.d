@@ -2314,6 +2314,13 @@ exists, and otherwise =package-vc= installs it from GitHub.
 =exec-path-from-shell= imports the variable for GUI Emacs (see the
 Process I/O section).
 
+The package ships an Info manual (=C-h R wordwise=), with the built
+=wordwise.info= and =dir= committed in its repo.  For an installed
+package, =package.el='s activation notices the =dir= file and registers
+the directory with Info on its own; a plain load-path checkout gets no
+such activation, so the local branch below adds the checkout to
+=Info-additional-directory-list= itself.
+
 The definition cache still persists through savehist, and the
 registration happens here — eagerly, not only inside the package —
 because savehist rewrites its file from the live variable list on every
@@ -2351,6 +2358,13 @@ Toggle with =C-c w=.  Change difficulty interactively with
     (use-package wordwise
       :ensure nil
       :preface (add-to-list 'load-path systemhalted/wordwise-local-checkout)
+      ;; package.el registers Info manuals only for installed packages;
+      ;; a load-path checkout needs its dir file put on Info's search
+      ;; path by hand for C-h R to find the wordwise manual.
+      :init
+      (with-eval-after-load 'info
+        (add-to-list 'Info-additional-directory-list
+                     systemhalted/wordwise-local-checkout))
       :bind ("C-c w" . wordwise-mode))
   ;; No local checkout: install from GitHub.  :rev :newest tracks the
   ;; latest commit rather than a release tag.
