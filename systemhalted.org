@@ -724,79 +724,81 @@ renders them.  Ligatures are enabled globally — this covers
 #+end_src
 
 #+begin_src emacs-lisp
-  (defun systemhalted/load-theme (&optional theme)
-    "Load THEME (defaulting to 'nord) without stacking themes on reload.
-When THEME is a catppuccin pseudo-symbol (catppuccin-latte, catppuccin-frappe,
-catppuccin-macchiato, catppuccin-mocha), set `catppuccin-flavor' and load
-the real `catppuccin' theme."
-    (interactive)
-    (let* ((t-to-load (or theme 'nord))
-           (name (symbol-name t-to-load))
-           (catppuccin-prefix "catppuccin-")
-           (is-catppuccin (string-prefix-p catppuccin-prefix name)))
-      (mapc #'disable-theme custom-enabled-themes)
-      (if is-catppuccin
-          (let ((flavor (intern (substring name (length catppuccin-prefix)))))
-            (setq catppuccin-flavor flavor)
-            (load-theme 'catppuccin t)
-            (message "Loaded theme: catppuccin (%s)" flavor))
-        (load-theme t-to-load t)
-        (message "Loaded theme: %s" t-to-load))))
+        (defun systemhalted/load-theme (&optional theme)
+          "Load THEME (defaulting to 'nord) without stacking themes on reload.
+      When THEME is a catppuccin pseudo-symbol (catppuccin-latte, catppuccin-frappe,
+      catppuccin-macchiato, catppuccin-mocha), set `catppuccin-flavor' and load
+      the real `catppuccin' theme."
+          (interactive)
+          (let* ((t-to-load (or theme 'nord))
+                 (name (symbol-name t-to-load))
+                 (catppuccin-prefix "catppuccin-")
+                 (is-catppuccin (string-prefix-p catppuccin-prefix name)))
+            (mapc #'disable-theme custom-enabled-themes)
+            (if is-catppuccin
+                (let ((flavor (intern (substring name (length catppuccin-prefix)))))
+                  (setq catppuccin-flavor flavor)
+                  (load-theme 'catppuccin t)
+                  (message "Loaded theme: catppuccin (%s)" flavor))
+              (load-theme t-to-load t)
+              (message "Loaded theme: %s" t-to-load))))
 
-  (use-package nord-theme
-    :ensure t
-    :custom
-    (nord-region-highlight "frost")
-    :config
-    (systemhalted/load-theme))
+        (use-package nord-theme
+          :ensure t
+          :custom
+          (nord-region-highlight "frost")
+          :config
+          (systemhalted/load-theme))
 
-  (use-package modus-themes
-    :ensure t)
+        (use-package modus-themes
+          :ensure t)
 
-  (use-package ef-themes
-    :ensure t)
+        (use-package ef-themes
+          :ensure t)
 
-  (use-package catppuccin-theme
-    :ensure t)
+        (use-package catppuccin-theme
+          :ensure t
+          :config
+  	(systemhalted/load-theme 'catppuccin-macchiato))
 
-  (use-package doom-themes
-    :ensure t
-    :config
-    (setq doom-themes-enable-bold t
-          doom-themes-enable-italic t))
+        (use-package doom-themes
+          :ensure t
+          :config
+          (setq doom-themes-enable-bold t
+                doom-themes-enable-italic t))
 
-  (defun systemhalted/get-theme-cycle-list ()
-    "Get the list of themes to cycle through: nord, catppuccin flavors, ef-themes, and doom-themes."
-    (let ((all-themes (custom-available-themes)))
-      (append
-       '(nord catppuccin-latte catppuccin-frappe catppuccin-macchiato catppuccin-mocha)
-       (seq-filter (lambda (x) (string-prefix-p "ef-" (symbol-name x))) all-themes)
-       (seq-filter (lambda (x) (string-prefix-p "doom-" (symbol-name x))) all-themes))))
+        (defun systemhalted/get-theme-cycle-list ()
+          "Get the list of themes to cycle through: nord, catppuccin flavors, ef-themes, and doom-themes."
+          (let ((all-themes (custom-available-themes)))
+            (append
+             '(nord catppuccin-latte catppuccin-frappe catppuccin-macchiato catppuccin-mocha)
+             (seq-filter (lambda (x) (string-prefix-p "ef-" (symbol-name x))) all-themes)
+             (seq-filter (lambda (x) (string-prefix-p "doom-" (symbol-name x))) all-themes))))
 
-  (defun systemhalted/cycle-theme ()
-    "Cycle to the next theme in `systemhalted/get-theme-cycle-list'."
-    (interactive)
-    (let* ((themes (systemhalted/get-theme-cycle-list))
-           (current (car custom-enabled-themes))
-           ;; Map the real catppuccin theme back to its pseudo-symbol
-           (effective (if (and (eq current 'catppuccin)
-                               (boundp 'catppuccin-flavor))
-                          (intern (concat "catppuccin-" (symbol-name catppuccin-flavor)))
-                        current))
-           (next (or (cadr (member effective themes))
-                     (car themes))))
-      (systemhalted/load-theme next)))
+        (defun systemhalted/cycle-theme ()
+          "Cycle to the next theme in `systemhalted/get-theme-cycle-list'."
+          (interactive)
+          (let* ((themes (systemhalted/get-theme-cycle-list))
+                 (current (car custom-enabled-themes))
+                 ;; Map the real catppuccin theme back to its pseudo-symbol
+                 (effective (if (and (eq current 'catppuccin)
+                                     (boundp 'catppuccin-flavor))
+                                (intern (concat "catppuccin-" (symbol-name catppuccin-flavor)))
+                              current))
+                 (next (or (cadr (member effective themes))
+                           (car themes))))
+            (systemhalted/load-theme next)))
 
-  (defun systemhalted/select-theme ()
-    "Interactively select a theme from the filtered cycle list."
-    (interactive)
-    (let* ((themes (systemhalted/get-theme-cycle-list))
-           (theme-names (mapcar #'symbol-name themes))
-           (choice (completing-read "Select theme: " theme-names nil t)))
-      (systemhalted/load-theme (intern choice))))
+        (defun systemhalted/select-theme ()
+          "Interactively select a theme from the filtered cycle list."
+          (interactive)
+          (let* ((themes (systemhalted/get-theme-cycle-list))
+                 (theme-names (mapcar #'symbol-name themes))
+                 (choice (completing-read "Select theme: " theme-names nil t)))
+            (systemhalted/load-theme (intern choice))))
 
-  (global-set-key (kbd "C-c t") #'systemhalted/cycle-theme)
-  (global-set-key (kbd "C-c T") #'systemhalted/select-theme)
+        (global-set-key (kbd "C-c t") #'systemhalted/cycle-theme)
+        (global-set-key (kbd "C-c T") #'systemhalted/select-theme)
 #+end_src
 
 ** Clipboard
@@ -948,7 +950,7 @@ the others.
 [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Minibuffer-History.html][Savehist]] persists minibuffer history across restarts. It is the substrate
 the rest of this section sits on: =vertico= sorts candidates by recency,
 =consult-yank-pop= reads =kill-ring=, and =corfu-history= and the
-Wordwise definition cache (see the Org section) persist themselves
+Wordwise definition cache (see the Wordwise section) persist themselves
 through =savehist-additional-variables=. Bumping =history-length= to 200
 keeps enough recent entries to be useful without bloating =history=.
 
@@ -2296,742 +2298,65 @@ and sweep workflow is unaffected unless invoked explicitly."
 
 ** Wordwise — Kindle-style inline vocabulary hints
 
-A reading aid inspired by Amazon Kindle's Word Wise feature.  When
-=systemhalted/wordwise-mode= is active, uncommon English words in the buffer
-get a short dictionary definition displayed on a phantom line above the
-word — exactly like Kindle shows hints above difficult vocabulary.
+[[https://github.com/systemhalted/wordwise.el][wordwise.el]] provides a
+reading aid inspired by Amazon Kindle's Word Wise feature: when
+=wordwise-mode= is active, uncommon English words get a short dictionary
+definition on a phantom line above the word.  A bundled five-tier
+frequency list decides what counts as uncommon, =wordwise-difficulty=
+(1–5) tunes the density, and definitions come from dict.org over one
+asynchronous connection, cached in =wordwise-cache=.  The feature grew
+up as a literate block in this file and was extracted into a package
+maintained in this account.
 
-The feature has five pieces:
+Like =sdkman.el= and =trustrail.el=, it loads through the hybrid
+local-checkout pattern: =WORDWISE_EL_DIR= names a local clone when one
+exists, and otherwise =package-vc= installs it from GitHub.
+=exec-path-from-shell= imports the variable for GUI Emacs (see the
+Process I/O section).
 
-- A *bundled frequency list* (~9 500 common English words in five tiers)
-  determines which words are "common" and therefore need no annotation.
-- A *difficulty level* (1–5, default 3) controls how aggressively words
-  are annotated.  Level 1 annotates only very rare words (not in the top
-  10 000); level 5 annotates anything outside the top 1 000.
-- A *DICT protocol client* (direct TCP to dict.org) provides definitions.
-  Lookups are cached in a hash table so each word is fetched at most
-  once. The cache lives in its =defvar= — which =C-c r= reloads never
-  overwrite — and persists across Emacs restarts through savehist
-  (landing in the same permission-600 =history= file as the kill ring).
-  Confirmed "no definition" responses persist too; connection failures
-  and timeouts stay session-local and are retried after a short cooldown.
-  =M-x systemhalted/wordwise-clear-cache= flushes everything explicitly.
-- A *nonblocking request queue* reuses one asynchronous DICT connection.
-  Cached hints appear immediately; uncached words are deduplicated and
-  resolved one at a time without waiting in the redisplay path.
-- A *visible-region scanner* runs when the mode is enabled and after
-  scrolling settles. It scans every window showing the buffer, including
-  windows on other frames. The scanner fontifies the region before reading
-  it: prose-vs-code detection is face-based, and the scroll hook can outrun
-  jit-lock into not-yet-fontified text, where a source block would otherwise
-  scan as prose.
-- The mode restricts itself to reading-oriented major modes: =org-mode=,
-  =nov-mode=, =markdown-mode=, =gfm-mode=, and =eww-mode=.
+The definition cache still persists through savehist, and the
+registration happens here — eagerly, not only inside the package —
+because savehist rewrites its file from the live variable list on every
+save: if registration waited for the package to load, any session that
+never touched =C-c w= would silently drop the cache from =history=.  The
+migration below re-homes definitions saved under the pre-extraction
+variable name; once a migrated session saves, the old entry is gone from
+=history= and the form reduces to a no-op.
 
 Toggle with =C-c w=.  Change difficulty interactively with
-=M-x systemhalted/wordwise-set-difficulty=.
+=M-x wordwise-set-difficulty=.
 
 #+begin_src emacs-lisp
-;; --- Wordwise: frequency data, face, cache, lookup, annotator, minor mode ---
+(defvar systemhalted/wordwise-local-checkout
+  (let ((dir (getenv "WORDWISE_EL_DIR")))
+    (when (and dir (file-directory-p dir)) dir))
+  "Local wordwise.el checkout from $WORDWISE_EL_DIR, or nil to install from GitHub.")
 
-;; Load the tiered frequency table from the data directory.
-(load (expand-file-name "data/wordwise-common-words"
-                        user-emacs-directory)
-      'noerror 'nomessage)
-
-(defgroup systemhalted/wordwise nil
-  "Kindle-style inline vocabulary hints."
-  :group 'convenience
-  :prefix "systemhalted/wordwise-")
-
-(defcustom systemhalted/wordwise-difficulty 3
-  "How aggressively to annotate words (1-5).
-Level 1: only words absent from the entire frequency list.
-Level 2: words outside the top ~10 000.
-Level 3: words outside the top ~5 000.
-Level 4: words outside the top ~3 000.
-Level 5: words outside the top ~1 000 (most annotations)."
-  :type '(integer :tag "Difficulty" :match
-                  (lambda (_w value) (and (integerp value) (<= 1 value 5))))
-  :group 'systemhalted/wordwise)
-
-(defcustom systemhalted/wordwise-allowed-modes
-  '(org-mode nov-mode markdown-mode gfm-mode eww-mode)
-  "Major modes in which Wordwise annotations are permitted."
-  :type '(repeat symbol)
-  :group 'systemhalted/wordwise)
-
-(defcustom systemhalted/wordwise-max-hint-length 50
-  "Maximum character length of a hint string above a word."
-  :type 'integer
-  :group 'systemhalted/wordwise)
-
-(defcustom systemhalted/wordwise-request-timeout 5
-  "Seconds to wait for one asynchronous DICT response."
-  :type 'number
-  :group 'systemhalted/wordwise)
-
-(defcustom systemhalted/wordwise-ignored-words nil
-  "Words that Wordwise should never annotate.
-Use `systemhalted/wordwise-ignore-word' to add the word at point
-interactively, or customize this list directly."
-  :type '(repeat string)
-  :group 'systemhalted/wordwise)
-
-(defface systemhalted/wordwise-hint-face
-  '((t :inherit shadow :height 0.7))
-  "Face for the Wordwise hint text displayed above annotated words."
-  :group 'systemhalted/wordwise)
-
-(defvar systemhalted/wordwise-cache (make-hash-table :test #'equal :size 512)
-  "Persistent cache mapping a word to its definition, or `missing'.
-Held in the `defvar' so `C-c r' reloads keep it — every entry costs a
-network round-trip to dict.org, and flushing on reload would cold-start
-annotation.  Flush explicitly with `systemhalted/wordwise-clear-cache'.")
-
-;; Persist fetched definitions across Emacs restarts through savehist —
-;; the same mechanism that already keeps kill-ring and corfu-history.
-;; Savehist restores the table before this section loads, so the defvar
-;; above leaves the restored value in place.  Old `none' entries combined
-;; "not found" with transport errors, so discard them during migration;
-;; new `missing' entries represent a confirmed DICT 552 response.
+;; Keep the cache in savehist's variable list even when wordwise itself
+;; has not loaded this session (savehist-save would drop it otherwise).
 (with-eval-after-load 'savehist
-  (add-to-list 'savehist-additional-variables 'systemhalted/wordwise-cache))
-(maphash (lambda (word def)
-           (unless (or (stringp def) (eq def 'missing))
-             (remhash word systemhalted/wordwise-cache)))
-         systemhalted/wordwise-cache)
+  (add-to-list 'savehist-additional-variables 'wordwise-cache))
 
-(when (fboundp 'systemhalted/wordwise--reset-requests)
-  ;; A config reload keeps the expensive definition cache but must not
-  ;; leave timers or process filters from the old implementation alive.
-  (systemhalted/wordwise--reset-requests))
+;; One-time migration from the pre-extraction variable name.  Savehist
+;; restored the old symbol from =history=; hand its table to the new
+;; name before the package's defvar can install an empty one.
+(when (and (boundp 'systemhalted/wordwise-cache)
+           (hash-table-p systemhalted/wordwise-cache)
+           (not (boundp 'wordwise-cache)))
+  (setq wordwise-cache systemhalted/wordwise-cache))
+(when (boundp 'systemhalted/wordwise-cache)
+  (makunbound 'systemhalted/wordwise-cache))
 
-(defconst systemhalted/wordwise--retry-delay 60
-  "Seconds to back off after a DICT connection failure.")
-
-(defvar systemhalted/wordwise--process nil
-  "Shared asynchronous DICT network process.")
-
-(defvar systemhalted/wordwise--connection-ready nil
-  "Non-nil after the DICT server greeting has been received.")
-
-(defvar systemhalted/wordwise--wire-data ""
-  "Unprocessed data received from the DICT server.")
-
-(defvar systemhalted/wordwise--queue nil
-  "FIFO list of words waiting for a DICT request.")
-
-(defvar systemhalted/wordwise--pending (make-hash-table :test #'equal)
-  "Words queued or in flight, mapped to interested buffers.")
-
-(defvar systemhalted/wordwise--current-word nil
-  "Word whose DICT response is currently in flight.")
-
-(defvar systemhalted/wordwise--response ""
-  "Accumulated DICT response for `systemhalted/wordwise--current-word'.")
-
-(defvar systemhalted/wordwise--request-timer nil
-  "Timeout timer for the current DICT request.")
-
-(defvar systemhalted/wordwise--retry-timer nil
-  "Timer used to retry the DICT connection after backoff.")
-
-(defvar systemhalted/wordwise--retry-at nil
-  "Absolute time after which a failed DICT connection may be retried.")
-
-(defvar systemhalted/wordwise--failure-cache
-  (make-hash-table :test #'equal)
-  "Session-local word failures mapped to their retry time.")
-
-(defvar systemhalted/wordwise--failure-retry-timer nil
-  "Timer that re-scans visible buffers after word-level failures expire.")
-
-(defvar systemhalted/wordwise--last-network-error nil
-  "Last reported DICT connection error, used to suppress message spam.")
-
-(defvar systemhalted/wordwise--skip-faces
-  '(org-block org-block-begin-line org-block-end-line
-    org-meta-line org-drawer org-property-value
-    org-special-keyword org-document-info-keyword
-    org-link org-tag org-code org-verbatim
-    markdown-pre-face markdown-inline-code-face
-    markdown-language-keyword-face markdown-code-face
-    markdown-url-face)
-  "Faces marking non-prose regions that Wordwise skips.")
-
-(defvar-local systemhalted/wordwise--scan-timer nil
-  "Idle timer for re-scanning visible windows after scrolling.")
-
-;; --- Tier / difficulty logic ---
-
-(defun systemhalted/wordwise--tier-threshold ()
-  "Return the maximum tier that should be SKIPPED at the current difficulty."
-  (- 6 systemhalted/wordwise-difficulty))
-
-(defun systemhalted/wordwise--word-needs-annotation-p (word)
-  "Return non-nil if WORD should be annotated at the current difficulty."
-  (when (and (boundp 'systemhalted/wordwise-common-words)
-             systemhalted/wordwise-common-words
-             (not (member word systemhalted/wordwise-ignored-words)))
-    (let ((tier (gethash word systemhalted/wordwise-common-words)))
-      (if tier
-          (> tier (systemhalted/wordwise--tier-threshold))
-        t))))
-
-;; --- Prose detection and code-like word filter ---
-
-(defun systemhalted/wordwise--in-prose-p (pos)
-  "Return non-nil if POS is in a prose region suitable for annotation.
-Checks the face text property at POS; non-prose faces (source blocks,
-inline code, drawers, links, etc.) are listed in `--skip-faces'."
-  (let* ((face (get-text-property pos 'face))
-         (faces (cond ((null face) nil)
-                      ((listp face) face)
-                      (t (list face)))))
-    (not (seq-some (lambda (f)
-                     (memq f systemhalted/wordwise--skip-faces))
-                   faces))))
-
-(defun systemhalted/wordwise--code-like-p (word)
-  "Return non-nil if WORD looks like a code identifier rather than prose."
-  (let ((case-fold-search nil))
-    (or (string-match-p "[_/]" word)
-        (string-match-p "[a-z][A-Z]" word)
-        (string-match-p "\\`[A-Z]+\\'" word)
-        (string-match-p "\\`[A-Z][a-z]+[A-Z]" word))))
-
-;; --- DICT response parsing ---
-
-(defun systemhalted/wordwise--extract-first-sense (body)
-  "Extract the first sense from a DICT protocol definition BODY."
-  (when (and body (stringp body) (> (length body) 0))
-    (let* ((lines (split-string body "\n" t "[ \t]+"))
-           (def-line
-            (or (seq-find (lambda (l) (string-match-p "\\`[0-9]+\\." l)) lines)
-                (seq-find (lambda (l)
-                            (and (> (length l) 10)
-                                 (not (string-match-p "\\\\[A-Z]" l))
-                                 (not (string-match-p "\\`From " l))
-                                 (not (string-match-p "\\`\\[" l))))
-                          lines)))
-           (trimmed (when def-line
-                      (replace-regexp-in-string
-                       "\\`[0-9]+\\.\\s-*" ""
-                       (replace-regexp-in-string "\\\\[^\\\\]*\\\\" "" def-line)))))
-      (when (and trimmed (> (length (string-trim trimmed)) 0))
-        (let ((clean (string-trim trimmed)))
-          (if (> (length clean) systemhalted/wordwise-max-hint-length)
-              (concat (substring clean 0 (- systemhalted/wordwise-max-hint-length 3)) "...")
-            clean))))))
-
-;; --- Asynchronous DICT client ---
-
-(defun systemhalted/wordwise--response-status (response)
-  "Return the terminal DICT status represented by RESPONSE.
-The result is `complete', `missing', `error', or nil while more data is needed."
-  (when (string-match
-         "\\(?:\\`\\|\n\\)\\(250\\|5[0-9][0-9]\\) [^\r\n]*\\(?:\r?\n\\|\\'\\)"
-         response)
-    (pcase (match-string 1 response)
-      ("250" 'complete)
-      ("552" 'missing)
-      (_ 'error))))
-
-(defun systemhalted/wordwise--definition-from-response (response)
-  "Extract the first definition body from a complete DICT RESPONSE."
-  (with-temp-buffer
-    (insert response)
-    (goto-char (point-min))
-    (when (re-search-forward "^151 " nil t)
-      (forward-line 1)
-      (let ((body-start (point)))
-        (when (re-search-forward "^\\.\r?$" nil t)
-          (systemhalted/wordwise--extract-first-sense
-           (buffer-substring-no-properties
-            body-start (line-beginning-position))))))))
-
-(defun systemhalted/wordwise--cancel-request-timer ()
-  "Cancel the current DICT request timeout."
-  (when (timerp systemhalted/wordwise--request-timer)
-    (cancel-timer systemhalted/wordwise--request-timer))
-  (setq systemhalted/wordwise--request-timer nil))
-
-(defun systemhalted/wordwise--close-process ()
-  "Close and forget the shared DICT process without running its sentinel."
-  (let ((proc systemhalted/wordwise--process))
-    (setq systemhalted/wordwise--process nil
-          systemhalted/wordwise--connection-ready nil
-          systemhalted/wordwise--wire-data "")
-    (when (processp proc)
-      (let ((buf (process-buffer proc)))
-        (set-process-sentinel proc #'ignore)
-        (when (process-live-p proc)
-          (delete-process proc))
-        (when (buffer-live-p buf)
-          (let ((kill-buffer-query-functions nil))
-            (kill-buffer buf)))))))
-
-(defun systemhalted/wordwise--cancel-scan-timer ()
-  "Cancel the current buffer's deferred Wordwise scan."
-  (when (timerp systemhalted/wordwise--scan-timer)
-    (cancel-timer systemhalted/wordwise--scan-timer))
-  (setq systemhalted/wordwise--scan-timer nil))
-
-(defun systemhalted/wordwise--reset-requests ()
-  "Cancel transient Wordwise network and scan state, preserving definitions."
-  (systemhalted/wordwise--cancel-request-timer)
-  (dolist (timer (list systemhalted/wordwise--retry-timer
-                       systemhalted/wordwise--failure-retry-timer))
-    (when (timerp timer)
-      (cancel-timer timer)))
-  (setq systemhalted/wordwise--retry-timer nil
-        systemhalted/wordwise--failure-retry-timer nil)
-  (systemhalted/wordwise--close-process)
-  (setq systemhalted/wordwise--queue nil
-        systemhalted/wordwise--current-word nil
-        systemhalted/wordwise--response ""
-        systemhalted/wordwise--retry-at nil
-        systemhalted/wordwise--last-network-error nil)
-  (clrhash systemhalted/wordwise--pending)
-  (clrhash systemhalted/wordwise--failure-cache)
-  (dolist (buf (buffer-list))
-    (with-current-buffer buf
-      (when (local-variable-p 'systemhalted/wordwise--scan-timer buf)
-        (systemhalted/wordwise--cancel-scan-timer)))))
-
-(defun systemhalted/wordwise--active-buffers ()
-  "Return live buffers where Wordwise mode is enabled."
-  (seq-filter
-   (lambda (buf)
-     (with-current-buffer buf
-       (bound-and-true-p systemhalted/wordwise-mode)))
-   (buffer-list)))
-
-(defun systemhalted/wordwise--schedule-scan (buffer &optional delay)
-  "Schedule a Wordwise scan of BUFFER after idle DELAY seconds."
-  (when (buffer-live-p buffer)
-    (with-current-buffer buffer
-      (when (bound-and-true-p systemhalted/wordwise-mode)
-        (systemhalted/wordwise--cancel-scan-timer)
-        (setq systemhalted/wordwise--scan-timer
-              (run-with-idle-timer
-               (or delay 0.1) nil
-               (lambda (buf)
-                 (when (buffer-live-p buf)
-                   (with-current-buffer buf
-                     (setq systemhalted/wordwise--scan-timer nil)
-                     (systemhalted/wordwise--scan-visible))))
-               buffer))))))
-
-(defun systemhalted/wordwise--schedule-active-scans (&optional delay)
-  "Schedule scans in all active Wordwise buffers after DELAY seconds."
-  (dolist (buf (systemhalted/wordwise--active-buffers))
-    (systemhalted/wordwise--schedule-scan buf delay)))
-
-(defun systemhalted/wordwise--schedule-failure-retry ()
-  "Arrange one future scan after session-local word failures expire."
-  (unless (timerp systemhalted/wordwise--failure-retry-timer)
-    (setq systemhalted/wordwise--failure-retry-timer
-          (run-at-time
-           systemhalted/wordwise--retry-delay nil
-           (lambda ()
-             (setq systemhalted/wordwise--failure-retry-timer nil)
-             (systemhalted/wordwise--schedule-active-scans))))))
-
-(defun systemhalted/wordwise--schedule-network-retry ()
-  "Schedule the request pump when the current connection backoff expires."
-  (when (timerp systemhalted/wordwise--retry-timer)
-    (cancel-timer systemhalted/wordwise--retry-timer))
-  (let ((delay (max 0.1 (- (or systemhalted/wordwise--retry-at 0)
-                           (float-time)))))
-    (setq systemhalted/wordwise--retry-timer
-          (run-at-time
-           delay nil
-           (lambda ()
-             (setq systemhalted/wordwise--retry-timer nil
-                   systemhalted/wordwise--retry-at nil)
-             (systemhalted/wordwise--pump))))))
-
-(defun systemhalted/wordwise--network-failure (reason)
-  "Handle a DICT connection failure described by REASON without blocking."
-  (systemhalted/wordwise--cancel-request-timer)
-  (when systemhalted/wordwise--current-word
-    (let ((word systemhalted/wordwise--current-word))
-      (if (gethash word systemhalted/wordwise--pending)
-          (push word systemhalted/wordwise--queue)
-        (remhash word systemhalted/wordwise--pending))))
-  (setq systemhalted/wordwise--current-word nil
-        systemhalted/wordwise--response ""
-        systemhalted/wordwise--retry-at
-        (+ (float-time) systemhalted/wordwise--retry-delay))
-  (systemhalted/wordwise--close-process)
-  (unless (equal reason systemhalted/wordwise--last-network-error)
-    (setq systemhalted/wordwise--last-network-error reason)
-    (message "Wordwise DICT unavailable; retrying in %ds (%s)"
-             systemhalted/wordwise--retry-delay reason))
-  (when systemhalted/wordwise--queue
-    (systemhalted/wordwise--schedule-network-retry)))
-
-(defun systemhalted/wordwise--complete-current (result)
-  "Finish the current request with RESULT and advance the queue.
-RESULT is a definition string, `missing', or `error'."
-  (let* ((word systemhalted/wordwise--current-word)
-         (buffers (and word
-                       (copy-sequence
-                        (gethash word systemhalted/wordwise--pending)))))
-    (systemhalted/wordwise--cancel-request-timer)
-    (when word
-      (pcase result
-        ((pred stringp)
-         (puthash word result systemhalted/wordwise-cache)
-         (setq systemhalted/wordwise--last-network-error nil))
-        ('missing
-         (puthash word 'missing systemhalted/wordwise-cache)
-         (setq systemhalted/wordwise--last-network-error nil))
-        (_
-         (puthash word
-                  (+ (float-time) systemhalted/wordwise--retry-delay)
-                  systemhalted/wordwise--failure-cache)
-         (systemhalted/wordwise--schedule-failure-retry)))
-      (remhash word systemhalted/wordwise--pending))
-    (setq systemhalted/wordwise--current-word nil
-          systemhalted/wordwise--response "")
-    (dolist (buf buffers)
-      (systemhalted/wordwise--schedule-scan buf))
-    (systemhalted/wordwise--pump)))
-
-(defun systemhalted/wordwise--request-timed-out (word)
-  "Fail the active request when WORD exceeds its timeout."
-  (when (equal word systemhalted/wordwise--current-word)
-    (systemhalted/wordwise--network-failure
-     (format "timeout looking up %s" word))))
-
-(defun systemhalted/wordwise--process-filter (proc chunk)
-  "Consume a CHUNK of DICT protocol data from PROC."
-  (when (eq proc systemhalted/wordwise--process)
-    (setq systemhalted/wordwise--wire-data
-          (concat systemhalted/wordwise--wire-data chunk))
-    (unless systemhalted/wordwise--connection-ready
-      (when (string-match "\\`\\([^\n]*\\)\r?\n" systemhalted/wordwise--wire-data)
-        (let ((greeting (match-string 1 systemhalted/wordwise--wire-data)))
-          (setq systemhalted/wordwise--wire-data
-                (substring systemhalted/wordwise--wire-data (match-end 0)))
-          (if (string-prefix-p "220 " greeting)
-              (progn
-                (setq systemhalted/wordwise--connection-ready t)
-                (systemhalted/wordwise--pump))
-            (systemhalted/wordwise--network-failure greeting)))))
-    (when (and (eq proc systemhalted/wordwise--process)
-               systemhalted/wordwise--connection-ready
-               systemhalted/wordwise--current-word
-               (> (length systemhalted/wordwise--wire-data) 0))
-      (setq systemhalted/wordwise--response
-            (concat systemhalted/wordwise--response
-                    systemhalted/wordwise--wire-data)
-            systemhalted/wordwise--wire-data "")
-      (pcase (systemhalted/wordwise--response-status
-              systemhalted/wordwise--response)
-        ('complete
-         (systemhalted/wordwise--complete-current
-          (or (systemhalted/wordwise--definition-from-response
-               systemhalted/wordwise--response)
-              'error)))
-        ('missing
-         (systemhalted/wordwise--complete-current 'missing))
-        ('error
-         (systemhalted/wordwise--complete-current 'error))))))
-
-(defun systemhalted/wordwise--process-sentinel (proc event)
-  "Handle a connection state EVENT for the shared DICT PROC."
-  (when (and (eq proc systemhalted/wordwise--process)
-             (memq (process-status proc) '(closed failed exit signal)))
-    (if (or systemhalted/wordwise--current-word
-            systemhalted/wordwise--queue)
-        (systemhalted/wordwise--network-failure (string-trim event))
-      (systemhalted/wordwise--close-process))))
-
-(defun systemhalted/wordwise--ensure-process ()
-  "Start the asynchronous shared DICT connection when necessary."
-  (unless (process-live-p systemhalted/wordwise--process)
-    (systemhalted/wordwise--close-process)
-    (let ((buf (generate-new-buffer " *wordwise-dict*")))
-      (condition-case err
-          (setq systemhalted/wordwise--process
-                (make-network-process
-                 :name "wordwise-dict"
-                 :buffer buf
-                 :host "dict.org"
-                 :service 2628
-                 :nowait t
-                 :noquery t
-                 :coding 'utf-8-unix
-                 :filter #'systemhalted/wordwise--process-filter
-                 :sentinel #'systemhalted/wordwise--process-sentinel))
-        (error
-         (when (buffer-live-p buf)
-           (kill-buffer buf))
-         (systemhalted/wordwise--network-failure
-          (error-message-string err)))))))
-
-(defun systemhalted/wordwise--pump ()
-  "Send the next queued word when the shared DICT connection is ready."
-  (cond
-   ((and systemhalted/wordwise--retry-at
-         (> systemhalted/wordwise--retry-at (float-time)))
-    (when systemhalted/wordwise--queue
-      (systemhalted/wordwise--schedule-network-retry)))
-   ((and (null systemhalted/wordwise--current-word)
-         systemhalted/wordwise--queue)
-    (systemhalted/wordwise--ensure-process)
-    (when (and (process-live-p systemhalted/wordwise--process)
-               systemhalted/wordwise--connection-ready)
-      (while (and systemhalted/wordwise--queue
-                  (null systemhalted/wordwise--current-word))
-        (let ((word (pop systemhalted/wordwise--queue)))
-          (if (eq (gethash word systemhalted/wordwise--pending 'miss) 'miss)
-              nil
-            (setq systemhalted/wordwise--current-word word
-                  systemhalted/wordwise--response "")
-            (condition-case err
-                (progn
-                  (process-send-string
-                   systemhalted/wordwise--process
-                   (format "DEFINE * %s\r\n" word))
-                  (setq systemhalted/wordwise--request-timer
-                        (run-at-time
-                         systemhalted/wordwise-request-timeout nil
-                         #'systemhalted/wordwise--request-timed-out word)))
-              (error
-               (systemhalted/wordwise--network-failure
-                (error-message-string err)))))))))))
-
-(defun systemhalted/wordwise--queue-word (word buffer)
-  "Queue WORD for BUFFER, deduplicating pending requests."
-  (let ((failed-until (gethash word systemhalted/wordwise--failure-cache)))
-    (when (and failed-until (<= failed-until (float-time)))
-      (remhash word systemhalted/wordwise--failure-cache)
-      (setq failed-until nil))
-    (when (and (eq (gethash word systemhalted/wordwise-cache 'miss) 'miss)
-               (not failed-until))
-      (let ((waiting (gethash word systemhalted/wordwise--pending 'miss)))
-        (if (eq waiting 'miss)
-            (progn
-              (puthash word (list buffer) systemhalted/wordwise--pending)
-              (setq systemhalted/wordwise--queue
-                    (nconc systemhalted/wordwise--queue (list word))))
-          (cl-pushnew buffer waiting)
-          (puthash word waiting systemhalted/wordwise--pending)))
-      (systemhalted/wordwise--pump))))
-
-(defun systemhalted/wordwise--remove-buffer-demand (buffer)
-  "Remove BUFFER from queued Wordwise requests that it no longer needs."
-  (maphash
-   (lambda (word buffers)
-     (let ((remaining (delq buffer buffers)))
-       (cond
-        ((eq word systemhalted/wordwise--current-word)
-         (puthash word remaining systemhalted/wordwise--pending))
-        (remaining
-         (puthash word remaining systemhalted/wordwise--pending))
-        (t
-         (remhash word systemhalted/wordwise--pending)
-         (setq systemhalted/wordwise--queue
-               (delete word systemhalted/wordwise--queue))))))
-   systemhalted/wordwise--pending))
-
-(defun systemhalted/wordwise-clear-cache ()
-  "Empty Wordwise definitions, cancel requests, and re-annotate active buffers."
-  (interactive)
-  (systemhalted/wordwise--reset-requests)
-  (clrhash systemhalted/wordwise-cache)
-  (dolist (buf (systemhalted/wordwise--active-buffers))
-    (with-current-buffer buf
-      (systemhalted/wordwise--remove-overlays)
-      (systemhalted/wordwise--scan-visible)))
-  (message "Wordwise cache cleared"))
-
-;; --- Overlay management ---
-;;
-;; Two overlays per annotated word:
-;; 1. Display overlay at the visual-line beginning — its before-string
-;;    creates a phantom hint line, pixel-aligned to the word's screen
-;;    position via (space :align-to) so it works with proportional fonts
-;;    and wrapped lines.
-;; 2. Marker overlay spanning the word — for duplicate detection.
-
-(defun systemhalted/wordwise--make-overlay (beg end hint &optional window)
-  "Create Wordwise overlays for BEG..END with HINT, measured in WINDOW."
-  (save-excursion
-    (goto-char beg)
-    (let* ((visual-bol (progn (vertical-motion 0 window) (point)))
-           ;; Pixel-accurate alignment via posn-at-point; falls back to
-           ;; character column when no window position is available.
-           (posn (posn-at-point beg window))
-           (x-pixel (when posn (car (posn-x-y posn))))
-           (padding (if x-pixel
-                        (propertize " " 'display
-                                    `(space :align-to (,x-pixel)))
-                      (make-string (- beg visual-bol) ?\s)))
-           (hint-line (concat padding
-                              (propertize hint
-                                          'face 'systemhalted/wordwise-hint-face)
-                              "\n"))
-           (display-ov (make-overlay visual-bol
-                                     (min (1+ visual-bol) (point-max))))
-           (marker-ov (make-overlay beg end nil t nil)))
-      (overlay-put display-ov 'before-string hint-line)
-      (overlay-put display-ov 'systemhalted/wordwise t)
-      (overlay-put marker-ov 'systemhalted/wordwise t)
-      (overlay-put marker-ov 'evaporate t))))
-
-(defun systemhalted/wordwise--already-annotated-p (beg end)
-  "Return non-nil if a Wordwise marker overlay spans BEG..END."
-  (seq-find (lambda (ov)
-              (and (overlay-get ov 'systemhalted/wordwise)
-                   (> (- (overlay-end ov) (overlay-start ov)) 0)))
-            (overlays-in beg end)))
-
-(defun systemhalted/wordwise--remove-overlays ()
-  "Remove all Wordwise overlays in the current buffer."
-  (remove-overlays (point-min) (point-max) 'systemhalted/wordwise t))
-
-;; --- Scan visible region (replaces jit-lock) ---
-
-(defun systemhalted/wordwise--scan-visible ()
-  "Scan every live window showing the current Wordwise buffer."
-  (when (bound-and-true-p systemhalted/wordwise-mode)
-    (let ((buf (current-buffer)))
-      ;; Reconcile demand on each complete visible scan so rapidly scrolling
-      ;; through a book cannot leave an ever-growing queue of stale words.
-      (systemhalted/wordwise--remove-buffer-demand buf)
-      (dolist (win (get-buffer-window-list buf nil t))
-        (when (and (window-live-p win)
-                   (eq (window-buffer win) buf))
-          ;; `window-end' is valid here because scroll hooks only schedule
-          ;; this scan; they never inspect it during redisplay.
-          (let ((end (window-end win t)))
-            (when end
-              (systemhalted/wordwise--scan-region
-               (window-start win) end win))))))))
-
-(defun systemhalted/wordwise--scan-region (beg end &optional window)
-  "Scan BEG..END for uncommon prose words.
-Cached definitions get overlays immediately; misses are queued without
-waiting for network output.  WINDOW supplies display measurements."
-  (when (apply #'derived-mode-p systemhalted/wordwise-allowed-modes)
-    ;; Prose detection reads `face' text properties, which exist only after
-    ;; font-lock has fontified the text — and the scroll hook fires before
-    ;; jit-lock reaches newly exposed regions.  Fontify first, or source
-    ;; blocks scan as prose.  Gated on `font-lock-defaults': shr-rendered
-    ;; modes (nov, eww) don't use font-lock, their faces are already in
-    ;; place, and `font-lock-ensure' would strip them.
-    (when font-lock-defaults
-      (font-lock-ensure beg end))
-    (save-excursion
-      (goto-char beg)
-      (while (re-search-forward "\\b\\([a-zA-Z]\\{4,\\}\\)\\b" end t)
-        (let* ((word-beg (match-beginning 1))
-               (word-end (match-end 1))
-               (raw-word (match-string-no-properties 1))
-               (word (downcase raw-word)))
-          (unless (or (not (systemhalted/wordwise--in-prose-p word-beg))
-                      (systemhalted/wordwise--already-annotated-p
-                       word-beg word-end)
-                      (systemhalted/wordwise--code-like-p raw-word)
-                      (not (systemhalted/wordwise--word-needs-annotation-p word)))
-            (let ((cached (gethash word systemhalted/wordwise-cache 'miss)))
-              (cond
-               ((eq cached 'miss)
-                (systemhalted/wordwise--queue-word word (current-buffer)))
-               ((eq cached 'missing) nil)
-               ((stringp cached)
-                (systemhalted/wordwise--make-overlay
-                 word-beg word-end cached window))))))))))
-
-;; --- Scroll hook ---
-
-(defun systemhalted/wordwise--on-scroll (win _start)
-  "Schedule a scan of WIN's buffer after scrolling and redisplay settle."
-  (when (window-live-p win)
-    (let ((buf (window-buffer win)))
-      (when (buffer-live-p buf)
-        (systemhalted/wordwise--schedule-scan buf)))))
-
-;; --- Minor mode ---
-
-(define-minor-mode systemhalted/wordwise-mode
-  "Kindle-style inline vocabulary hints.
-When enabled, uncommon English words in prose regions are annotated
-with a short dictionary definition on a phantom line above the word.
-Definitions are fetched over one asynchronous dict.org connection, one
-word at a time, without waiting in redisplay.  Difficulty is controlled by
-`systemhalted/wordwise-difficulty' (1-5)."
-  :lighter " WordWise"
-  :group 'systemhalted/wordwise
-  (if systemhalted/wordwise-mode
-      (if (apply #'derived-mode-p systemhalted/wordwise-allowed-modes)
-          (progn
-            (add-hook 'window-scroll-functions
-                      #'systemhalted/wordwise--on-scroll nil t)
-            (systemhalted/wordwise--scan-visible)
-            (message "Wordwise enabled (difficulty %d)"
-                     systemhalted/wordwise-difficulty))
-        (setq systemhalted/wordwise-mode nil)
-        (message "Wordwise not available in %s" major-mode))
-    (remove-hook 'window-scroll-functions
-                 #'systemhalted/wordwise--on-scroll t)
-    (systemhalted/wordwise--cancel-scan-timer)
-    (systemhalted/wordwise--remove-buffer-demand (current-buffer))
-    (systemhalted/wordwise--remove-overlays)
-    (unless (systemhalted/wordwise--active-buffers)
-      (systemhalted/wordwise--reset-requests))
-    (message "Wordwise disabled")))
-
-(defun systemhalted/wordwise-set-difficulty (level)
-  "Set Wordwise difficulty to LEVEL (1-5) and re-annotate."
-  (interactive
-   (list (read-number "Wordwise difficulty (1-5): "
-                      systemhalted/wordwise-difficulty)))
-  (unless (<= 1 level 5)
-    (user-error "Difficulty must be between 1 and 5"))
-  (setq systemhalted/wordwise-difficulty level)
-  (when (bound-and-true-p systemhalted/wordwise-mode)
-    (systemhalted/wordwise--cancel-scan-timer)
-    (systemhalted/wordwise--remove-overlays)
-    (systemhalted/wordwise--scan-visible))
-  (message "Wordwise difficulty set to %d" level))
-
-(defun systemhalted/wordwise-ignore-word ()
-  "Add the word at point to the ignore list and remove its annotation.
-The word is saved to `systemhalted/wordwise-ignored-words' via
-Customize so it persists across sessions."
-  (interactive)
-  (let* ((bounds (bounds-of-thing-at-point 'word))
-         (raw (when bounds (buffer-substring-no-properties
-                            (car bounds) (cdr bounds))))
-         (word (when raw (downcase raw))))
-    (unless word (user-error "No word at point"))
-    (if (member word systemhalted/wordwise-ignored-words)
-        (message "Wordwise: '%s' is already ignored" word)
-      (customize-save-variable
-       'systemhalted/wordwise-ignored-words
-       (cons word systemhalted/wordwise-ignored-words))
-      ;; Clear all overlays and re-scan so the ignored word disappears
-      (when (bound-and-true-p systemhalted/wordwise-mode)
-        (systemhalted/wordwise--remove-overlays)
-        (systemhalted/wordwise--scan-visible))
-      (message "Wordwise: '%s' will no longer be annotated" word))))
-
-(global-set-key (kbd "C-c w") #'systemhalted/wordwise-mode)
-
-;; `define-minor-mode' is not re-run by `C-c r'.  Resume scans in buffers
-;; where Wordwise was already active after the transient state reset above.
-(dolist (buf (systemhalted/wordwise--active-buffers))
-  (with-current-buffer buf
-    (add-hook 'window-scroll-functions
-              #'systemhalted/wordwise--on-scroll nil t)
-    (systemhalted/wordwise--schedule-scan buf)))
+(if systemhalted/wordwise-local-checkout
+    (use-package wordwise
+      :ensure nil
+      :preface (add-to-list 'load-path systemhalted/wordwise-local-checkout)
+      :bind ("C-c w" . wordwise-mode))
+  ;; No local checkout: install from GitHub.  :rev :newest tracks the
+  ;; latest commit rather than a release tag.
+  (use-package wordwise
+    :vc (:url "https://github.com/systemhalted/wordwise.el" :rev :newest)
+    :bind ("C-c w" . wordwise-mode)))
 #+end_src
 
 ** Tutorial: Using Wordwise
@@ -3047,7 +2372,7 @@ it — the same pattern Kindle's Word Wise uses. Common words (the top
 several thousand in English) are left alone so the annotations never
 feel noisy.
 
-*Enabling the mode.* Press =C-c w= to toggle =systemhalted/wordwise-mode=.
+*Enabling the mode.* Press =C-c w= to toggle =wordwise-mode=.
 The first activation fetches definitions from dict.org over the network
 through one asynchronous connection, so typing and scrolling never wait
 for the server. Once a word is looked up, its definition is cached and
@@ -3070,7 +2395,7 @@ how many words are annotated:
 |     4 | ~3 000                           |                        |
 |     5 | ~1 000 (most annotations)        | many annotations       |
 
-Change difficulty with =M-x systemhalted/wordwise-set-difficulty=.
+Change difficulty with =M-x wordwise-set-difficulty=.
 Existing annotations are immediately redrawn to match the new level.
 
 *How definitions appear.* Each annotated word gets a faint line above
@@ -3081,7 +2406,7 @@ it showing the definition, indented to the word's column position:
 This is a guiding principle for our work.
 #+end_example
 
-The hint text uses a smaller, subdued face (=systemhalted/wordwise-hint-face=)
+The hint text uses a smaller, subdued face (=wordwise-hint-face=)
 so it stays unobtrusive.
 
 *Prose vs. code.* Wordwise only annotates text in prose regions.  It
@@ -3095,17 +2420,17 @@ buffer. Cached definitions appear instantly; new words enter a deduplicated
 queue and are fetched one at a time without blocking Emacs.
 
 *Ignoring words.* If you see an annotation you do not want, place
-the cursor on the word and run =M-x systemhalted/wordwise-ignore-word=.
-The word is added to =systemhalted/wordwise-ignored-words= and saved
+the cursor on the word and run =M-x wordwise-ignore-word=.
+The word is added to =wordwise-ignored-words= and saved
 via Customize so it persists across sessions. You can also edit the
 list directly with =M-x customize-variable RET
-systemhalted/wordwise-ignored-words=.
+wordwise-ignored-words=.
 
 | Keys          | Command                                   |
 |---------------+-------------------------------------------|
 | =C-c w=       | Toggle Wordwise mode on/off                |
-| =M-x systemhalted/wordwise-set-difficulty= | Change annotation density |
-| =M-x systemhalted/wordwise-ignore-word=    | Ignore word at point      |
+| =M-x wordwise-set-difficulty= | Change annotation density |
+| =M-x wordwise-ignore-word=    | Ignore word at point      |
 
 * Git and Documentation
 
@@ -3327,14 +2652,16 @@ Two startup-time settings that the rest of the section depends on:
   per-response syscall count by ~250×, which is the single biggest
   responsiveness win for Java buffers.
 - =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=,
-  =SDKMAN_EL_DIR= and =TRUSTRAIL_EL_DIR= from a login + interactive shell
+  =SDKMAN_EL_DIR=, =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= from a login
+  + interactive shell
   on startup. GUI Emacs
   (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
   terminal) does *not* inherit the interactive shell environment, so
   SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
-  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR= and
-  =TRUSTRAIL_EL_DIR= are imported for the same reason: each points its
-  section below at a local checkout of a package maintained in this
+  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR=,
+  =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= are imported for the same
+  reason: each points its
+  section at a local checkout of a package maintained in this
   account, and without the import a GUI Emacs would never see them and
   would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
   (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
@@ -3350,7 +2677,8 @@ Two startup-time settings that the rest of the section depends on:
   :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
   :init
   (setq exec-path-from-shell-variables
-        '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR" "TRUSTRAIL_EL_DIR"))
+        '("PATH" "MANPATH" "JAVA_HOME" "SDKMAN_EL_DIR" "TRUSTRAIL_EL_DIR"
+          "WORDWISE_EL_DIR"))
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
