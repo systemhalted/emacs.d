@@ -2760,38 +2760,51 @@ point Git's editor at the client with =git config --global core.editor
 finish key come from =with-editor= and =git-rebase=, which ride in as
 Magit's own dependencies.
 
-But those dependencies only activate once Magit itself loads, and Magit is
-autoloaded — it doesn't load until the first =C-x g=. So a commit started
-cold from a terminal would otherwise land in =fundamental-mode= with =C-c
-C-c= unbound. =systemhalted/git-edit-buffer-setup= bridges that gap: a
-=find-file-hook= that costs one string test per visited file and pulls in
-=git-commit= / =git-rebase= (with their =C-c C-c= machinery) only for the
-handful of files Git asks us to edit — keeping both packages out of normal
-startup.
+Those dependencies only arrive once Magit itself loads, and Magit is
+autoloaded — nothing pulls it in until the first =C-x g=. Leaving that load
+to the moment Git asks for an editor is what makes the first =C-c C-c= of a
+terminal rebase go missing, and the reason is a timing detail in =server.el=:
+=server-process-filter= creates the terminal frame *before* it visits the
+file. Visiting =git-rebase-todo= autoloads =git-rebase=, whose first line is
+=(require 'magit)= — about 0.7 s cold. For that whole 0.7 s the frame is
+already on screen showing whatever buffer the server was sitting in, which
+for this config is =*scratch*= in Org mode. A =C-c C-c= typed into that gap
+is looked up against Org's keymap, so it dispatches =org-ctrl-c-ctrl-c=; by
+the time the command actually runs, the rebase buffer has become current, and
+Org complains that it can do nothing useful here. The keypress is swallowed
+and only the second one finishes the rebase.
+
+The fix is to keep the load off that path entirely: a one-shot idle timer
+requires =git-rebase= a second after startup. Startup itself stays as lazy as
+before — the timer only fires once Emacs has nothing else to do — but by the
+time any external =git= hands over a file, the libraries are resident and the
+visit costs about 10 ms instead of 700.
+
+One =require= covers every case, because =git-rebase= drags in =magit=,
+=git-commit= and =with-editor= behind it. Loading =git-commit= is what
+enables =global-git-commit-mode=, which puts =git-commit-setup-check-buffer=
+on =find-file-hook= for =COMMIT_EDITMSG=, =MERGE_MSG=, =TAG_EDITMSG=,
+=BRANCH_DESCRIPTION= and the rest; Magit's own autoloads already map
+=git-rebase-todo= onto =git-rebase-mode= through =auto-mode-alist=. So no
+hand-written =find-file-hook= is needed here, and the one that used to live
+in this block was doing harm: it called =git-rebase-mode= on a buffer Emacs
+had *already* put in that mode, and re-running a major mode wipes the
+buffer-local =kill-buffer-query-functions= that =with-editor= installs to
+stop you killing the buffer out from under =git=.
 
 #+begin_src emacs-lisp
-(defun systemhalted/git-edit-buffer-setup ()
-  "Enable Magit's commit/rebase editing for buffers Git opens via emacsclient.
-Magit is only autoloaded (it loads on `C-x g'), so a commit or rebase started
-from an external terminal would otherwise open in `fundamental-mode' with no
-`C-c C-c' to finish.  Gate on the visited file's name — a cheap per-file
-string test — and load `git-commit' / `git-rebase' on demand, never at startup."
-  (when buffer-file-name
-    (let ((name (file-name-nondirectory buffer-file-name)))
-      (cond
-       ((equal name "git-rebase-todo")
-        (require 'git-rebase)
-        (git-rebase-mode))
-       ((string-match-p "\\(?:MSG\\|_DESCRIPTION\\)\\'" name)
-        (require 'git-commit)
-        (git-commit-setup-check-buffer))))))
-
 (use-package magit
   :ensure t
   :bind
   ("C-x g" . magit-status)
   :init
-  (add-hook 'find-file-hook #'systemhalted/git-edit-buffer-setup))
+  ;; Preload Git's editor machinery (`git-rebase' pulls in `magit',
+  ;; `git-commit' and `with-editor') once Emacs is idle.  Loading it lazily
+  ;; from `find-file' instead would put ~0.7s of `require' inside the window
+  ;; where emacsclient's frame is already up but still showing the previous
+  ;; buffer, and a `C-c C-c' typed during that window is read against the
+  ;; wrong keymap and lost.
+  (run-with-idle-timer 1 nil (lambda () (require 'git-rebase))))
 #+end_src
 
 ** Markdown mode — README and prose docs
