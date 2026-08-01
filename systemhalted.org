@@ -853,6 +853,92 @@ renders them.  Ligatures are enabled globally — this covers
         (global-set-key (kbd "C-c T") #'systemhalted/select-theme)
 #+end_src
 
+** Nerd-icons — icon glyphs via Nerd Fonts
+
+[[https://github.com/rainstormstudio/nerd-icons.el][nerd-icons]] provides
+a library of icon glyphs drawn from the Nerd Fonts Private Use Area.
+The font fallback for those ranges is already configured above in the
+font block; this package gives Emacs Lisp a clean API to insert them.
+The dashboard and other UI packages consume =nerd-icons= for file-type
+and section-heading decorations.
+
+#+begin_src emacs-lisp
+  (use-package nerd-icons
+    :ensure t)
+#+end_src
+
+** Dashboard — startup screen
+
+Rather than starting with a blank scratch buffer, Emacs opens a
+purpose-built dashboard showing recent files, Projectile projects,
+bookmarks, and one-click navigator buttons for the most-used personal
+commands (journal, notes search, tutorials, Magit).
+
+The dashboard uses =nerd-icons= for file-type and heading icons — the
+Nerd Font fallback registered in the font section above provides the
+glyphs.  Content is centered and the ASCII text banner keeps things
+lightweight in both GUI and terminal frames.
+
+=initial-buffer-choice= is set to =dashboard-open= so =emacsclient -c=
+frames also land on the dashboard instead of a bare scratch buffer.
+
+Single-key shortcuts in the dashboard buffer:
+
+| Key | Action              |
+|-----+---------------------|
+| =j= | Open today's journal |
+| =n= | Search notes         |
+| =t= | Browse tutorials     |
+| =g= | Refresh dashboard    |
+
+#+begin_src emacs-lisp
+  (use-package dashboard
+    :ensure t
+    :demand t
+    :custom
+    (dashboard-banner-logo-title "Welcome to Emacs")
+    (dashboard-startup-banner 'official)
+    (dashboard-center-content t)
+    (dashboard-vertically-center-content t)
+    (dashboard-icon-type 'nerd-icons)
+    (dashboard-display-icons-p t)
+    (dashboard-set-heading-icons t)
+    (dashboard-set-file-icons t)
+    (dashboard-projects-backend 'projectile)
+    (dashboard-items '((recents   . 5)
+                       (projects  . 5)
+                       (bookmarks . 5)))
+    (dashboard-navigation-cycle t)
+    (dashboard-startupify-list '(dashboard-insert-banner
+                                 dashboard-insert-newline
+                                 dashboard-insert-banner-title
+                                 dashboard-insert-newline
+                                 dashboard-insert-navigator
+                                 dashboard-insert-newline
+                                 dashboard-insert-init-info
+                                 dashboard-insert-items
+                                 dashboard-insert-newline
+                                 dashboard-insert-footer))
+    (dashboard-navigator-buttons
+     `(((,(nerd-icons-octicon "nf-oct-pencil" :height 1.1 :v-adjust 0.0)
+         "Journal [j]" "Open today's journal entry"
+         (lambda (&rest _) (systemhalted/journal)))
+        (,(nerd-icons-octicon "nf-oct-search" :height 1.1 :v-adjust 0.0)
+         "Notes [n]" "Search notes with ripgrep"
+         (lambda (&rest _) (systemhalted/notes-search)))
+        (,(nerd-icons-octicon "nf-oct-book" :height 1.1 :v-adjust 0.0)
+         "Tutorials [t]" "Browse tutorials and package docs"
+         (lambda (&rest _) (systemhalted/tutorial))))))
+    :config
+    (dashboard-setup-startup-hook)
+    (setq initial-buffer-choice #'dashboard-open)
+    :bind
+    (:map dashboard-mode-map
+          ("j" . systemhalted/journal)
+          ("n" . systemhalted/notes-search)
+          ("t" . systemhalted/tutorial)))
+#+end_src
+
 ** Clipboard
 
 GUI Emacs already shares the system clipboard with the host on every windowed
