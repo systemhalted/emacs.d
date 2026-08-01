@@ -2194,11 +2194,13 @@ from anywhere else, fall back to the flat `* Inbox' heading."
 The =org= =use-package= form is where everything declared above gets
 wired together. The interesting clusters:
 
-- *Global keys.* =C-c c= for capture, =C-c l= for =org-store-link=, and — in
-  Org buffers — =C-c C-w= rebound to =systemhalted/refile-note= (moving a file,
-  not refiling a subtree). There is deliberately no agenda binding — the agenda
-  is a task view, and org holds no tasks. The mode hook turns on
-  =visual-line-mode= so long paragraphs wrap softly in any Org buffer.
+- *Keys.* =C-c c= for capture (global), =C-c l= for =org-store-link=
+  (Org buffers only — keeps it from shadowing the LSP =C-c l= prefix in
+  programming modes), and =C-c C-w= rebound to =systemhalted/refile-note=
+  (moving a file, not refiling a subtree). There is deliberately no agenda
+  binding — the agenda is a task view, and org holds no tasks. The mode
+  hook turns on =visual-line-mode= so long paragraphs wrap softly in any
+  Org buffer.
 - *Display.* =org-startup-indented t= renders headings with virtual
   indentation; =org-hide-emphasis-markers t= suppresses the surrounding
   =/= / =*= / === characters on inline emphasis (cleaner for reading,
@@ -2238,9 +2240,10 @@ Jupyter is opt-in via its own subsection below.
   :ensure nil
   :bind
   (("C-c c" . org-capture)
-   ("C-c l" . org-store-link)
    ;; The sweep moves a note file into place instead of refiling a subtree.
-   (:map org-mode-map ("C-c C-w" . systemhalted/refile-note)))
+   (:map org-mode-map
+         ("C-c l" . org-store-link)
+         ("C-c C-w" . systemhalted/refile-note)))
   :hook
   (org-mode . visual-line-mode)
   :custom
@@ -3023,9 +3026,18 @@ header.
 
 ** LSP-Java — JDT LS configuration
 
-=lsp-java= configures Eclipse JDT LS. Four settings cover the project
-ergonomics:
+=lsp-java= configures Eclipse JDT LS. The settings cover project
+ergonomics and Lombok support:
 
+- *Lombok agent.* Lombok modifies the AST via bytecode manipulation,
+  not standard annotation processing — JDT LS must load it as a JVM
+  agent to see generated methods (=.builder()=, =.getKey()=, etc.).
+  The VS Code Java extension bundles a Lombok JAR automatically;
+  =lsp-java= does not, so we add =-javaagent:= to =lsp-java-vmargs=
+  pointing at the Maven-cached JAR. =systemhalted/lombok-jar-path=
+  finds the newest =lombok-*.jar= under =~/.m2/repository=; if none
+  exists, run =mvn dependency:resolve= in any Lombok project first.
+  The agent is inert in projects that have no Lombok annotations.
 - =lsp-java-completion-guess-method-arguments nil= disables
   placeholder-style method-arg generation. The auto-generated names
   (=arg0=, =arg1=) are always wrong and removing them is more work
@@ -3040,6 +3052,14 @@ ergonomics:
   and are covered by =.gitignore=.
 
 #+begin_src emacs-lisp
+(defun systemhalted/lombok-jar-path ()
+  "Return the path to the newest Lombok JAR in the Maven cache, or nil."
+  (let ((jars (file-expand-wildcards
+               (expand-file-name "~/.m2/repository/org/projectlombok/lombok/*/lombok-*.jar"))))
+    (car (last (seq-filter (lambda (f) (not (string-match-p "-sources" f))) jars)))))
+#+end_src
+
+#+begin_src emacs-lisp
 (use-package lsp-java
   :ensure t
   :after lsp-mode
@@ -3047,7 +3067,17 @@ ergonomics:
   (lsp-java-completion-guess-method-arguments nil)
   (lsp-java-configuration-update-build-configuration "interactive")
   (lsp-java-server-install-dir (expand-file-name "eclipse.jdt.ls/server/" user-emacs-directory))
-  (lsp-java-workspace-dir (expand-file-name "eclipse.jdt.ls/workspace/" user-emacs-directory)))
+  (lsp-java-workspace-dir (expand-file-name "eclipse.jdt.ls/workspace/" user-emacs-directory))
+  (lsp-java-vmargs (let ((base '("-XX:+UseParallelGC"
+                                  "-XX:GCTimeRatio=4"
+                                  "-XX:AdaptiveSizePolicyWeight=90"
+                                  "-Dsun.zip.disableMemoryMapping=true"
+                                  "-Xmx1G"
+                                  "-Xms100m"))
+                         (lombok (systemhalted/lombok-jar-path)))
+                     (if lombok
+                         (append base (list (concat "-javaagent:" lombok)))
+                       base))))
 #+end_src
 
 ** DAP-mode — Java debugging through JDT LS
@@ -3848,6 +3878,14 @@ gitignored.
 - /Stale state after a dependency change./ =M-x lsp-workspace-restart=,
   or =C-c l R=, then re-launch the debug session. If the build file itself
   changed, use =C-c l j u= first to refresh JDT LS project configuration.
+- /Lombok annotations show as errors./ JDT LS needs the Lombok agent
+  loaded via =-javaagent:= in =lsp-java-vmargs=. Verify Lombok is in
+  the Maven cache (=~/.m2/repository/org/projectlombok/lombok/=) — if
+  not, run =mvn dependency:resolve= in any Lombok project. Then
+  restart the workspace with =C-c l R=. If the POM changed, run
+  =M-x lsp-java-update-project-configuration= from the =pom.xml=
+  buffer first. Check =*lsp-log*= for Lombok-related errors if the
+  issue persists.
 - /External file changes do not appear immediately./ Recursive LSP file
   watchers are disabled to keep Emacs memory bounded. Restart the workspace
   with =C-c l R= after large external changes.
