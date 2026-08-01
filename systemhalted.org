@@ -913,9 +913,10 @@ Single-key shortcuts in the dashboard buffer:
                                  dashboard-insert-newline
                                  dashboard-insert-banner-title
                                  dashboard-insert-newline
-                                 dashboard-insert-navigator
-                                 dashboard-insert-newline
                                  dashboard-insert-init-info
+                                 dashboard-insert-newline
+                                 dashboard-insert-newline
+                                 dashboard-insert-navigator
                                  dashboard-insert-items
                                  dashboard-insert-newline
                                  dashboard-insert-footer))
@@ -1568,38 +1569,40 @@ Common entry points (all under =C-c p=):
   Consult, which is usually faster).
 
 #+begin_src emacs-lisp
-(use-package projectile
-  :ensure t
-  :bind-keymap
-  ("C-c p" . projectile-command-map)
-  :custom
-  (projectile-completion-system 'default)
-  (projectile-indexing-method 'alien)
-  :config
-  (defvar systemhalted/projects-root "~/Workspaces"
-    "Root directory under which every project is auto-registered with Projectile.")
+  (use-package projectile
+    :ensure t
+    :demand t
+    :bind-keymap
+    ("C-c p" . projectile-command-map)
+    :custom
+    (projectile-completion-system 'default)
+    (projectile-indexing-method 'alien)
+    (projectile-sort-order 'recentf)
+    :config
+    (defvar systemhalted/projects-root "~/Workspaces"
+      "Root directory under which every project is auto-registered with Projectile.")
 
-  (defun systemhalted/discover-projects (&optional root)
-    "Register every project found anywhere under ROOT with Projectile.
-Descends ROOT recursively (skipping dotfiles) and, for each directory
-Projectile recognizes as a project — one holding a `.git', a known build
-file, or a `.projectile' marker — adds its root to the known-projects
-list, then stops descending so subdirectories inside a repo aren't
-treated as separate projects.  ROOT defaults to `systemhalted/projects-root'."
-    (interactive)
-    (setq root (or root systemhalted/projects-root))
-    (when (file-directory-p root)
-      ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
-      ;; trees (.cache, .venv, ...) are never projects and can be huge.
-      (dolist (dir (directory-files root t "\\`[^.]"))
-        (when (file-directory-p dir)
-          (if (projectile-project-p dir)
-              (projectile-add-known-project
-               (abbreviate-file-name (projectile-project-root dir)))
-            (systemhalted/discover-projects dir))))))
+    (defun systemhalted/discover-projects (&optional root)
+      "Register every project found anywhere under ROOT with Projectile.
+  Descends ROOT recursively (skipping dotfiles) and, for each directory
+  Projectile recognizes as a project — one holding a `.git', a known build
+  file, or a `.projectile' marker — adds its root to the known-projects
+  list, then stops descending so subdirectories inside a repo aren't
+  treated as separate projects.  ROOT defaults to `systemhalted/projects-root'."
+      (interactive)
+      (setq root (or root systemhalted/projects-root))
+      (when (file-directory-p root)
+        ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
+        ;; trees (.cache, .venv, ...) are never projects and can be huge.
+        (dolist (dir (directory-files root t "\\`[^.]"))
+          (when (file-directory-p dir)
+            (if (projectile-project-p dir)
+                (projectile-add-known-project
+                 (abbreviate-file-name (projectile-project-root dir)))
+              (systemhalted/discover-projects dir))))))
 
-  (projectile-mode 1)
-  (systemhalted/discover-projects))
+    (projectile-mode 1)
+    (systemhalted/discover-projects))
 #+end_src
 
 ** compile — multiple compilation buffers
