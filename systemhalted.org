@@ -56,6 +56,7 @@ Warnings buffer is silenced. Messages are still written to the
 
 (add-hook 'emacs-startup-hook
           (lambda ()
+            (setq gc-cons-threshold (* 2 1000 1000))
             (message "Emacs loaded in %.2f seconds with %d garbage collections."
                      (float-time (time-subtract after-init-time before-init-time))
                      gcs-done)))
@@ -121,6 +122,16 @@ evaluated, and when this import sat later in the file (its old home in
 the Programming chapter) a GUI Emacs was still blind to the variable at
 that point and silently fell back to the GitHub install.
 
+*** Environment cache
+
+Spawning =zsh -l -i= on every startup costs over a second. The cache
+layer below writes the imported variables to =var/env-cache.el= after the
+first shell spawn and reads them back on subsequent starts, skipping the
+shell entirely. The cache auto-expires after 24 hours so changes to
+=~/.zshrc= (new SDKMAN candidates, PATH edits) are picked up within a
+day. =C-c R= (=systemhalted/refresh-env-cache=) forces an immediate
+re-import when you need it sooner.
+
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
 
@@ -134,8 +145,57 @@ that point and silently fell back to the GitHub install.
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
+  ;; Silence Powerlevel10k's instant-prompt warning when the shell is
+  ;; spawned non-interactively by exec-path-from-shell.
+  (setenv "POWERLEVEL9K_INSTANT_PROMPT" "quiet")
+
+  (defvar systemhalted/env-cache-file
+    (expand-file-name "var/env-cache.el" user-emacs-directory)
+    "File where cached shell environment variables are stored.")
+
+  (defvar systemhalted/env-cache-ttl-hours 24
+    "Hours before the environment cache is considered stale.")
+
+  (defun systemhalted/env-cache-valid-p ()
+    "Return non-nil when the env cache exists and is younger than TTL."
+    (and (file-exists-p systemhalted/env-cache-file)
+         (< (float-time
+             (time-subtract (current-time)
+                            (file-attribute-modification-time
+                             (file-attributes systemhalted/env-cache-file))))
+            (* systemhalted/env-cache-ttl-hours 3600))))
+
+  (defun systemhalted/env-cache-write ()
+    "Snapshot the current values of `exec-path-from-shell-variables' to disk."
+    (make-directory (file-name-directory systemhalted/env-cache-file) t)
+    (with-temp-file systemhalted/env-cache-file
+      (insert ";;; env-cache.el --- auto-generated shell env cache  -*- no-byte-compile: t -*-\n")
+      (dolist (var exec-path-from-shell-variables)
+        (let ((val (getenv var)))
+          (when val
+            (insert (format "(setenv %S %S)\n" var val)))))
+      (insert (format "(setq exec-path (split-string (getenv \"PATH\") path-separator))\n"))
+      (insert ";;; env-cache.el ends here\n")))
+
+  (defun systemhalted/env-cache-load ()
+    "Apply cached environment variables from disk."
+    (load systemhalted/env-cache-file nil 'nomessage 'nosuffix))
+
+  (defun systemhalted/refresh-env-cache ()
+    "Re-import the shell environment and update the cache.
+Use after editing ~/.zshrc, installing a new SDKMAN candidate, etc."
+    (interactive)
+    (exec-path-from-shell-initialize)
+    (systemhalted/env-cache-write)
+    (message "Environment cache refreshed."))
+
   :config
-  (exec-path-from-shell-initialize))
+  (if (systemhalted/env-cache-valid-p)
+      (systemhalted/env-cache-load)
+    (exec-path-from-shell-initialize)
+    (systemhalted/env-cache-write))
+
+  :bind ("C-c R" . systemhalted/refresh-env-cache))
 #+end_src
 
 * Core Editing
@@ -221,6 +281,10 @@ frame is drawn — chrome that is dead weight when navigation is keyboard-first.
     "Personal Emacs configuration."
     :group 'convenience)
 
+  ;; UI chrome (menu bar, tool bar, scroll bars) is suppressed in
+  ;; early-init.el so the first frame never renders them.  The mode
+  ;; calls below remain as a safety net for frames created via
+  ;; emacsclient or make-frame that might inherit a different alist.
   (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
   (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
   (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
@@ -797,16 +861,17 @@ renders them.  Ligatures are enabled globally — this covers
 
         (use-package nord-theme
           :ensure t
+          :defer t
           :custom
-          (nord-region-highlight "frost")
-          :config
-          (systemhalted/load-theme))
+          (nord-region-highlight "frost"))
 
         (use-package modus-themes
-          :ensure t)
+          :ensure t
+          :defer t)
 
         (use-package ef-themes
-          :ensure t)
+          :ensure t
+          :defer t)
 
         (use-package catppuccin-theme
           :ensure t
@@ -815,6 +880,7 @@ renders them.  Ligatures are enabled globally — this covers
 
         (use-package doom-themes
           :ensure t
+          :defer t
           :config
           (setq doom-themes-enable-bold t
                 doom-themes-enable-italic t))
@@ -1628,6 +1694,7 @@ the call, and the name function reads it from there.
 #+begin_src emacs-lisp
 (use-package compile
   :ensure nil
+  :defer t
   :custom
   (compilation-scroll-output t)
   :config
@@ -2824,13 +2891,17 @@ collection covering every major mode used here. Both are enabled globally
 because LSP completion candidates can carry snippet payloads
 (=lsp-enable-snippet t= further below), and accepting one of those
 candidates expands through yasnippet — so the package needs to be live in
-every LSP buffer even when it's never invoked by name.
+every LSP buffer even when it's never invoked by name. The global mode
+activation is deferred via a one-second idle timer so it does not block
+startup (~0.5 s saved).
 
 #+begin_src emacs-lisp
 (use-package yasnippet
   :ensure t
-  :config
-  (yas-global-mode 1))
+  :defer t
+  :init
+  (add-hook 'emacs-startup-hook
+            (lambda () (run-with-idle-timer 1 nil #'yas-global-mode 1))))
 
 (use-package yasnippet-snippets
   :ensure t
