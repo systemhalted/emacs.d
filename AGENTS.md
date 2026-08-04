@@ -43,7 +43,8 @@ Language intelligence is centralized on `lsp-mode` + `lsp-ui`. Do not reintroduc
 - `yasnippet` + `yasnippet-snippets` — snippets.
 - `lsp-java` — JDT LS, installed under `eclipse.jdt.ls/server/`.
 - `lsp-pyright` — Python; requires `pyright` binary on PATH.
-- `dap-mode` + `dap-java` — debugging via Debug Adapter Protocol.
+- `lua-mode` + `lsp-mode`'s built-in `lua-language-server` client — Lua; formatting stays on `lsp-format-buffer`, REPL/Org Babel share the detected Lua interpreter, and `luacheck` on PATH adds Flycheck linting.
+  - `dap-mode` + `dap-java` — debugging via Debug Adapter Protocol.
 
 Web editing is split by file type: `web-mode` for `.html`/`.tsx`, `rjsx-mode` for `.jsx`/`.js`, `typescript-mode` for `.ts`, built-in `css-mode` for CSS. Do not collapse onto a single mode.
 

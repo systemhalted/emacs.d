@@ -6,8 +6,8 @@
 
 * Overview
 
-This is a compact Emacs configuration focused on Org mode, Java, Python and
-Jupyter notebooks, web programming, Git, and documentation formats.
+This is a compact Emacs configuration focused on Org mode, Java, Python, Lua,
+and Jupyter notebooks, web programming, Git, and documentation formats.
 
 The guiding rule is simple: keep Emacs excellent at the work that happens here
 every day. 
@@ -1506,7 +1506,7 @@ local help command remains available on =C-h C-.= for the occasional UI
 button/widget case.
 
 Programming-language hover documentation stays under LSP: use =C-c l h h=
-for Java, Python, TypeScript, and other language-server buffers. Helpful is
+for Java, Python, Lua, TypeScript, and other language-server buffers. Helpful is
 for Emacs Lisp symbols, commands, variables, faces, and keys.
 
 #+begin_src emacs-lisp
@@ -1917,8 +1917,8 @@ warning is a nudge, not a guard.
 =<note>-attachments/= directory and are linked from the note; =C-c C-w= carries
 them along when you refile.
 
-For code and notebooks, Org Babel loads Emacs Lisp, Java, Python, and shell by
-default. Jupyter support is available on demand:
+For code and notebooks, Org Babel loads Emacs Lisp, Java, Python, Lua, and
+shell by default. Jupyter support is available on demand:
 
 #+begin_example
 C-c j
@@ -2299,7 +2299,7 @@ area and section directories exist before anything could target them, without
 forcing Org into the startup path. =C-c a= and =C-c P= — the old
 agenda and promotion keys — are
 explicitly unbound so a config reload in a long-running session clears
-them. Finally, Babel is loaded for Emacs Lisp, Java, Python, and shell —
+them. Finally, Babel is loaded for Emacs Lisp, Java, Python, Lua, and shell —
 Jupyter is opt-in via its own subsection below.
 
 #+begin_src emacs-lisp
@@ -2348,6 +2348,7 @@ Jupyter is opt-in via its own subsection below.
    'org-babel-load-languages
    '((emacs-lisp . t)
      (java . t)
+     (lua . t)
      (python . t)
      (shell . t))))
 #+end_src
@@ -2856,8 +2857,8 @@ Language intelligence is centered on =lsp-mode=: one protocol, one
 completion path through Corfu via =capf=, one diagnostics surface through
 Flycheck. =lsp-mode= owns the protocol, =lsp-ui= layers a few minimal
 in-buffer affordances, =lsp-java= drives JDT LS, =lsp-pyright= drives
-Pyright, =rustic= drives =rust-analyzer=, and =dap-mode= reuses JDT LS
-for breakpoints in Java. The
+Pyright, =lsp-mode='s built-in LuaLS client drives Lua, =rustic= drives
+=rust-analyzer=, and =dap-mode= reuses JDT LS for breakpoints in Java. The
 subsections below introduce each piece next to its rationale; a usage
 tutorial for the everyday LSP/DAP commands lives at the end of this
 section under =Tutorial: Using LSP and DAP=.
@@ -2973,7 +2974,7 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
 
 [[https://emacs-lsp.github.io/lsp-mode/][lsp-mode]] is the protocol layer.
 It attaches to Java via =systemhalted/lsp-deferred-unless-excluded=
-(SDKMAN-aware) and to JS/TS/web/CSS/Rust via plain =lsp-deferred=. The
+(SDKMAN-aware) and to Lua/JS/TS/web/CSS/Rust via plain =lsp-deferred=. The
 non-default settings exist for two reasons:
 
 *Memory bounds.* A Java editing session previously pushed Emacs above
@@ -3023,7 +3024,7 @@ Java project model when the build file changes.
   (lsp lsp-deferred)
   :hook
   ((java-mode . systemhalted/lsp-deferred-unless-excluded)
-   ((js-mode rjsx-mode typescript-mode web-mode css-mode rustic-mode) . lsp-deferred))
+   ((js-mode rjsx-mode typescript-mode web-mode css-mode lua-mode rustic-mode) . lsp-deferred))
   :bind
   (:map lsp-mode-map
         ("C-c C-f" . lsp-format-buffer)
@@ -3290,6 +3291,84 @@ would otherwise launch the wrong interpreter on =C-c C-p=.
   :ensure nil
   :custom
   (python-shell-interpreter "python3"))
+#+end_src
+
+** Lua — LuaLS, luacheck, and the REPL
+
+=lua-mode= is the major mode for =.lua= files and Lua shebang scripts.
+Language intelligence comes from =lsp-mode='s built-in
+=lua-language-server= client, so — like =rust-analyzer= and
+=bash-language-server= — there is no second Emacs package to install for
+LSP itself. Adding =lua-mode= to the shared =lsp-mode= hook list above
+keeps completion, xref, rename, and formatting on the same =C-c l= /
+=C-c C-f= path as every other language.
+
+Formatting stays on the existing =C-c C-f= (=lsp-format-buffer=) path.
+LuaLS ships a formatter, so there is no separate Emacs-side formatting
+package to coordinate. Diagnostics come from both LuaLS and
+=luacheck=: in LSP buffers, =lsp-mode= takes over the main Flycheck slot,
+so =flycheck-add-next-checker= chains =lua-luacheck= after the generic
+=lsp= checker. That keeps the single diagnostics UI while still surfacing
+luacheck's unused-variable and style findings.
+
+The interpreter command is shared between =lua-mode='s REPL integration
+and Org Babel. =systemhalted/lua-command= prefers a plain =lua= shim when
+one exists, but falls back to =lua5.4= / =lua54= for distros that ship a
+versioned binary only. That keeps =M-x run-lua= and =#+begin_src lua=
+blocks aligned without machine-local config.
+
+Install the interpreter and LuaRocks with the platform package manager,
+then add =luacheck= with LuaRocks. LuaLS can come from a system package
+when one exists, but =M-x lsp-install-server RET lua-language-server= is
+the portable fallback built into =lsp-mode=.
+
+#+begin_src sh
+# Lua interpreter:
+# macOS, MacPorts:   sudo port install lua
+# macOS, Homebrew:   brew install lua
+# Fedora:            sudo dnf install lua
+# Ubuntu / Debian:   sudo apt install lua5.4
+
+# LuaRocks (for luacheck):
+# macOS, MacPorts:   sudo port install luarocks
+# macOS, Homebrew:   brew install luarocks
+# Fedora:            sudo dnf install luarocks
+# Ubuntu / Debian:   sudo apt install luarocks
+
+luarocks install luacheck
+
+# LuaLS:
+# Prefer your package manager's `lua-language-server` package when it exists.
+# Portable fallback inside Emacs: M-x lsp-install-server RET lua-language-server
+#+end_src
+
+#+begin_src emacs-lisp
+(defun systemhalted/lua-command ()
+  "Return the preferred Lua command on PATH.
+Prefer the plain `lua' shim, but fall back to versioned Lua 5.4 binaries."
+  (or (executable-find "lua")
+      (executable-find "lua5.4")
+      (executable-find "lua54")
+      "lua"))
+
+(with-eval-after-load 'ob-lua
+  (setq org-babel-lua-command (systemhalted/lua-command)))
+
+(with-eval-after-load 'lsp-diagnostics
+  (with-eval-after-load 'flycheck
+    (lsp-diagnostics-lsp-checker-if-needed)
+    (flycheck-add-next-checker 'lsp '(t . lua-luacheck))))
+
+(use-package lua-mode
+  :ensure t
+  :mode
+  (("\\.lua\\'" . lua-mode)
+   ("\\.rockspec\\'" . lua-mode))
+  :init
+  (add-to-list 'interpreter-mode-alist '("lua\\(?:[0-9.]+\\)?\\'" . lua-mode))
+  (add-to-list 'interpreter-mode-alist '("luajit\\'" . lua-mode))
+  :custom
+  (lua-default-application (systemhalted/lua-command)))
 #+end_src
 
 ** Rust — rustic and rust-analyzer
@@ -3730,11 +3809,12 @@ binds them.
 
 *** LSP — everyday code intelligence
 
-LSP attaches automatically to =java-mode=, =python-mode=, =js-mode=,
-=rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=, =rustic-mode=, and
-=sh-mode= via the =lsp-deferred= hook on =lsp-mode=. The mode line shows
-=LSP[<server>]= once the server is up (=jdtls= for Java, =pyright= for
-Python, =rust-analyzer= for Rust, etc.). If it does not appear, the server
+LSP attaches automatically to =java-mode=, =python-mode=, =lua-mode=,
+=js-mode=, =rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=,
+=rustic-mode=, and =sh-mode= via the =lsp-deferred= hook on =lsp-mode=.
+The mode line shows =LSP[<server>]= once the server is up (=jdtls= for
+Java, =pyright= for Python, =lua-language-server= for Lua,
+=rust-analyzer= for Rust, etc.). If it does not appear, the server
 probably failed to start — check =*lsp-log*=.
 
 Jumping to a definition (the most common move, e.g. from a Java method call
@@ -3836,6 +3916,23 @@ extra Emacs configuration — each buffer is checked against the config that
 governs it. The server also prefers the project's own
 =node_modules/typescript= over the globally installed compiler, so
 diagnostics match what =tsc= says in that repo.
+
+*** Lua — formatting, linting, and the REPL
+
+Lua buffers are =lua-mode= driven by =lua-language-server=. The first time
+a file from a new project is opened, =lsp-mode= prompts for the project
+root: answer =i= to import the suggested root — usually the git root. The
+mode line shows =LSP[lua-language-server]= once the server is up.
+
+Formatting stays on =C-c C-f=: LuaLS provides the formatter, so the usual
+=lsp-format-buffer= command is the whole story. Diagnostics combine LuaLS
+with =luacheck=: in =lua-mode= buffers, Flycheck runs =lua-luacheck= after
+the generic =lsp= checker so unused locals and style findings land in the
+same error list as language-server diagnostics.
+
+For quick REPL work, =M-x run-lua= uses the same interpreter command Org
+Babel does. The config prefers a plain =lua= executable, but falls back to
+=lua5.4= when that is the only binary on =PATH=.
 
 *** Rust — cargo commands and rust-analyzer assists
 
@@ -3977,6 +4074,12 @@ gitignored.
   buffer (or =M-x lsp-workspace-restart=). The project's own
   =node_modules/.bin/tsserver= does not count — that is the raw =tsserver=,
   not the LSP wrapper =ts-ls= launches.
+- /No completions, formatting, or lint diagnostics in a Lua buffer./ Same
+  pattern: =*lsp-log*= reports =lua-language-server= missing (or install it
+  with =M-x lsp-install-server RET lua-language-server=), and Flycheck
+  reports =luacheck= missing when the linter is the absent piece. Install
+  =luacheck= with =luarocks install luacheck=, then reopen the buffer (or
+  =M-x lsp-workspace-restart=).
 - /ts-ls nags about non-issues (unreachable code, "declared but never
   read")./ Those are =tsserver= hint diagnostics, and the fix is a setting,
   not a different server. The ignore list is
