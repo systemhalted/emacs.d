@@ -2858,11 +2858,26 @@ the time the command actually runs, the rebase buffer has become current, and
 Org complains that it can do nothing useful here. The keypress is swallowed
 and only the second one finishes the rebase.
 
-The fix is to keep the load off that path entirely: a one-shot idle timer
-requires =git-rebase= a second after startup. Startup itself stays as lazy as
+The fix is to keep the load off that path entirely, and it needs two
+branches. In an interactive session a one-shot idle timer requires
+=git-rebase= a second after startup. Startup itself stays as lazy as
 before — the timer only fires once Emacs has nothing else to do — but by the
 time any external =git= hands over a file, the libraries are resident and the
 visit costs about 10 ms instead of 700.
+
+A daemon cannot rely on that timer. When =git='s editor command starts the
+daemon itself — the =-a ''= fallback, or an explicit =emacs --daemon &&
+emacsclient -t= — the client connects the instant init returns, well inside
+the idle second, so the timer has not fired and the race is back. And it is
+worse than the swallowed-keypress window above: a commit-message buffer
+(=COMMIT_EDITMSG= from a reword or squash) visited before =git-commit= is
+loaded has no =find-file-hook= check to catch it, opens as plain text, and
+never gets a =C-c C-c= at all — only =git-rebase-todo= recovers, through
+Magit's =auto-mode-alist= autoload. So a daemon requires =git-rebase=
+eagerly during init: the ~0.7 s lands on daemon boot, which the editor
+command was already waiting on, and interactive startup stays as fast as it
+was. =test/daemon-editor-test.sh= boots a daemon exactly this way and
+asserts the machinery is resident before it has had any idle time.
 
 One =require= covers every case, because =git-rebase= drags in =magit=,
 =git-commit= and =with-editor= behind it. Loading =git-commit= is what
@@ -2883,12 +2898,16 @@ stop you killing the buffer out from under =git=.
   ("C-x g" . magit-status)
   :init
   ;; Preload Git's editor machinery (`git-rebase' pulls in `magit',
-  ;; `git-commit' and `with-editor') once Emacs is idle.  Loading it lazily
-  ;; from `find-file' instead would put ~0.7s of `require' inside the window
-  ;; where emacsclient's frame is already up but still showing the previous
+  ;; `git-commit' and `with-editor').  Loading it lazily from `find-file'
+  ;; instead would put ~0.7s of `require' inside the window where
+  ;; emacsclient's frame is already up but still showing the previous
   ;; buffer, and a `C-c C-c' typed during that window is read against the
-  ;; wrong keymap and lost.
-  (run-with-idle-timer 1 nil (lambda () (require 'git-rebase))))
+  ;; wrong keymap and lost.  A daemon loads eagerly: when git's editor
+  ;; command starts the daemon itself, the client connects before the
+  ;; idle timer could ever fire.
+  (if (daemonp)
+      (require 'git-rebase)
+    (run-with-idle-timer 1 nil (lambda () (require 'git-rebase)))))
 #+end_src
 
 ** Markdown mode — README and prose docs
