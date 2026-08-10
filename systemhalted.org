@@ -106,7 +106,11 @@ ARGS are the remaining arguments to `package-install'.  A stale
                              package)))
          (message "Package install failed; refreshing archives and retrying %s once..."
                   package-name)
-         (package-refresh-contents)
+         ;; Offline, the refresh fails too; its error would replace the more
+         ;; useful install error, so surface the original instead.
+         (condition-case nil
+             (package-refresh-contents)
+           (error (signal (car err) (cdr err))))
          (apply orig package-name args))))))
 
 (advice-remove 'package-install #'systemhalted/package-install--with-refresh)
@@ -121,12 +125,19 @@ ARGS are the remaining arguments to `package-install'.  A stale
   "Errors reported by `use-package' during the current config load.")
 (setq systemhalted/use-package-errors nil)
 
-(defun systemhalted/use-package--record-error (message)
-  "Record a use-package error MESSAGE for batch-load verification."
-  (push message systemhalted/use-package-errors))
+;; `use-package' reports install and load failures through `display-warning'
+;; with type `use-package' and level :error — not through `use-package-error',
+;; which is a defsubst (inlined into byte-compiled callers) and only guards
+;; malformed declarations at expansion time.  Recording the warnings is the
+;; hook that actually sees a package fail.
+(defun systemhalted/use-package--record-warning (type message &optional level &rest _)
+  "Record use-package MESSAGE reported at :error LEVEL for batch verification.
+TYPE and LEVEL are as in `display-warning'."
+  (when (and (eq type 'use-package) (eq level :error))
+    (push (format "%s" message) systemhalted/use-package-errors)))
 
-(advice-remove 'use-package-error #'systemhalted/use-package--record-error)
-(advice-add 'use-package-error :before #'systemhalted/use-package--record-error)
+(advice-remove 'display-warning #'systemhalted/use-package--record-warning)
+(advice-add 'display-warning :before #'systemhalted/use-package--record-warning)
 
 (defun systemhalted/config--assert-no-package-errors ()
   "Signal an error when `use-package' reported failures during this load."
@@ -1671,9 +1682,10 @@ single, fixed depth, so it can't find them without hardcoding how deep
 each one lives. Instead =systemhalted/discover-projects= walks
 =systemhalted/projects-root= (=~/Workspaces=) recursively to /any/ depth
 and registers every repo it finds — stopping the moment it hits a project
-root so it never descends into a repo's own file tree. Directory symlinks are
-not traversed, preventing cycles; a symlink that directly names a project is
-still registered, and unreadable branches are skipped with a message. It runs
+root so it never descends into a repo's own file tree. Symlinked directories
+are followed — a repo behind a symlinked parent is found like any other —
+while a visited-path check stops symlink cycles, and unreadable branches are
+skipped with a message. It runs
 on startup, so =C-c p p= lists every project without first visiting a file
 inside each one, and it's guarded on the directory existing so it's a harmless
 no-op on machines without that tree. After adding a new repo, re-scan on the
@@ -1701,30 +1713,32 @@ Common entry points (all under =C-c p=):
     (defvar systemhalted/projects-root "~/Workspaces"
       "Root directory under which every project is auto-registered with Projectile.")
 
-    (defun systemhalted/discover-projects (&optional root)
+    (defun systemhalted/discover-projects (&optional root visited)
       "Register every project found anywhere under ROOT with Projectile.
-Descend through ordinary directories only, skipping dotfiles and directory
-symlinks so cycles cannot trap startup.  A symlink that directly names a
-project is still registered.  Unreadable branches are reported and skipped.
-ROOT defaults to `systemhalted/projects-root'."
+Descend through directories, symlinked ones included, skipping dotfiles.
+VISITED carries the true names already on the current descent path, so a
+symlink cycle stops where it started instead of trapping startup.
+Unreadable branches are reported and skipped.  ROOT defaults to
+`systemhalted/projects-root'."
       (interactive)
       (setq root (or root systemhalted/projects-root))
       (when (file-directory-p root)
-        (condition-case err
-            (progn
-              ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
-              ;; trees (.cache, .venv, ...) are never projects and can be huge.
-              (dolist (dir (directory-files root t "\\`[^.]"))
-                (when (file-directory-p dir)
-                  (cond
-                   ((projectile-project-p dir)
-                    (projectile-add-known-project
-                     (abbreviate-file-name (projectile-project-root dir))))
-                   ((not (file-symlink-p dir))
-                    (systemhalted/discover-projects dir))))))
-          (file-error
-           (message "Skipping unreadable project directory %s: %s"
-                    root (error-message-string err))))))
+        (let ((true-root (file-truename root)))
+          (unless (member true-root visited)
+            (condition-case err
+                (progn
+                  ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
+                  ;; trees (.cache, .venv, ...) are never projects and can be huge.
+                  (dolist (dir (directory-files root t "\\`[^.]"))
+                    (when (file-directory-p dir)
+                      (if (projectile-project-p dir)
+                          (projectile-add-known-project
+                           (abbreviate-file-name (projectile-project-root dir)))
+                        (systemhalted/discover-projects
+                         dir (cons true-root visited))))))
+              (file-error
+               (message "Skipping unreadable project directory %s: %s"
+                        root (error-message-string err))))))))
 
     (projectile-mode 1)
     (systemhalted/discover-projects))
@@ -2015,12 +2029,14 @@ a numeric suffix when that name is taken, so two notes never collide.
 capture and refile offer.
 
 =systemhalted/org-capture-file= is the =C-c c= capture target: it asks for a
-destination (=Inbox=, or any =area/section= — a new one is created if typed),
-then a title (optional for the inbox, where the file is timestamped), creates
-the =.org= file with a =#+TITLE:=/=#+DATE:= header, and leaves point ready for
-the body. Destinations are validated as a configured area or exactly one
-=area/section= level, so empty, absolute, hidden, and escaping paths never leave
-Organicely. =systemhalted/refile-note= is its weekly-sweep counterpart: it moves
+destination (=Inbox=, or =area/section= where the area is one of the
+configured areas and a new /section/ is created if typed), then a title
+(optional for the inbox, where the file is timestamped), creates the =.org=
+file with a =#+TITLE:=/=#+DATE:= header, and leaves point ready for the body.
+Destinations are validated as a configured area or exactly one =area/section=
+level (a trailing slash is tolerated), so empty, absolute, hidden, and
+escaping paths never leave Organicely — new /areas/ are a deliberate config
+edit in =systemhalted/org-area-dirs=, not a capture-time typo away. =systemhalted/refile-note= is its weekly-sweep counterpart: it moves
 the current note's file — and its =-attachments= folder — into a chosen
 =area/section=, the directory-model stand-in for =org-refile= (bound to =C-c C-w=).
 File and attachment collisions share the same numeric suffix, and any partial
@@ -2110,7 +2126,9 @@ A matching attachment directory also counts as a collision."
 
 (defun systemhalted/org--validate-destination (relative)
   "Return valid Organicely destination RELATIVE, or signal `user-error'.
-Destinations are a configured area, or one non-hidden section beneath it."
+Destinations are a configured area, or one non-hidden section beneath it.
+A directory-style trailing slash is normalized away in the returned value."
+  (setq relative (directory-file-name relative))
   (let ((parts (split-string relative "/" nil)))
     (unless
         (and (not (file-name-absolute-p relative))
@@ -2145,9 +2163,10 @@ These are the completion candidates for capture and refile."
 
 (defun systemhalted/org-capture-file ()
   "Capture target: create a fresh note file and switch to it.
-Prompts for a destination — \"Inbox\" or any existing/new \"area/section\"
-directory — then a title (optional for Inbox, where the file is timestamped).
-Seeds a `#+TITLE:'/`#+DATE:' header and leaves point ready for the body."
+Prompts for a destination — \"Inbox\", or \"area/section\" under a configured
+area, creating a new section if typed — then a title (optional for Inbox,
+where the file is timestamped).  Seeds a `#+TITLE:'/`#+DATE:' header and
+leaves point ready for the body."
   (let* ((choice (completing-read "Capture to (Inbox, or area/section): "
                                   (cons "Inbox" (systemhalted/org-section-dirs))))
          (inbox (string-equal choice "Inbox"))
@@ -2460,7 +2479,8 @@ Jupyter is opt-in via its own subsection below.
     (org-todo-keywords nil)
     :config
     ;; Capture creates a fresh note file. `c' prompts for a destination
-    ;; (Inbox, or any area/section — new ones allowed) and a title; `s' files a
+    ;; (Inbox, or configured-area/section — new sections allowed) and a title;
+    ;; `s' files a
     ;; source-linked note grouped by :SOURCE_ID: into 00-inbox/sources.org, with
     ;; %a embedding an inline backlink for one-keystroke navigation back.
     (setq org-capture-templates
@@ -3244,8 +3264,10 @@ ergonomics and Lombok support:
   =lsp-java= does not, so we add =-javaagent:= to =lsp-java-vmargs=
   pointing at the Maven-cached JAR. =systemhalted/lombok-jar-path=
   compares Maven directory names as semantic versions and selects only the
-  newest main =lombok-VERSION.jar=, ignoring sources and Javadoc artifacts. If
-  none exists, run =mvn dependency:resolve= in any Lombok project first.
+  newest main =lombok-VERSION.jar=, ignoring sources and Javadoc artifacts;
+  a non-numeric version directory (=edge-SNAPSHOT=) ranks below every
+  numeric release rather than erroring. If none exists, run
+  =mvn dependency:resolve= in any Lombok project first.
   The agent is inert in projects that have no Lombok annotations.
 - =lsp-java-completion-guess-method-arguments nil= disables
   placeholder-style method-arg generation. The auto-generated names
@@ -3266,6 +3288,14 @@ ergonomics and Lombok support:
   (file-name-nondirectory
    (directory-file-name (file-name-directory jar))))
 
+(defun systemhalted/lombok--jar-version-list (jar)
+  "Return Lombok JAR's parsed version, or nil for a non-numeric one.
+Maven version directories like \"edge-SNAPSHOT\" don't parse as versions;
+they rank below every numeric release instead of signaling."
+  (condition-case nil
+      (version-to-list (systemhalted/lombok--jar-version jar))
+    (error nil)))
+
 (defun systemhalted/lombok-jar-path ()
   "Return the path to the newest main Lombok JAR in the Maven cache, or nil."
   (let ((jars
@@ -3281,8 +3311,11 @@ ergonomics and Lombok support:
     (car
      (sort jars
            (lambda (a b)
-             (version< (systemhalted/lombok--jar-version b)
-                       (systemhalted/lombok--jar-version a)))))))
+             (let ((va (systemhalted/lombok--jar-version-list a))
+                   (vb (systemhalted/lombok--jar-version-list b)))
+               (cond ((and va vb) (version-list-< vb va))
+                     (va t)
+                     (t nil))))))))
 #+end_src
 
 #+begin_src emacs-lisp

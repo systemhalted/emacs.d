@@ -22,7 +22,10 @@ Useful batch commands:
 - `emacs --batch -Q -l init.el --eval '(message "init loaded")'` — smoke-test that the config loads.
 - `emacs --debug-init` — interactive startup with the debugger enabled.
 
-There is no formal test suite.
+Regression tests live in `test/`:
+- `emacs --batch -Q -l init.el -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit` — ERT suite for the config's own functions (the test file redirects `$HOME` to a temp directory before loading Org, so it never touches `~/organicely`).
+- `bash test/link-home-test.sh` — isolated cases for the installer script.
+- `emacs --batch -Q -l init.el --eval '(systemhalted/config--assert-no-package-errors)' --eval '(message "init loaded")'` — strict smoke test; fails on any recorded `use-package` install/load error.
 
 ## Naming and style
 
@@ -38,7 +41,7 @@ Org holds **no task management**. The rule: anything with a "done" state goes in
 
 Enforcement is **soft by design**: `systemhalted/org-warn-done-state` warns (never blocks) on save when a file under `~/organicely/` contains TODO/IN-PROGRESS/DONE headings or `SCHEDULED:`/`DEADLINE:` lines. Do not reintroduce hard guards, agenda config, or task keywords.
 
-Capture (`C-c c`) has two templates: `c` Note — `systemhalted/org-capture-file` prompts for a destination (`Inbox` or any `area/section`, new ones created if typed) and a title, then creates a fresh note file; `s` Source note — `systemhalted/org-notes-target` groups notes in `00-inbox/sources.org` under a heading keyed by the source's `:SOURCE_ID:`. The journal deliberately has **no capture template**: journaling goes through `C-c J` (`systemhalted/journal`) — opens (creating if needed) today's `50-journal/daily/YYYY-MM-DD.org`, titled e.g. `5th June 2026, Friday`, alone in the frame with book view on. Refiling is not `org-refile`: in Org buffers `C-c C-w` is rebound to `systemhalted/refile-note`, which moves the current note's file — and its `<note>-attachments/` directory — into a chosen `area/section`.
+Capture (`C-c c`) has two templates: `c` Note — `systemhalted/org-capture-file` prompts for a destination (`Inbox`, or `area/section` where the area must be a configured one and a new *section* is created if typed; new areas are a config edit to `systemhalted/org-area-dirs`) and a title, then creates a fresh note file; `s` Source note — `systemhalted/org-notes-target` groups notes in `00-inbox/sources.org` under a heading keyed by the source's `:SOURCE_ID:`. The journal deliberately has **no capture template**: journaling goes through `C-c J` (`systemhalted/journal`) — opens (creating if needed) today's `50-journal/daily/YYYY-MM-DD.org`, titled e.g. `5th June 2026, Friday`, alone in the frame with book view on. Refiling is not `org-refile`: in Org buffers `C-c C-w` is rebound to `systemhalted/refile-note`, which moves the current note's file — and its `<note>-attachments/` directory — into a chosen `area/section`.
 
 The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: the config must never reference, require, or delete them.
 

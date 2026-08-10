@@ -2,6 +2,21 @@
 
 (require 'cl-lib)
 (require 'ert)
+
+(defvar systemhalted-test--original-home (getenv "HOME")
+  "Real $HOME before the suite redirected it; see the test below.")
+
+(defvar systemhalted-test--org-preloaded (featurep 'org)
+  "Non-nil when init.el already loaded Org (a fresh retangle does).
+Then Org's :config ran against the real $HOME before this file could
+redirect it, and the hermeticity assertion below cannot apply.")
+
+;; Loading org fires the config's deferred :config, which scaffolds the
+;; Organicely tree under $HOME.  Point $HOME at a throwaway directory first
+;; (init.el has already loaded from the real one) so running the suite never
+;; writes into the user's notes tree.
+(setenv "HOME" (make-temp-file "systemhalted-test-home-" t))
+
 (require 'org)
 
 (ert-deftest systemhalted/package-install-refreshes-and-retries-once ()
@@ -51,9 +66,39 @@
   (let ((systemhalted/use-package-errors '("broken package")))
     (should-error (systemhalted/config--assert-no-package-errors))))
 
+(ert-deftest systemhalted/use-package-error-warnings-are-recorded ()
+  (let ((systemhalted/use-package-errors nil))
+    (display-warning 'use-package "Failed to install demo: no match" :error)
+    (display-warning 'use-package "minor grumble" :warning)
+    (display-warning 'emacs "unrelated" :error)
+    (should (equal systemhalted/use-package-errors
+                   '("Failed to install demo: no match")))))
+
+(ert-deftest systemhalted/package-install-keeps-original-error-when-refresh-fails ()
+  (let ((systemhalted/package-install--refreshing nil))
+    (cl-letf (((symbol-function 'package-refresh-contents)
+               (lambda () (error "network down"))))
+      (let ((err (should-error
+                  (systemhalted/package-install--with-refresh
+                   (lambda (&rest _args) (error "real cause"))
+                   'demo))))
+        (should (string-match-p "real cause" (cadr err)))))))
+
+(ert-deftest systemhalted/test-run-does-not-touch-real-home ()
+  (when systemhalted-test--org-preloaded
+    (ert-skip "init.el retangled and loaded Org before $HOME was redirected"))
+  (should-not
+   (string-prefix-p (file-name-as-directory systemhalted-test--original-home)
+                    org-directory)))
+
 (ert-deftest systemhalted/org-destination-validation ()
   (dolist (valid '("00-inbox" "20-personal/home" "30-learning/new section"))
     (should (equal valid (systemhalted/org--validate-destination valid))))
+  ;; A directory-style trailing slash is normalized away, not rejected.
+  (should (equal "20-personal/home"
+                 (systemhalted/org--validate-destination "20-personal/home/")))
+  (should (equal "00-inbox"
+                 (systemhalted/org--validate-destination "00-inbox/")))
   (dolist (invalid '("" "/tmp" "../outside" "00-inbox/.."
                      "00-inbox/.hidden" "00-inbox/a/b"
                      "unknown/section" "20-personal/foo-attachments"
@@ -111,7 +156,7 @@
         (kill-buffer buffer))
       (delete-directory root t))))
 
-(ert-deftest systemhalted/project-discovery-skips-directory-symlinks ()
+(ert-deftest systemhalted/project-discovery-survives-symlink-cycles ()
   (let* ((root (make-temp-file "project-discovery-" t))
          (child (expand-file-name "child" root))
          (loop (expand-file-name "loop" root))
@@ -126,6 +171,29 @@
                        nil)))
             (systemhalted/discover-projects root))
           (should (< checks 5)))
+      (delete-directory root t))))
+
+(ert-deftest systemhalted/project-discovery-traverses-symlinked-parents ()
+  (let* ((root (make-temp-file "project-discovery-" t))
+         (outside (make-temp-file "project-outside-" t))
+         (repo (expand-file-name "repo" outside))
+         registered)
+    (unwind-protect
+        (progn
+          (make-directory repo)
+          (make-symbolic-link outside (expand-file-name "shared" root))
+          (cl-letf (((symbol-function 'projectile-project-p)
+                     (lambda (dir)
+                       (string= (file-name-nondirectory
+                                 (directory-file-name dir))
+                                "repo")))
+                    ((symbol-function 'projectile-project-root)
+                     (lambda (dir) dir))
+                    ((symbol-function 'projectile-add-known-project)
+                     (lambda (dir) (push dir registered))))
+            (systemhalted/discover-projects root))
+          (should (= (length registered) 1)))
+      (delete-directory outside t)
       (delete-directory root t))))
 
 (ert-deftest systemhalted/project-discovery-tolerates-unreadable-directories ()
@@ -161,11 +229,20 @@
   (let ((jars '("/cache/1.18.9/lombok-1.18.9.jar"
                 "/cache/1.18.42/lombok-1.18.42-sources.jar"
                 "/cache/1.18.42/lombok-1.18.42.jar"
-                "/cache/1.18.50/lombok-1.18.50-javadoc.jar")))
+                "/cache/1.18.50/lombok-1.18.50-javadoc.jar"
+                "/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar")))
     (cl-letf (((symbol-function 'file-expand-wildcards)
                (lambda (&rest _args) jars)))
       (should
        (equal "/cache/1.18.42/lombok-1.18.42.jar"
+              (systemhalted/lombok-jar-path))))))
+
+(ert-deftest systemhalted/lombok-falls-back-to-non-numeric-version-dirs ()
+  (let ((jars '("/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar")))
+    (cl-letf (((symbol-function 'file-expand-wildcards)
+               (lambda (&rest _args) jars)))
+      (should
+       (equal "/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar"
               (systemhalted/lombok-jar-path))))))
 
 (provide 'systemhalted-test)
