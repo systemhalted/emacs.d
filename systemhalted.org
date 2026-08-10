@@ -19,7 +19,7 @@ system for thinking, consuming, and executing, not as a maximal task manager.
 
 * Startup and Package Management
 
-Startup is intentionally boring. A two-line =early-init.el= sets
+Startup is intentionally boring. =early-init.el= sets
 =package-enable-at-startup= to nil — since Emacs 27 the automatic activation
 pass runs /before/ init.el, so disabling it there (and only there; setting the
 variable in this file would be too late) makes the explicit
@@ -27,10 +27,17 @@ variable in this file would be too late) makes the explicit
 are current and explicit:
 GNU/Nongnu provide core ecosystem packages, MELPA provides actively maintained
 tooling, and MELPA Stable remains lower priority. =use-package= is used only to
-make package ownership and configuration boundaries obvious. External packages
-declare =:ensure t= at the call site; built-in packages declare =:ensure nil=.
-There is no global auto-install switch because broad implicit installs make
-reloads harder to reason about.
+make package ownership and configuration boundaries obvious. Archive packages
+declare =:ensure t=; built-ins, bundled extensions, and local checkouts declare
+=:ensure nil=; =:vc= is already an explicit installer. There is no global
+auto-install switch because broad implicit installs make reloads harder to
+reason about.
+
+Archive metadata can outlive MELPA's rolling tarballs. If an install fails, a
+small advice refreshes the archives and retries once by package name so a stale
+descriptor cannot keep requesting a removed URL. =use-package= errors are also
+recorded for the strict batch smoke test; interactive startup still reports
+them normally without being terminated.
 
 Emacs Custom can still write local state, but it is redirected under
 =var/custom.el= so generated choices do not churn this repository. Settings that
@@ -81,10 +88,53 @@ Warnings buffer is silenced. Messages are still written to the
 (unless package-archive-contents
   (package-refresh-contents))
 
+(defvar systemhalted/package-install--refreshing nil
+  "Non-nil while retrying a package install after refreshing archives.")
+
+(defun systemhalted/package-install--with-refresh (orig package &rest args)
+  "Call ORIG to install PACKAGE, refreshing stale archives on first failure.
+ARGS are the remaining arguments to `package-install'.  A stale
+`package-desc' is retried by package name so the refreshed descriptor wins."
+  (condition-case err
+      (apply orig package args)
+    (error
+     (if systemhalted/package-install--refreshing
+         (signal (car err) (cdr err))
+       (let ((systemhalted/package-install--refreshing t)
+             (package-name (if (package-desc-p package)
+                               (package-desc-name package)
+                             package)))
+         (message "Package install failed; refreshing archives and retrying %s once..."
+                  package-name)
+         (package-refresh-contents)
+         (apply orig package-name args))))))
+
+(advice-remove 'package-install #'systemhalted/package-install--with-refresh)
+(advice-add 'package-install :around #'systemhalted/package-install--with-refresh)
+
 (unless (package-installed-p 'use-package)
   (package-install 'use-package))
 (require 'use-package)
 (setq use-package-always-ensure nil)
+
+(defvar systemhalted/use-package-errors nil
+  "Errors reported by `use-package' during the current config load.")
+(setq systemhalted/use-package-errors nil)
+
+(defun systemhalted/use-package--record-error (message)
+  "Record a use-package error MESSAGE for batch-load verification."
+  (push message systemhalted/use-package-errors))
+
+(advice-remove 'use-package-error #'systemhalted/use-package--record-error)
+(advice-add 'use-package-error :before #'systemhalted/use-package--record-error)
+
+(defun systemhalted/config--assert-no-package-errors ()
+  "Signal an error when `use-package' reported failures during this load."
+  (when systemhalted/use-package-errors
+    (error "use-package failures: %s"
+           (mapconcat #'identity
+                      (nreverse systemhalted/use-package-errors)
+                      " | "))))
 #+end_src
 
 ** Process I/O and shell environment
@@ -736,6 +786,7 @@ Because GUI Emacs doesn't inherit the shell environment,
   (if systemhalted/trustrail-local-checkout
       ;; Development machine: load the live checkout so edits take effect on reload.
       (use-package trustrail
+        :ensure nil
         :preface (add-to-list 'load-path systemhalted/trustrail-local-checkout)
         :commands trustrail-list-packages)
     (use-package trustrail
@@ -1620,11 +1671,13 @@ single, fixed depth, so it can't find them without hardcoding how deep
 each one lives. Instead =systemhalted/discover-projects= walks
 =systemhalted/projects-root= (=~/Workspaces=) recursively to /any/ depth
 and registers every repo it finds — stopping the moment it hits a project
-root so it never descends into a repo's own file tree. It runs on startup,
-so =C-c p p= lists every project without first visiting a file inside each
-one, and it's guarded on the directory existing so it's a harmless no-op on
-machines without that tree. After adding a new repo, re-scan on the spot
-with =M-x systemhalted/discover-projects= — no restart needed.
+root so it never descends into a repo's own file tree. Directory symlinks are
+not traversed, preventing cycles; a symlink that directly names a project is
+still registered, and unreadable branches are skipped with a message. It runs
+on startup, so =C-c p p= lists every project without first visiting a file
+inside each one, and it's guarded on the directory existing so it's a harmless
+no-op on machines without that tree. After adding a new repo, re-scan on the
+spot with =M-x systemhalted/discover-projects= — no restart needed.
 
 Common entry points (all under =C-c p=):
 
@@ -1650,22 +1703,28 @@ Common entry points (all under =C-c p=):
 
     (defun systemhalted/discover-projects (&optional root)
       "Register every project found anywhere under ROOT with Projectile.
-  Descends ROOT recursively (skipping dotfiles) and, for each directory
-  Projectile recognizes as a project — one holding a `.git', a known build
-  file, or a `.projectile' marker — adds its root to the known-projects
-  list, then stops descending so subdirectories inside a repo aren't
-  treated as separate projects.  ROOT defaults to `systemhalted/projects-root'."
+Descend through ordinary directories only, skipping dotfiles and directory
+symlinks so cycles cannot trap startup.  A symlink that directly names a
+project is still registered.  Unreadable branches are reported and skipped.
+ROOT defaults to `systemhalted/projects-root'."
       (interactive)
       (setq root (or root systemhalted/projects-root))
       (when (file-directory-p root)
-        ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
-        ;; trees (.cache, .venv, ...) are never projects and can be huge.
-        (dolist (dir (directory-files root t "\\`[^.]"))
-          (when (file-directory-p dir)
-            (if (projectile-project-p dir)
-                (projectile-add-known-project
-                 (abbreviate-file-name (projectile-project-root dir)))
-              (systemhalted/discover-projects dir))))))
+        (condition-case err
+            (progn
+              ;; "\\`[^.]" skips every dotfile, not just "." and ".." — hidden
+              ;; trees (.cache, .venv, ...) are never projects and can be huge.
+              (dolist (dir (directory-files root t "\\`[^.]"))
+                (when (file-directory-p dir)
+                  (cond
+                   ((projectile-project-p dir)
+                    (projectile-add-known-project
+                     (abbreviate-file-name (projectile-project-root dir))))
+                   ((not (file-symlink-p dir))
+                    (systemhalted/discover-projects dir))))))
+          (file-error
+           (message "Skipping unreadable project directory %s: %s"
+                    root (error-message-string err))))))
 
     (projectile-mode 1)
     (systemhalted/discover-projects))
@@ -1959,10 +2018,13 @@ capture and refile offer.
 destination (=Inbox=, or any =area/section= — a new one is created if typed),
 then a title (optional for the inbox, where the file is timestamped), creates
 the =.org= file with a =#+TITLE:=/=#+DATE:= header, and leaves point ready for
-the body. =systemhalted/refile-note= is its weekly-sweep counterpart: it moves
+the body. Destinations are validated as a configured area or exactly one
+=area/section= level, so empty, absolute, hidden, and escaping paths never leave
+Organicely. =systemhalted/refile-note= is its weekly-sweep counterpart: it moves
 the current note's file — and its =-attachments= folder — into a chosen
-=area/section=, the directory-model stand-in for =org-refile= (bound to =C-c C-w=
-in Org buffers).
+=area/section=, the directory-model stand-in for =org-refile= (bound to =C-c C-w=).
+File and attachment collisions share the same numeric suffix, and any partial
+move is rolled back before an error is returned.
 
 =systemhalted/org-goto-or-create-heading= moves point /onto/ a named top-level
 heading in the current buffer, creating it (with surrounding blank lines) when
@@ -2036,12 +2098,35 @@ the parent entry and appends the capture to the end of its subtree."
     (if (string-empty-p x) "note" x)))
 
 (defun systemhalted/org-unique-file (dir stem)
-  "Return a non-colliding DIR/STEM.org path, adding -N on collision."
+  "Return a non-colliding DIR/STEM.org path, adding -N on collision.
+A matching attachment directory also counts as a collision."
   (let ((path (expand-file-name (concat stem ".org") dir)) (i 2))
-    (while (file-exists-p path)
+    (while (or (file-exists-p path)
+               (file-exists-p
+                (concat (file-name-sans-extension path) "-attachments")))
       (setq path (expand-file-name (format "%s-%d.org" stem i) dir))
       (setq i (1+ i)))
     path))
+
+(defun systemhalted/org--validate-destination (relative)
+  "Return valid Organicely destination RELATIVE, or signal `user-error'.
+Destinations are a configured area, or one non-hidden section beneath it."
+  (let ((parts (split-string relative "/" nil)))
+    (unless
+        (and (not (file-name-absolute-p relative))
+             (memq (length parts) '(1 2))
+             (member (car parts) systemhalted/org-area-dirs)
+             (seq-every-p
+              (lambda (part)
+                (and (not (string-empty-p (string-trim part)))
+                     (not (string-prefix-p "." part))
+                     (not (string-match-p "\\\\" part))
+                     (not (string-suffix-p "-attachments" part))
+                     (not (string-suffix-p "(Attachments)" part))))
+              parts))
+      (user-error
+       "Choose a configured area or one area/section under Organicely"))
+    relative))
 
 (defun systemhalted/org-section-dirs ()
   "Relative \"area\" and \"area/section\" directories under `org-directory'.
@@ -2066,7 +2151,9 @@ Seeds a `#+TITLE:'/`#+DATE:' header and leaves point ready for the body."
   (let* ((choice (completing-read "Capture to (Inbox, or area/section): "
                                   (cons "Inbox" (systemhalted/org-section-dirs))))
          (inbox (string-equal choice "Inbox"))
-         (reldir (if inbox "00-inbox" choice))
+         (reldir (if inbox
+                     "00-inbox"
+                   (systemhalted/org--validate-destination choice)))
          (dir (systemhalted/org-file reldir))
          (title (string-trim (read-string (if inbox "Title (optional): " "Title: "))))
          (stem (if (string-empty-p title)
@@ -2083,25 +2170,53 @@ Seeds a `#+TITLE:'/`#+DATE:' header and leaves point ready for the body."
 (defun systemhalted/refile-note ()
   "Move the current note file (and its attachments) into a chosen area/section.
 This is the directory-model replacement for `org-refile' — the weekly sweep
-moves an inbox note into place by relocating its file."
+moves an inbox note into place by relocating its file.  Roll back completed
+moves if any later step fails."
   (interactive)
   (unless (and buffer-file-name
                (file-in-directory-p buffer-file-name org-directory))
     (user-error "Not visiting a note under Organicely"))
-  (let* ((target-rel (completing-read "Move note to: "
-                                      (systemhalted/org-section-dirs) nil nil))
+  (let* ((target-rel
+          (systemhalted/org--validate-destination
+           (completing-read "Move note to: "
+                            (systemhalted/org-section-dirs) nil nil)))
          (target-dir (systemhalted/org-file target-rel))
          (dest (systemhalted/org-unique-file
                 target-dir (file-name-base buffer-file-name)))
          (old buffer-file-name)
-         (attach (concat (file-name-sans-extension old) "-attachments")))
+         (attach (concat (file-name-sans-extension old) "-attachments"))
+         (dest-attach
+          (concat (file-name-sans-extension dest) "-attachments"))
+         note-moved
+         attachment-moved)
     (make-directory target-dir t)
     (save-buffer)
-    (rename-file old dest)
-    (when (file-directory-p attach)
-      (rename-file attach (concat (file-name-sans-extension dest) "-attachments")))
-    (set-visited-file-name dest nil t)
-    (message "Moved to %s" (file-relative-name dest org-directory))))
+    (condition-case err
+        (progn
+          (rename-file old dest)
+          (setq note-moved t)
+          (when (file-directory-p attach)
+            (rename-file attach dest-attach)
+            (setq attachment-moved t))
+          (set-visited-file-name dest nil t)
+          (message "Moved to %s" (file-relative-name dest org-directory)))
+      (error
+       (let (rollback-errors)
+         (when attachment-moved
+           (condition-case rollback-error
+               (rename-file dest-attach attach)
+             (error (push (error-message-string rollback-error)
+                          rollback-errors))))
+         (when note-moved
+           (condition-case rollback-error
+               (rename-file dest old)
+             (error (push (error-message-string rollback-error)
+                          rollback-errors))))
+         (if rollback-errors
+             (error "Move failed: %s; rollback also failed: %s"
+                    (error-message-string err)
+                    (mapconcat #'identity (nreverse rollback-errors) " | "))
+           (signal (car err) (cdr err))))))))
 
 (defun systemhalted/journal ()
   "Open (creating if needed) today's per-day journal file for writing.
@@ -2303,54 +2418,55 @@ them. Finally, Babel is loaded for Emacs Lisp, Java, Python, Lua, and shell —
 Jupyter is opt-in via its own subsection below.
 
 #+begin_src emacs-lisp
-(use-package org
-  :ensure nil
-  :bind
-  (("C-c c" . org-capture)
-   ;; The sweep moves a note file into place instead of refiling a subtree.
-   (:map org-mode-map
-         ("C-c l" . org-store-link)
-         ("C-c C-w" . systemhalted/refile-note)))
-  :hook
-  (org-mode . visual-line-mode)
-  :custom
-  (org-directory (expand-file-name "~/organicely/"))
-  (org-default-notes-file (systemhalted/org-file "00-inbox/sources.org"))
-  (org-ellipsis " ...")
-  (org-startup-indented t)
-  (org-hide-emphasis-markers t)
-  (org-src-window-setup 'current-window)
-  (org-confirm-babel-evaluate t)
-  ;; Org models no tasks; anything with a done state goes to Reminders.
-  (org-todo-keywords nil)
-  :config
-  ;; Capture creates a fresh note file. `c' prompts for a destination
-  ;; (Inbox, or any area/section — new ones allowed) and a title; `s' files a
-  ;; source-linked note grouped by :SOURCE_ID: into 00-inbox/sources.org, with
-  ;; %a embedding an inline backlink for one-keystroke navigation back.
-  (setq org-capture-templates
-        `(("c" "Note" plain
-           (function systemhalted/org-capture-file)
-           "%?" :unnarrowed t)
-          ("s" "Source note" entry
-           (file+function ,(systemhalted/org-file "00-inbox/sources.org")
-                          systemhalted/org-notes-target)
-           "* %?\n%a")))
-  ;; Attach the soft done-state guard to any Organicely buffer.
-  (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
-  ;; Runs as soon as Org first loads, so the area/section dirs always exist.
-  (systemhalted/ensure-org-files)
-  ;; The agenda and promotion keys are gone; unbinding (rather than just not
-  ;; binding) clears stale bindings when the config is reloaded in place.
-  (global-unset-key (kbd "C-c a"))
-  (global-unset-key (kbd "C-c P"))
-  (org-babel-do-load-languages
-   'org-babel-load-languages
-   '((emacs-lisp . t)
-     (java . t)
-     (lua . t)
-     (python . t)
-     (shell . t))))
+  (use-package org
+    :ensure nil
+    :bind
+    (("C-c c" . org-capture)
+     ;; The sweep moves a note file into place instead of refiling a subtree.
+     (:map org-mode-map
+           ("C-c l" . org-store-link)
+           ("C-c C-w" . systemhalted/refile-note)))
+    :hook
+    (org-mode . visual-line-mode)
+    :custom
+    (org-directory (expand-file-name "~/organicely/"))
+    (org-default-notes-file (systemhalted/org-file "00-inbox/sources.org"))
+    (org-ellipsis " ...")
+    (org-startup-indented t)
+    (org-hide-emphasis-markers t)
+    (org-src-window-setup 'current-window)
+    (org-confirm-babel-evaluate t)
+    ;; Org models no tasks; anything with a done state goes to Reminders.
+    (org-todo-keywords nil)
+    :config
+    ;; Capture creates a fresh note file. `c' prompts for a destination
+    ;; (Inbox, or any area/section — new ones allowed) and a title; `s' files a
+    ;; source-linked note grouped by :SOURCE_ID: into 00-inbox/sources.org, with
+    ;; %a embedding an inline backlink for one-keystroke navigation back.
+    (setq org-capture-templates
+          `(("c" "Note" plain
+             (function systemhalted/org-capture-file)
+             "%?" :unnarrowed t)
+            ("s" "Source note" entry
+             (file+function ,(systemhalted/org-file "00-inbox/sources.org")
+                            systemhalted/org-notes-target)
+             "* %?\n%a"))
+  	browse-url-browser-function 'eww-browse-url)
+    ;; Attach the soft done-state guard to any Organicely buffer.
+    (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
+    ;; Runs as soon as Org first loads, so the area/section dirs always exist.
+    (systemhalted/ensure-org-files)
+    ;; The agenda and promotion keys are gone; unbinding (rather than just not
+    ;; binding) clears stale bindings when the config is reloaded in place.
+    (global-unset-key (kbd "C-c a"))
+    (global-unset-key (kbd "C-c P"))
+    (org-babel-do-load-languages
+     'org-babel-load-languages
+     '((emacs-lisp . t)
+       (java . t)
+       (lua . t)
+       (python . t)
+       (shell . t))))
 #+end_src
 
 ** Notes retrieval
@@ -2952,6 +3068,7 @@ time JDT LS starts, the SDKMAN buffer-local state applied via
     ;; Development machine: $SDKMAN_EL_DIR points at the live checkout, so load
     ;; it directly and edits take effect on the next reload.
     (use-package sdkman
+      :ensure nil
       :preface (add-to-list 'load-path systemhalted/sdkman-local-checkout)
       :commands (sdkman-mode global-sdkman-mode sdkman-lsp-java-excluded-file-p)
       :init (global-sdkman-mode 1))
@@ -3107,8 +3224,9 @@ ergonomics and Lombok support:
   The VS Code Java extension bundles a Lombok JAR automatically;
   =lsp-java= does not, so we add =-javaagent:= to =lsp-java-vmargs=
   pointing at the Maven-cached JAR. =systemhalted/lombok-jar-path=
-  finds the newest =lombok-*.jar= under =~/.m2/repository=; if none
-  exists, run =mvn dependency:resolve= in any Lombok project first.
+  compares Maven directory names as semantic versions and selects only the
+  newest main =lombok-VERSION.jar=, ignoring sources and Javadoc artifacts. If
+  none exists, run =mvn dependency:resolve= in any Lombok project first.
   The agent is inert in projects that have no Lombok annotations.
 - =lsp-java-completion-guess-method-arguments nil= disables
   placeholder-style method-arg generation. The auto-generated names
@@ -3124,11 +3242,28 @@ ergonomics and Lombok support:
   and are covered by =.gitignore=.
 
 #+begin_src emacs-lisp
+(defun systemhalted/lombok--jar-version (jar)
+  "Return the Maven version directory containing Lombok JAR."
+  (file-name-nondirectory
+   (directory-file-name (file-name-directory jar))))
+
 (defun systemhalted/lombok-jar-path ()
-  "Return the path to the newest Lombok JAR in the Maven cache, or nil."
-  (let ((jars (file-expand-wildcards
-               (expand-file-name "~/.m2/repository/org/projectlombok/lombok/*/lombok-*.jar"))))
-    (car (last (seq-filter (lambda (f) (not (string-match-p "-sources" f))) jars)))))
+  "Return the path to the newest main Lombok JAR in the Maven cache, or nil."
+  (let ((jars
+         (seq-filter
+          (lambda (jar)
+            (let ((version (systemhalted/lombok--jar-version jar)))
+              (string=
+               (file-name-nondirectory jar)
+               (format "lombok-%s.jar" version))))
+          (file-expand-wildcards
+           (expand-file-name
+            "~/.m2/repository/org/projectlombok/lombok/*/lombok-*.jar")))))
+    (car
+     (sort jars
+           (lambda (a b)
+             (version< (systemhalted/lombok--jar-version b)
+                       (systemhalted/lombok--jar-version a)))))))
 #+end_src
 
 #+begin_src emacs-lisp

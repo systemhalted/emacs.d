@@ -1,12 +1,74 @@
-#+TITLE: Palak Mathur's Emacs config
+#+TITLE: Palak Mathur's Emacs Configuration
 #+AUTHOR: Palak Mathur
 
-#+HTML:<div align=center><a href="https://github.com/pmathur33/rabunctious-emacs"><img alt="Emacs Logo" width="240" height="240" src="https://upload.wikimedia.org/wikipedia/commons/0/08/EmacsIcon.svg"></a>
- #+HTML:</div>
-* Why Emacs?
+* Overview
 
-    I started using Emacs in 2010 and my relationship with it has been on and off. I mostly use Jetbrains IntelliJ IDEA
-    for my work. But the idea of Emacs - everything inside is awesome. You can configure IDEA to an extent but after that
-    it just gives up. Checking emails, managing schedule, and taking notes - few things that are lacking in IDEA. Emacs
-    on the other hand is an Operating System in itself. You can configure it the way you want and for your comfort and
-    there is a huge community to help, guide and support you.
+This is a literate personal Emacs configuration centered on Org notes,
+programming with =lsp-mode=, modern minibuffer/completion packages, Git,
+documentation, and terminal workflows.  Emacs 30 is recommended; the current
+configuration is verified with Emacs 30.2.
+
+=systemhalted.org= is the source of truth.  =init.el= loads the generated
+=systemhalted.el= when it is current and otherwise retangles the Org file.
+Never edit =systemhalted.el= directly.
+
+* Requirements
+
+- Emacs 30 or newer is recommended.
+- =git= and =rg= should be on =PATH=.
+- The first startup needs network access to install external Emacs packages.
+- A Nerd Font enables the configured icons and ligatures.
+- Language servers, interpreters, and TeX tools are optional; their platform
+  installation commands live beside each feature in =systemhalted.org=.
+
+* Installation
+
+Clone this repository somewhere other than =~/.emacs.d=.  From the clone, run:
+
+#+begin_src sh
+./link-home.sh
+#+end_src
+
+=link-home.sh= creates =~/.emacs.d= only when the path is absent.  If a file,
+directory, wrong symlink, or dangling symlink already exists, it refuses to
+replace it.  Move the old configuration aside explicitly and rerun the script.
+A repository cloned directly as =~/.emacs.d= is detected and left unchanged.
+
+* Organicely
+
+Org is a notes-only second brain under =~/organicely/=—not a task manager.
+Notes live as individual files in numbered areas, optionally one section deep.
+Anything with a done state belongs in Apple Reminders; anything with a date
+belongs in Apple Calendar.
+
+The main commands are =C-c c= for capture, =C-c C-w= for moving a note file,
+=C-c J= for today's journal, and =C-c n= for note search.  Capture and refile
+destinations are constrained to the configured Organicely areas.
+
+* Development and Verification
+
+Retangle after changing Emacs Lisp blocks:
+
+#+begin_src sh
+emacs --batch -Q -l org --eval '(org-babel-tangle-file "systemhalted.org")'
+#+end_src
+
+Run the strict batch smoke test, configuration regressions, and safe installer
+tests:
+
+#+begin_src sh
+emacs --batch -Q -l init.el --eval '(systemhalted/config--assert-no-package-errors)' --eval '(message "init loaded")'
+emacs --batch -Q -l init.el -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit
+bash test/link-home-test.sh
+#+end_src
+
+For an interactive startup check, run =emacs --debug-init=.  Before committing,
+also run =git diff --check= and =git status --short=.
+
+* Package Policy
+
+Archive packages declare =:ensure t=, built-ins and package-bundled extensions
+declare =:ensure nil=, and local checkout branches also declare =:ensure nil=.
+A =:vc= declaration is already an explicit package installer and is not paired
+with =:ensure=.  If an archive install fails because cached metadata is stale,
+the configuration refreshes archive contents and retries once.

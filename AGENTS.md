@@ -7,7 +7,7 @@ This repository is a personal Emacs configuration. `init.el` is the entry point:
 ## Build, Test, and Development Commands
 
 - `emacs --batch -Q -l org --eval '(org-babel-tangle-file "systemhalted.org")'`: regenerate tangled Emacs Lisp from the literate Org config.
-- `emacs --batch -Q -l init.el --eval '(message "init loaded")'`: smoke-test that the configuration loads in batch mode.
+- `emacs --batch -Q -l init.el --eval '(systemhalted/config--assert-no-package-errors)' --eval '(message "init loaded")'`: smoke-test the configuration and fail on any `use-package` error.
 - `emacs --debug-init`: start Emacs interactively with startup debugging enabled.
 - `git status --short`: check for generated or runtime files before committing.
 
@@ -15,7 +15,7 @@ This repository is a personal Emacs configuration. `init.el` is the entry point:
 
 Use Emacs Lisp conventions: two-space indentation, lowercase kebab-case symbols, and namespaced custom functions with the `systemhalted/` prefix (e.g., `systemhalted/config-reload`, `systemhalted/notes-search`; internals use `systemhalted/<feature>--<name>`). Do not introduce a second namespace.
 
-Use `use-package` for every package with explicit `:ensure t` for external packages and `:ensure nil` for built-ins. There is no `use-package-always-ensure`—implicit installs are deliberately disabled.
+Use `use-package` for every package. Archive packages use explicit `:ensure t` (or an explicit package name such as `:ensure auctex`); built-ins, package-bundled extensions, and local-checkout branches use `:ensure nil`. A `:vc` declaration is itself an explicit installer and is not paired with `:ensure`. There is no `use-package-always-ensure`—implicit installs are deliberately disabled.
 
 Keep literate explanations near the relevant source block in `systemhalted.org`; keep comments in `.el` files brief and operational. Avoid committing machine-local state, caches, credentials, or package manager artifacts.
 
@@ -52,7 +52,7 @@ Minibuffer completion: `vertico` + `orderless` + `marginalia` + `consult` + `cor
 
 ## Testing Guidelines
 
-There is no formal test suite. For configuration changes, run the batch load command above and then start Emacs with `--debug-init`. For Org Babel edits, retangle `systemhalted.org` and inspect the generated diff if `systemhalted.el` is tracked in your branch. If adding reusable Lisp, consider adding small `ert-deftest` tests in a future `test/` directory and document the command here.
+Focused regression tests live in `test/systemhalted-test.el`; run them with `emacs --batch -Q -l init.el -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit`. Run `bash test/link-home-test.sh` for the isolated installer cases. For configuration changes, run the strict batch load command above and then start Emacs with `--debug-init`. For Org Babel edits, retangle `systemhalted.org` and inspect the generated diff if `systemhalted.el` is tracked in your branch. Standalone package internals such as Wordwise are tested in their own repositories, not here.
 
 ## Commit & Pull Request Guidelines
 
