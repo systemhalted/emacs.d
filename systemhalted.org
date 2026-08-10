@@ -2407,6 +2407,14 @@ The =:config= block wires the second-brain flow:
   =systemhalted/refile-note=, which moves a note's file into a chosen directory,
   so there are no =org-refile-targets= to maintain.
 
+URL links open in EWW, and only from Org buffers:
+=systemhalted/org-eww-links= sets =browse-url-browser-function=
+buffer-locally on =org-mode-hook=, so magit, help, and every other buffer
+keep the system browser. When a page needs a real browser, =C-c o=
+(=systemhalted/org-open-in-system-browser=) opens the link at point through
+=browse-url-secondary-browser-function= instead; inside an EWW buffer, =&=
+does the same for the page being read.
+
 Then the hooks: =org-mode-hook= attaches the soft done-state warning.
 =systemhalted/ensure-org-files= is called directly from =:config=, which runs
 the moment Org first loads (capture, refile, or opening any =.org= file) — so the
@@ -2418,6 +2426,16 @@ them. Finally, Babel is loaded for Emacs Lisp, Java, Python, Lua, and shell —
 Jupyter is opt-in via its own subsection below.
 
 #+begin_src emacs-lisp
+  (defun systemhalted/org-eww-links ()
+    "Open links from this buffer in EWW; other buffers are unaffected."
+    (setq-local browse-url-browser-function #'eww-browse-url))
+
+  (defun systemhalted/org-open-in-system-browser ()
+    "Open the link at point in the system browser instead of EWW."
+    (interactive)
+    (let ((browse-url-browser-function browse-url-secondary-browser-function))
+      (org-open-at-point)))
+
   (use-package org
     :ensure nil
     :bind
@@ -2425,9 +2443,11 @@ Jupyter is opt-in via its own subsection below.
      ;; The sweep moves a note file into place instead of refiling a subtree.
      (:map org-mode-map
            ("C-c l" . org-store-link)
-           ("C-c C-w" . systemhalted/refile-note)))
+           ("C-c C-w" . systemhalted/refile-note)
+           ("C-c o" . systemhalted/org-open-in-system-browser)))
     :hook
-    (org-mode . visual-line-mode)
+    ((org-mode . visual-line-mode)
+     (org-mode . systemhalted/org-eww-links))
     :custom
     (org-directory (expand-file-name "~/organicely/"))
     (org-default-notes-file (systemhalted/org-file "00-inbox/sources.org"))
@@ -2450,8 +2470,7 @@ Jupyter is opt-in via its own subsection below.
             ("s" "Source note" entry
              (file+function ,(systemhalted/org-file "00-inbox/sources.org")
                             systemhalted/org-notes-target)
-             "* %?\n%a"))
-  	browse-url-browser-function 'eww-browse-url)
+             "* %?\n%a")))
     ;; Attach the soft done-state guard to any Organicely buffer.
     (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
     ;; Runs as soon as Org first loads, so the area/section dirs always exist.

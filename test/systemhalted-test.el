@@ -138,6 +138,25 @@
           (should-not (systemhalted/discover-projects root)))
       (delete-directory root t))))
 
+(ert-deftest systemhalted/org-buffers-default-links-to-eww ()
+  (with-temp-buffer
+    (org-mode)
+    (should (local-variable-p 'browse-url-browser-function))
+    (should (eq browse-url-browser-function #'eww-browse-url)))
+  (should-not (eq (default-value 'browse-url-browser-function)
+                  #'eww-browse-url)))
+
+(ert-deftest systemhalted/org-open-in-system-browser-uses-secondary ()
+  (let (opened)
+    (with-temp-buffer
+      (org-mode)
+      (insert "[[https://example.com/page]]")
+      (goto-char 3)
+      (let ((browse-url-secondary-browser-function
+             (lambda (url &rest _args) (setq opened url))))
+        (systemhalted/org-open-in-system-browser)))
+    (should (equal opened "https://example.com/page"))))
+
 (ert-deftest systemhalted/lombok-selects-newest-main-jar-semantically ()
   (let ((jars '("/cache/1.18.9/lombok-1.18.9.jar"
                 "/cache/1.18.42/lombok-1.18.42-sources.jar"
