@@ -4014,23 +4014,25 @@ want LSP semantics specifically.
 
 The LSP prefix is =C-c l=. The most-used commands:
 
-| Keys        | Command                  | What it does                          |
-|-------------+--------------------------+---------------------------------------|
-| =M-.=       | =xref-find-definitions=  | jump to definition (routed via LSP)   |
-| =M-,=       | =xref-go-back=           | return to the previous location       |
-| =C-c l g g= | =lsp-find-definition=    | jump to definition (LSP-native)       |
-| =C-c l g r= | =lsp-find-references=    | list references                       |
-| =C-c l g i= | =lsp-find-implementation=| jump to implementation                |
-| =C-c l r r= | =lsp-rename=             | rename symbol across the workspace    |
-| =C-c l r o= | =lsp-organize-imports=   | sort imports, drop unused ones        |
-| =C-c l a a= | =lsp-execute-code-action=| quick fixes, imports, refactors       |
-| =C-c l h h= | =lsp-describe-thing-at-point= | hover docs                       |
-| =C-c l i=   | =corfu-popupinfo-toggle= | toggle completion docs for buffer     |
-| =C-c l H=   | =lsp-toggle-symbol-highlight= | toggle symbol highlighting       |
-| =C-c l F=   | =lsp-toggle-on-type-formatting= | toggle on-type formatting       |
-| =C-c l R=   | =lsp-workspace-restart= | restart current LSP workspace          |
-| =C-c l j u= | =lsp-java-update-project-configuration= | refresh Java project model |
-| =C-c C-f=   | =lsp-format-buffer=      | format the buffer                     |
+| Keys          | Command                               | What it does                                |
+|---------------+---------------------------------------+---------------------------------------------|
+| =M-.=           | =xref-find-definitions=                 | jump to definition (routed via LSP)         |
+| =M-,=           | =xref-go-back=                          | return to the previous location             |
+| =C-c l g g=     | =lsp-find-definition=                   | jump to definition (LSP-native)             |
+| =C-c l g r=     | =lsp-find-references=                   | list references                             |
+| =C-c l g i=     | =lsp-find-implementation=               | jump to implementation                      |
+| =C-c l r r=     | =lsp-rename=                            | rename symbol across the workspace          |
+| =C-c l r o=     | =lsp-organize-imports=                  | sort imports, drop unused ones              |
+| =C-c l a a=     | =lsp-execute-code-action=               | quick fixes, imports, refactors             |
+| =C-c l h h=     | =lsp-describe-thing-at-point=           | hover docs                                  |
+| =C-c l i=       | =corfu-popupinfo-toggle=                | toggle completion docs for buffer           |
+| =C-c l H=       | =lsp-toggle-symbol-highlight=           | toggle symbol highlighting                  |
+| =C-c l F=       | =lsp-toggle-on-type-formatting=         | toggle on-type formatting                   |
+| =C-c l R=       | =lsp-workspace-restart=                 | restart current LSP workspace               |
+| =C-c l j u=     | =lsp-java-update-project-configuration= | refresh Java project model                  |
+| =C-c C-f=       | =lsp-format-buffer=                     | format the buffer                           |
+| =C-c l g h=     | =lsp-treemacs-call-hierarchy=           | Show incoming calls for the symbol at point |
+| =C-u C-c l g h= | =lsp-treemacs-call-hierarchy=           | Show outgoing calls                         |
 
 =which-key= is enabled, so pressing =C-c l= and pausing pops up the full
 submenu — useful for discovering the rest of the prefix without memorizing
