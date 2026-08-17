@@ -245,5 +245,50 @@ redirect it, and the hermeticity assertion below cannot apply.")
        (equal "/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar"
               (systemhalted/lombok-jar-path))))))
 
+(ert-deftest systemhalted/undefined-replay-requeues-sequence-bound-now ()
+  "A sequence that is bound in the current buffer gets replayed, not beeped."
+  (with-temp-buffer
+    (let ((map (make-sparse-keymap))
+          (unread-command-events nil)
+          orig-called)
+      (define-key map (kbd "C-c C-c") #'ignore)
+      (use-local-map map)
+      (cl-letf (((symbol-function 'this-command-keys-vector)
+                 (lambda () (vconcat (kbd "C-c C-c")))))
+        (systemhalted/undefined-replay-bound-keys
+         (lambda () (setq orig-called t))))
+      (should-not orig-called)
+      (should (equal unread-command-events
+                     (listify-key-sequence (vconcat (kbd "C-c C-c"))))))))
+
+(ert-deftest systemhalted/undefined-replay-leaves-unbound-sequence-alone ()
+  "A sequence unbound here still falls through to `undefined'."
+  (with-temp-buffer
+    (fundamental-mode)
+    (let ((unread-command-events nil)
+          orig-called)
+      (cl-letf (((symbol-function 'this-command-keys-vector)
+                 (lambda () (vconcat (kbd "C-c C-c")))))
+        (systemhalted/undefined-replay-bound-keys
+         (lambda () (setq orig-called t))))
+      (should orig-called)
+      (should-not unread-command-events))))
+
+(ert-deftest systemhalted/undefined-replay-advice-is-installed ()
+  (should (advice-member-p #'systemhalted/undefined-replay-bound-keys
+                           'undefined)))
+
+(ert-deftest systemhalted/with-editor-usage-message-skips-killed-buffer ()
+  "The guarded usage message must not select a buffer killed meanwhile."
+  (let (timer-fn)
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (_secs _repeat fn &rest _args) (setq timer-fn fn))))
+      (with-temp-buffer
+        (setq-local with-editor-usage-message "hint")
+        (systemhalted/with-editor-usage-message--guarded)))
+    ;; The temp buffer is dead by now; firing the timer must be a no-op.
+    (should (functionp timer-fn))
+    (funcall timer-fn)))
+
 (provide 'systemhalted-test)
 ;;; systemhalted-test.el ends here

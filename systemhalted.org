@@ -2910,6 +2910,66 @@ stop you killing the buffer out from under =git=.
     (run-with-idle-timer 1 nil (lambda () (require 'git-rebase)))))
 #+end_src
 
+Preloading is necessary but not sufficient: there is a second race that has
+nothing to do with load time. While =server.el= creates the client frame and
+visits the file, the daemon's command loop is already parked inside
+=read-key-sequence= — holding the keymaps of whatever buffer was current
+*before* the client attached, the dashboard in this config. A =C-c C-c=
+typed into that window completes the sequence against those stale maps and
+dispatches =undefined=, even though the rebase buffer is current and binds
+the key by the time the command actually executes (verified live:
+=key-binding= returns =with-editor-finish= inside the very =undefined= call
+that just rejected it). On a warm daemon the window is a quarter of a
+second; on a cold start under load it stretches to seconds, which is
+exactly when muscle memory gets there first.
+
+The stale-map lookup cannot be un-latched from Lisp, but the swallowed
+keypress can be recovered: when =undefined= fires and the exact sequence
+*is* bound in the now-current buffer, push the keys back onto the input
+queue instead of beeping — the second read starts fresh and resolves
+against the right keymaps. Genuinely unbound keys still reach =undefined=
+and beep as before.
+
+#+begin_src emacs-lisp
+(defun systemhalted/undefined-replay-bound-keys (orig-fun)
+  "Replay a key sequence that resolved against stale keymaps.
+Keys typed while emacsclient hands a file to the daemon are looked
+up in the buffer that was current before `server-switch-buffer'
+ran; when the sequence is bound in the buffer that is current by
+the time `undefined' executes, re-queue the keys instead of
+beeping."
+  (let ((keys (this-command-keys-vector)))
+    (if (and (length> keys 0) (key-binding keys))
+        (setq unread-command-events (listify-key-sequence keys))
+      (funcall orig-fun))))
+
+(advice-add 'undefined :around #'systemhalted/undefined-replay-bound-keys)
+#+end_src
+
+One consequence of the replay: pending input always beats idle timers, so a
+recovered =C-c C-c= finishes the edit — killing its buffer — before
+=with-editor-usage-message='s 0.05 s timer gets to print its hint, and the
+upstream timer selects the dead buffer without checking
+(=Error running timer: (error "Selecting deleted buffer")=). The override
+below is upstream's own body plus a =buffer-live-p= guard; drop it once
+with-editor guards the timer itself.
+
+#+begin_src emacs-lisp
+(defun systemhalted/with-editor-usage-message--guarded ()
+  "Like `with-editor-usage-message', but skip buffers killed meanwhile."
+  (let ((buffer (current-buffer)))
+    (run-with-timer
+     0.05 nil
+     (lambda ()
+       (when (buffer-live-p buffer)
+         (with-current-buffer buffer
+           (message (substitute-command-keys with-editor-usage-message))))))))
+
+(with-eval-after-load 'with-editor
+  (advice-add 'with-editor-usage-message :override
+              #'systemhalted/with-editor-usage-message--guarded))
+#+end_src
+
 ** Markdown mode — README and prose docs
 
 Three file globs: =README.md= opens in =gfm-mode= since that's what GitHub
