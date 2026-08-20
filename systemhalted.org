@@ -1029,6 +1029,11 @@ lightweight in both GUI and terminal frames.
 
 =initial-buffer-choice= is set to =dashboard-open= so =emacsclient -c=
 frames also land on the dashboard instead of a bare scratch buffer.
+Projects still come from Projectile, but the list is re-ranked locally
+by activity: projects with open buffers come first, then projects
+inferred from =recentf=, then the untouched remainder. The stock widget
+mostly reflects startup discovery order, which barely moves in a
+long-lived Emacs session.
 
 Single-key shortcuts in the dashboard buffer:
 
@@ -1711,6 +1716,11 @@ inside each one, and it's guarded on the directory existing so it's a harmless
 no-op on machines without that tree. After adding a new repo, re-scan on the
 spot with =M-x systemhalted/discover-projects= — no restart needed.
 
+That eager discovery is great for Projectile itself, but the stock
+Dashboard Projects widget reads the raw known-project list in that
+mostly-static order. The small helper below keeps the Projectile backend
+while re-ranking the dashboard list by active buffers and =recentf=.
+
 Common entry points (all under =C-c p=):
 
 - =C-c p p= — switch project.
@@ -1759,6 +1769,53 @@ Unreadable branches are reported and skipped.  ROOT defaults to
               (file-error
                (message "Skipping unreadable project directory %s: %s"
                         root (error-message-string err))))))))
+
+    (defun systemhalted/dashboard-projects--normalize-root (project-root)
+      "Return PROJECT-ROOT in canonical Projectile/dashboard form."
+      (file-name-as-directory
+       (abbreviate-file-name (expand-file-name project-root))))
+
+    (defun systemhalted/dashboard-projects--project-for-file (file project-prefixes)
+      "Return the most specific project root from PROJECT-PREFIXES containing FILE."
+      (let ((expanded-file (expand-file-name file)))
+        (seq-some (lambda (project-prefix)
+                    (when (string-prefix-p (car project-prefix) expanded-file)
+                      (cdr project-prefix)))
+                  project-prefixes)))
+
+    (defun systemhalted/dashboard-projects--sort-by-activity (projects)
+      "Return PROJECTS reordered by open buffers and recent file activity."
+      (let* ((projects (mapcar #'systemhalted/dashboard-projects--normalize-root
+                               projects))
+             (project-prefixes
+              (sort (mapcar (lambda (project)
+                              (cons (expand-file-name project) project))
+                            projects)
+                    (lambda (left right)
+                      (> (length (car left)) (length (car right))))))
+             (open-projects
+              (mapcar #'systemhalted/dashboard-projects--normalize-root
+                      (projectile-open-projects)))
+             recent-projects)
+        (dolist (file (or (bound-and-true-p recentf-list) '()))
+          (when-let* ((project
+                       (systemhalted/dashboard-projects--project-for-file
+                        file project-prefixes)))
+            (push project recent-projects)))
+        (delete-dups
+         (append open-projects (nreverse recent-projects) projects))))
+
+    (defun systemhalted/dashboard-projects--load-projects-by-activity (original)
+      "Wrap ORIGINAL dashboard loader to re-rank Projectile projects by activity."
+      (let ((projects (funcall original)))
+        (if (eq dashboard-projects-backend 'projectile)
+            (systemhalted/dashboard-projects--sort-by-activity projects)
+          projects)))
+
+    (unless (advice-member-p #'systemhalted/dashboard-projects--load-projects-by-activity
+                             'dashboard-projects-backend-load-projects)
+      (advice-add 'dashboard-projects-backend-load-projects
+                  :around #'systemhalted/dashboard-projects--load-projects-by-activity))
 
     (projectile-mode 1)
     (systemhalted/discover-projects))

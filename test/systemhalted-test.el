@@ -112,6 +112,54 @@ redirect it, and the hermeticity assertion below cannot apply.")
     (should-not face-calls)
     (should-not fontset-calls)))
 
+(ert-deftest systemhalted/dashboard-projects-normalize-root-adds-trailing-slash ()
+  (should
+   (equal "/tmp/example-project/"
+          (systemhalted/dashboard-projects--normalize-root
+           "/tmp/example-project"))))
+
+(ert-deftest systemhalted/dashboard-projects-prefers-most-specific-root ()
+  (should
+   (equal "/tmp/work/app/"
+          (systemhalted/dashboard-projects--project-for-file
+           "/tmp/work/app/src/main.el"
+           '(("/tmp/work/app/" . "/tmp/work/app/")
+             ("/tmp/work/" . "/tmp/work/"))))))
+
+(ert-deftest systemhalted/dashboard-projects-sort-by-activity-prioritizes-open-then-recentf ()
+  (let ((recentf-list '("/tmp/work/eventing/src/main.el"
+                        "/tmp/work/notes/index.org"
+                        "/tmp/work/shell/README.md")))
+    (cl-letf (((symbol-function 'projectile-open-projects)
+               (lambda ()
+                 '("/tmp/work/emacs.d/" "/tmp/work/shell/"))))
+      (should
+       (equal '("/tmp/work/emacs.d/"
+                "/tmp/work/shell/"
+                "/tmp/work/eventing/"
+                "/tmp/work/notes/"
+                "/tmp/work/misc/")
+              (systemhalted/dashboard-projects--sort-by-activity
+               '("/tmp/work/shell"
+                 "/tmp/work/misc"
+                 "/tmp/work/eventing"
+                 "/tmp/work/notes"
+                 "/tmp/work/emacs.d")))))))
+
+(ert-deftest systemhalted/dashboard-projects-loader-only-sorts-projectile-backend ()
+  (cl-letf (((symbol-function 'systemhalted/dashboard-projects--sort-by-activity)
+             (lambda (_projects) '("sorted"))))
+    (let ((dashboard-projects-backend 'projectile))
+      (should
+       (equal '("sorted")
+              (systemhalted/dashboard-projects--load-projects-by-activity
+               (lambda () '("original"))))))
+    (let ((dashboard-projects-backend 'project-el))
+      (should
+       (equal '("original")
+              (systemhalted/dashboard-projects--load-projects-by-activity
+               (lambda () '("original"))))))))
+
 (ert-deftest systemhalted/use-package-error-warnings-are-recorded ()
   (let ((systemhalted/use-package-errors nil))
     (display-warning 'use-package "Failed to install demo: no match" :error)
