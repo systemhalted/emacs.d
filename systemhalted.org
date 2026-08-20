@@ -820,7 +820,9 @@ Three small finishing touches:
   variable-pitch face for the book-style reading view further down. Sizes
   are =150= (=15pt=) on both faces; the =find-font= guards make the block
   no-op when a font isn't installed instead of leaving a missing-font
-  warning.
+  warning.  The helper below runs for the current GUI frame and every
+  later graphical frame, so =emacs --daemon= + =emacsclient -c= gets the
+  same fonts as a regular app launch.
 - *Nerd Font fallback.* Shell prompts (Powerlevel10k, Starship, etc.) and
   UI packages use glyphs from the Nerd Fonts Private Use Area that plain
   Fira Code doesn't carry.  =set-fontset-font= registers a Nerd Font on
@@ -853,29 +855,47 @@ Three small finishing touches:
   (with-eval-after-load 'dired
     (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
 
-  (when (display-graphic-p)
-    (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
-                               '("Fira Code" "FiraCode Nerd Font"))))
-      (when mono-font
-        (set-face-attribute 'default nil :font mono-font :height 150)))
-    (when (find-font (font-spec :name "Cantarell"))
-      (set-face-attribute 'variable-pitch nil :font "Cantarell" :height 150))
+  (defconst systemhalted/gui-default-font-candidates
+    '("Fira Code" "FiraCode Nerd Font")
+    "Monospaced fonts to try for the default face, in order.")
 
-    ;; Nerd Font fallback for icon glyphs (Powerline, Devicons, etc.)
-    ;; Register on both the default fontset (t, inherited by future
-    ;; frames) AND the current frame's fontset (nil) so the Nerd Font
-    ;; takes priority over the default face's catch-all unicode mapping.
-    (let ((nerd-font (seq-find (lambda (name) (find-font (font-spec :name name)))
-                               '("FiraCode Nerd Font Mono"
-                                 "MesloLGS NF"
-                                 "MesloLGS Nerd Font Mono"
-                                 "JetBrainsMono Nerd Font Mono"
-                                 "MesloLGM Nerd Font Mono"))))
-      (when nerd-font
-        (dolist (range '((#xe000  . #xf8ff)    ; BMP Private Use Area (Powerline, Devicons)
-                         (#xf0000 . #xfffff))) ; Supplementary PUA-A (Material Design, etc.)
-          (set-fontset-font t range nerd-font nil 'prepend)
-          (set-fontset-font nil range nerd-font nil 'prepend)))))
+  (defconst systemhalted/gui-nerd-font-candidates
+    '("FiraCode Nerd Font Mono"
+      "MesloLGS NF"
+      "MesloLGS Nerd Font Mono"
+      "JetBrainsMono Nerd Font Mono"
+      "MesloLGM Nerd Font Mono")
+    "Nerd Fonts to try for Private Use Area glyph fallback, in order.")
+
+  (defconst systemhalted/gui-nerd-font-ranges
+    '((#xe000  . #xf8ff)    ; BMP Private Use Area (Powerline, Devicons)
+      (#xf0000 . #xfffff)) ; Supplementary PUA-A (Material Design, etc.)
+    "Unicode ranges that should render with the Nerd Font fallback.")
+
+  (defun systemhalted/apply-graphical-frame-fonts (&optional frame)
+    "Apply GUI fonts and icon fallbacks to FRAME."
+    (let ((frame (or frame (selected-frame))))
+      (when (display-graphic-p frame)
+        (with-selected-frame frame
+          (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                                     systemhalted/gui-default-font-candidates)))
+            (when mono-font
+              (set-face-attribute 'default frame :font mono-font :height 150)))
+          (when (find-font (font-spec :name "Cantarell"))
+            (set-face-attribute 'variable-pitch frame :font "Cantarell" :height 150))
+
+          ;; Register on both the default fontset (t, inherited by future
+          ;; frames) AND the current frame's fontset (nil) so the Nerd Font
+          ;; takes priority over the default face's catch-all unicode mapping.
+          (let ((nerd-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                                     systemhalted/gui-nerd-font-candidates)))
+            (when nerd-font
+              (dolist (range systemhalted/gui-nerd-font-ranges)
+                (set-fontset-font t range nerd-font nil 'prepend)
+                (set-fontset-font nil range nerd-font nil 'prepend))))))))
+
+  (add-hook 'after-make-frame-functions #'systemhalted/apply-graphical-frame-fonts)
+  (systemhalted/apply-graphical-frame-fonts)
 #+end_src
 
 *Ligatures.* Fira Code ships with programming ligatures (=->= , ===== ,
