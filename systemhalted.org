@@ -10,7 +10,7 @@ This is a compact Emacs configuration focused on Org mode, Java, Python, Lua,
 and Jupyter notebooks, web programming, Git, and documentation formats.
 
 The guiding rule is simple: keep Emacs excellent at the work that happens here
-every day. 
+every day.
 
 The current direction favors composable packages that use Emacs' built-in
 completion and language APIs. Large, all-in-one frameworks were replaced where a
@@ -358,17 +358,21 @@ portable bit is =(fullscreen . fullboth)= in the frame alists, which works
 under X11 and PGTK. =ns-use-native-fullscreen= is the macOS-only toggle that
 makes Cmd-Ctrl-F use the system's native fullscreen animation rather than a
 maximized-but-windowed state; setting it is wrapped in a darwin check
-because the variable is unbound on Linux.
+because the variable is unbound on Linux.  When
+=systemhalted/omarchy-owned-ui= is set (Omarchy hosts), this block is
+skipped so the tiling window manager controls fullscreen and window
+placement.
 
 #+begin_src emacs-lisp
-  (when (display-graphic-p)
-    ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
-    ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
-    ;; the portable bit that handles X11/PGTK.
-    (when (eq system-type 'darwin)
-      (setq ns-use-native-fullscreen t)))
-  (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
-  (add-to-list 'default-frame-alist '(fullscreen . fullboth))
+  (unless (bound-and-true-p systemhalted/omarchy-owned-ui)
+    (when (display-graphic-p)
+      ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
+      ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
+      ;; the portable bit that handles X11/PGTK.
+      (when (eq system-type 'darwin)
+        (setq ns-use-native-fullscreen t)))
+    (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
+    (add-to-list 'default-frame-alist '(fullscreen . fullboth)))
 #+end_src
 
 ** Line numbers, gated to safe buffers
@@ -656,25 +660,25 @@ the loop:
   the session.
 
 #+begin_src emacs-lisp
-    (defun systemhalted/config-visit ()
-      "Open the literate Emacs configuration."
-      (interactive)
-      (find-file (expand-file-name "systemhalted.org" user-emacs-directory))
-      (olivetti-mode 1))
-    (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
+  (defun systemhalted/config-visit ()
+    "Open the literate Emacs configuration."
+    (interactive)
+    (find-file (expand-file-name "systemhalted.org" user-emacs-directory))
+    (olivetti-mode 1))
+  (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
 
-    (defun systemhalted/config-reload ()
-      "Save and reload the literate Emacs configuration."
-      (interactive)
-      (let* ((config-file (expand-file-name "systemhalted.org" user-emacs-directory))
-             (config-buffer (get-file-buffer config-file)))
-        (when (and config-buffer (buffer-modified-p config-buffer))
-          (with-current-buffer config-buffer
-            (save-buffer)))
-        (message "Reloading Emacs configuration...")
-        (org-babel-load-file config-file)
-        (message "Reloaded Emacs configuration.")))
-    (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
+  (defun systemhalted/config-reload ()
+    "Save and reload the literate Emacs configuration."
+    (interactive)
+    (let* ((config-file (expand-file-name "systemhalted.org" user-emacs-directory))
+           (config-buffer (get-file-buffer config-file)))
+      (when (and config-buffer (buffer-modified-p config-buffer))
+        (with-current-buffer config-buffer
+          (save-buffer)))
+      (message "Reloading Emacs configuration...")
+      (org-babel-load-file config-file)
+      (message "Reloaded Emacs configuration.")))
+  (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
 #+end_src
 
 ** Tutorial dispatcher
@@ -823,7 +827,9 @@ Three small finishing touches:
   no-op when a font isn't installed instead of leaving a missing-font
   warning.  The helper below runs for the current GUI frame and every
   later graphical frame, so =emacs --daemon= + =emacsclient -c= gets the
-  same fonts as a regular app launch.
+  same fonts as a regular app launch.  When =systemhalted/omarchy-owned-ui=
+  is set (Omarchy hosts), the default and variable-pitch faces are left to
+  the host and the helper only installs the Nerd Font fallback below.
 - *Nerd Font fallback.* Shell prompts (Powerlevel10k, Starship, etc.) and
   UI packages use glyphs from the Nerd Fonts Private Use Area that plain
   Fira Code doesn't carry.  =set-fontset-font= registers a Nerd Font on
@@ -836,13 +842,14 @@ Three small finishing touches:
   The =Mono= variant is essential: it forces Nerd Font glyphs to
   single-cell width so powerline separators align correctly in Ghostel
   and other terminal buffers.
-- *Theme.* Nord. =systemhalted/load-theme= disables every currently-enabled
-  theme first because repeated config reloads otherwise stack faces or
-  leave stale theme state behind. =nord-region-highlight 'frost= is the
-  one face customization — selection in the bluer "frost" palette rather
-  than the default muted gray.
+- *Theme.* No theme is auto-loaded at startup; the cycle list below
+  defaults to Nord via =systemhalted/load-theme=, which disables every
+  currently-enabled theme first because repeated config reloads otherwise
+  stack faces or leave stale theme state behind. =nord-region-highlight
+  'frost= is the one face customization — selection in the bluer "frost"
+  palette rather than the default muted gray.
 
-  Our extended theme system supports:
+  The theme system supports:
   - **Cycling themes**: Pressing =C-c t= (runs =systemhalted/cycle-theme=)
     cycles through Nord, Catppuccin (all four flavors: latte, frappé,
     macchiato, mocha), all =ef-themes=, and all =doom-themes=.
@@ -852,7 +859,20 @@ Three small finishing touches:
   - **Checking the active theme**: You can run =C-h v custom-enabled-themes RET=
     or evaluate =(car custom-enabled-themes)= via =M-:=.
 
+- *Host-owned UI.* =systemhalted/omarchy-owned-ui= is nil by default; set
+  it to =t= in =~/.config/emacs/init.el= (before this config loads) on a
+  host that owns the Emacs look, such as Omarchy.  The config then skips
+  its own default and variable-pitch fonts and any startup theme so the
+  host's theme and font drive Emacs, while the Nerd Font fallback and the
+  manual =C-c t= / =C-c T= commands keep working as an override.
+
 #+begin_src emacs-lisp
+  (defvar systemhalted/omarchy-owned-ui nil
+    "When non-nil, the host system (Omarchy) owns Emacs UI styling.
+  The config then skips setting its own default and variable-pitch fonts;
+  the startup theme is deferred regardless. Set this in
+  ~/.config/emacs/init.el before loading this config.")
+
   (with-eval-after-load 'dired
     (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
 
@@ -878,12 +898,13 @@ Three small finishing touches:
     (let ((frame (or frame (selected-frame))))
       (when (display-graphic-p frame)
         (with-selected-frame frame
-          (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
-                                     systemhalted/gui-default-font-candidates)))
-            (when mono-font
-              (set-face-attribute 'default frame :font mono-font :height 150)))
-          (when (find-font (font-spec :name "Cantarell"))
-            (set-face-attribute 'variable-pitch frame :font "Cantarell" :height 150))
+          (unless (bound-and-true-p systemhalted/omarchy-owned-ui)
+            (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                                       systemhalted/gui-default-font-candidates)))
+              (when mono-font
+                (set-face-attribute 'default frame :font mono-font :height 150)))
+            (when (find-font (font-spec :name "Cantarell"))
+              (set-face-attribute 'variable-pitch frame :font "Cantarell" :height 150)))
 
           ;; Register on both the default fontset (t, inherited by future
           ;; frames) AND the current frame's fontset (nil) so the Nerd Font
@@ -959,7 +980,7 @@ renders them.  Ligatures are enabled globally — this covers
         (use-package catppuccin-theme
           :ensure t
           :config
-  	(systemhalted/load-theme 'catppuccin-macchiato))
+  	:defer t)
 
         (use-package doom-themes
           :ensure t

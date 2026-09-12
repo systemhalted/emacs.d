@@ -34,6 +34,27 @@ directory, wrong symlink, or dangling symlink already exists, it refuses to
 replace it.  Move the old configuration aside explicitly and rerun the script.
 A repository cloned directly as =~/.emacs.d= is detected and left unchanged.
 
+* Running under Omarchy
+
+On [[https://omarchy.org/][Omarchy]] systems the desktop owns the Emacs look, so this config is
+driven through =~/.config/emacs/init.el= instead of a home-directory
+symlink, leaving Omarchy's theme and font integration (and its file
+watchers) in charge:
+
+- =user-emacs-directory= is pointed at this repository before =init.el=
+  loads, so runtime commands (=C-c e=, =C-c r=) and state directories
+  (=elpa/=, =var/=, =backups/=) resolve here as if the repo were
+  =~/.emacs.d=.
+- =early-init.el= is symlinked into the home config directory so it runs
+  before package activation.
+- =systemhalted/omarchy-owned-ui= is set to =t=, so the config defers its
+  default and variable-pitch fonts (and any startup theme) to Omarchy;
+  =C-c t= and =C-c T= still work as a manual override until the Omarchy
+  theme changes again.
+
+The hook-based =./link-home.sh= install is unaffected and remains the
+setup on non-Omarchy machines.
+
 * Organicely
 
 Org is a notes-only second brain under =~/organicely/=—not a task manager.
