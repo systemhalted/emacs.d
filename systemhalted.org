@@ -2525,13 +2525,16 @@ The =:config= block wires the second-brain flow:
   =systemhalted/refile-note=, which moves a note's file into a chosen directory,
   so there are no =org-refile-targets= to maintain.
 
-URL links open in EWW, and only from Org buffers:
+URL links stay EWW-first, and only from Org buffers:
 =systemhalted/org-eww-links= sets =browse-url-browser-function=
 buffer-locally on =org-mode-hook=, so magit, help, and every other buffer
-keep the system browser. When a page needs a real browser, =C-c o=
-(=systemhalted/org-open-in-system-browser=) opens the link at point through
-=browse-url-secondary-browser-function= instead; inside an EWW buffer, =&=
-does the same for the page being read.
+keep the system browser. Ordinary pages still open in EWW; obvious PDF
+targets are handed to the PDF viewer directly, and URLs that only reveal
+themselves as PDFs after the HTTP response are caught by EWW's
+=application/pdf= handler further down. When a page needs a real browser,
+=C-c o= (=systemhalted/org-open-in-system-browser=) opens the link at point
+through =browse-url-secondary-browser-function= instead; inside an EWW
+buffer, =&= does the same for the page being read.
 
 Then the hooks: =org-mode-hook= attaches the soft done-state warning.
 =systemhalted/ensure-org-files= is called directly from =:config=, which runs
@@ -2545,8 +2548,8 @@ Jupyter is opt-in via its own subsection below.
 
 #+begin_src emacs-lisp
   (defun systemhalted/org-eww-links ()
-    "Open links from this buffer in EWW; other buffers are unaffected."
-    (setq-local browse-url-browser-function #'eww-browse-url))
+    "Open links from this buffer in EWW, except PDFs which stay in Emacs."
+    (setq-local browse-url-browser-function #'systemhalted/org-browse-url))
 
   (defun systemhalted/org-open-in-system-browser ()
     "Open the link at point in the system browser instead of EWW."
@@ -2590,6 +2593,8 @@ Jupyter is opt-in via its own subsection below.
              (file+function ,(systemhalted/org-file "00-inbox/sources.org")
                             systemhalted/org-notes-target)
              "* %?\n%a")))
+    ;; PDFs are meant to be read inside Emacs, not handed to the OS viewer.
+    (setf (alist-get "\\.pdf\\'" org-file-apps nil nil #'equal) 'emacs)
     ;; Attach the soft done-state guard to any Organicely buffer.
     (add-hook 'org-mode-hook #'systemhalted/apply-org-soft-guard)
     ;; Runs as soon as Org first loads, so the area/section dirs always exist.
@@ -2760,6 +2765,154 @@ and sweep workflow is unaffected unless invoked explicitly."
     (mixed-pitch-mode (if enabling 1 -1))))
 
 (global-set-key (kbd "C-c B") #'systemhalted/book-view-toggle)
+#+end_src
+
+** PDF tools — in-Emacs PDF reading
+
+PDFs should stay inside Emacs whether they come from =C-x C-f=, an Org
+=file:= link, or a link followed from an EWW page. =pdf-tools= is the
+renderer: local =.pdf= files are claimed lazily through its loader, Org
+file links override Org's default "open PDFs externally" rule, and EWW's
+=application/pdf= handler is replaced with one that writes the downloaded
+bytes to a disposable local file and revisits that file in =pdf-view-mode=.
+
+That disposable copy lives under =temporary-file-directory= by default
+(customizable below) and is deleted when the PDF buffer is killed. If a
+downloaded PDF turns out to be worth keeping, =C-x C-w= writes it to a
+permanent location.
+
+#+begin_src sh
+# Native dependencies for pdf-tools' epdfinfo helper:
+# macOS, MacPorts:   sudo port install poppler automake pkgconfig
+# macOS, Homebrew:   brew install poppler automake pkgconf
+# Fedora:            sudo dnf install poppler-glib-devel automake pkgconf-pkg-config
+# Ubuntu / Debian:   sudo apt install libpoppler-glib-dev automake pkg-config
+#
+# Then in Emacs, once per machine (and again after a poppler upgrade):
+# M-x pdf-tools-install
+#+end_src
+
+The Lisp package installs straight from GitHub through =package-vc=.
+The =:mode= / =:magic= entries below keep startup fast by leaving
+=pdf-tools= unloaded until the first PDF buffer is visited.
+
+#+begin_src emacs-lisp
+(require 'url-handlers)
+(require 'url-parse)
+
+(defcustom systemhalted/pdf-temp-directory temporary-file-directory
+  "Directory for temporary PDFs downloaded for in-Emacs reading."
+  :type 'directory
+  :group 'systemhalted)
+
+(defconst systemhalted/pdf-url-regexp "\\.pdf\\(?:[?#].*\\)?\\'"
+  "Regexp matching URLs that explicitly end in a PDF filename.")
+
+(defvar-local systemhalted/pdf-temp-file nil
+  "Temporary PDF backing the current buffer, deleted when the buffer is killed.")
+
+(defun systemhalted/pdf-url-p (url)
+  "Return non-nil when URL explicitly names a PDF file."
+  (and (stringp url)
+       (let ((case-fold-search t))
+         (string-match-p systemhalted/pdf-url-regexp url))))
+
+(defun systemhalted/pdf--delete-file-if-present (file)
+  "Delete FILE when it exists."
+  (when (and (stringp file)
+             (file-exists-p file))
+    (delete-file file)))
+
+(defun systemhalted/pdf--delete-temp-file ()
+  "Delete the temporary PDF backing the current buffer, if any."
+  (systemhalted/pdf--delete-file-if-present systemhalted/pdf-temp-file))
+
+(defun systemhalted/pdf--url-filename (url)
+  "Return a best-effort filename for URL."
+  (let* ((path (if (stringp url)
+                   (url-filename (url-generic-parse-url url))
+                 ""))
+         (name (file-name-nondirectory path)))
+    (if (string= name "") "download.pdf" name)))
+
+(defun systemhalted/pdf--make-temp-file (&optional hint)
+  "Create a temporary PDF path, optionally seeded from HINT."
+  (let* ((dir (file-name-as-directory
+               (expand-file-name systemhalted/pdf-temp-directory)))
+         (name (file-name-nondirectory (or hint "download.pdf")))
+         (name (if (string= name "") "download.pdf" name))
+         (stem (replace-regexp-in-string
+                "[^[:alnum:]]+"
+                "-"
+                (file-name-base name)))
+         (stem (if (string= stem "") "download" stem)))
+    (make-directory dir t)
+    (make-temp-file (expand-file-name (concat "systemhalted-" stem "-") dir)
+                    nil
+                    ".pdf")))
+
+(defun systemhalted/pdf--visit-temporary-file (file &optional new-window)
+  "Visit temporary PDF FILE and delete it when its buffer is killed.
+If NEW-WINDOW is non-nil, display the buffer in another window."
+  (let ((buffer (find-file-noselect file)))
+    (with-current-buffer buffer
+      (setq-local systemhalted/pdf-temp-file file)
+      (add-hook 'kill-buffer-hook #'systemhalted/pdf--delete-temp-file nil t))
+    (if new-window
+        (pop-to-buffer buffer)
+      (pop-to-buffer-same-window buffer))
+    buffer))
+
+(defun systemhalted/pdf-open-url (url &optional new-window)
+  "Download PDF URL to a temporary file and open it in Emacs.
+If NEW-WINDOW is non-nil, display the PDF in another window."
+  (interactive (browse-url-interactive-arg "PDF URL: "))
+  (let ((temp-file (systemhalted/pdf--make-temp-file
+                    (systemhalted/pdf--url-filename url)))
+        buffer)
+    (unwind-protect
+        (progn
+          (url-copy-file url temp-file t)
+          (setq buffer
+                (systemhalted/pdf--visit-temporary-file temp-file new-window)))
+      (unless buffer
+        (systemhalted/pdf--delete-file-if-present temp-file)))
+    buffer))
+
+(defun systemhalted/org-browse-url (url &optional new-window)
+  "Open URL in EWW, except that obvious PDFs stay in Emacs.
+If NEW-WINDOW is non-nil, display the target in another window."
+  (if (systemhalted/pdf-url-p url)
+      (systemhalted/pdf-open-url url new-window)
+    (eww-browse-url url new-window)))
+
+(defun systemhalted/eww-display-pdf ()
+  "Open the current EWW PDF response in Emacs."
+  (let ((temp-file (systemhalted/pdf--make-temp-file
+                    (systemhalted/pdf--url-filename
+                     (plist-get eww-data :url))))
+        (coding-system-for-write 'no-conversion)
+        buffer)
+    (unwind-protect
+        (progn
+          (write-region (point) (point-max) temp-file nil 'silent)
+          (setq buffer (systemhalted/pdf--visit-temporary-file temp-file)))
+      (unless buffer
+        (systemhalted/pdf--delete-file-if-present temp-file)))
+    buffer))
+
+(with-eval-after-load 'eww
+  (advice-remove 'eww-display-pdf #'systemhalted/eww-display-pdf)
+  (advice-add 'eww-display-pdf :override #'systemhalted/eww-display-pdf))
+
+(use-package pdf-tools
+  :vc (:url "https://github.com/vedang/pdf-tools" :rev :newest)
+  :defer t
+  :commands (pdf-tools-install pdf-view-mode)
+  :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
+  :magic ("%PDF" . pdf-view-mode)
+  :config
+  (setq-default pdf-view-display-size 'fit-page))
 #+end_src
 
 ** Wordwise — Kindle-style inline vocabulary hints
@@ -4462,10 +4615,10 @@ gitignored.
 Three layers: AUCTeX for editing and compilation, =auctex-latexmk= so
 =latexmk= drives the build (handling cross-reference and bibliography
 reruns automatically), and RefTeX for label / reference / citation
-completion. The compiled PDF opens in the OS default viewer instead of
-=pdf-tools= — fast to install, enough for the edit → compile → read →
-save loop. Org's PDF export is rerouted through the same =latexmk=
-command at the end of the section.
+completion. The compiled PDF opens in =pdf-tools= inside Emacs, keeping
+the edit → compile → read loop in one place and letting SyncTeX land in
+the actual PDF buffer. Org's PDF export is rerouted through the same
+=latexmk= command at the end of the section.
 
 ** Installation — TeX distribution
 
@@ -4481,11 +4634,11 @@ is preferred so missing-package chasing never blocks a build.
 # Fedora:            sudo dnf install texlive-scheme-full latexmk
 # Ubuntu / Debian:   sudo apt install texlive-full latexmk
 
-# Optional later: pdf-tools for in-Emacs PDF viewing with SyncTeX.
-# macOS, MacPorts:   sudo port install poppler automake
-# macOS, Homebrew:   brew install poppler automake
-# Fedora:            sudo dnf install poppler-glib-devel automake
-# Ubuntu / Debian:   sudo apt install libpoppler-glib-dev automake
+# pdf-tools native dependencies (shared with the reading section above):
+# macOS, MacPorts:   sudo port install poppler automake pkgconfig
+# macOS, Homebrew:   brew install poppler automake pkgconf
+# Fedora:            sudo dnf install poppler-glib-devel automake pkgconf-pkg-config
+# Ubuntu / Debian:   sudo apt install libpoppler-glib-dev automake pkg-config
 # Then in Emacs: M-x pdf-tools-install
 #+end_src
 
@@ -4523,12 +4676,9 @@ The custom settings:
   =LatexMk= command (registered by =auctex-latexmk= in the next
   subsection) instead of plain =pdflatex=.
 
-The =:config= block sets up the PDF viewer. On macOS, =open -a
-Preview.app= launches Preview; on Linux/BSD, =xdg-open= dispatches to
-whatever the desktop has registered for =application/pdf= (Evince on
-GNOME, Okular on KDE, Atril on MATE, etc.). Switching to =pdf-tools=
-later is a matter of installing it (see the shell block above) and
-changing this selection to ='((output-pdf "PDF Tools"))=.
+The =:config= block selects AUCTeX's built-in =PDF Tools= viewer entry.
+AUCTeX already knows how to drive =pdf-tools= for SyncTeX, so only the
+selection needs changing here.
 
 #+begin_src emacs-lisp
 (use-package tex
@@ -4547,16 +4697,9 @@ changing this selection to ='((output-pdf "PDF Tools"))=.
   ;; latexmk handles reruns for refs/bib/TOC; auctex-latexmk registers it.
   (TeX-command-default "LatexMk")
   :config
-  ;; Open the compiled PDF in the OS's default viewer.
-  ;; macOS:        `open -a Preview.app' launches Preview.
-  ;; Linux/BSD:    `xdg-open' dispatches to Evince/Okular/Atril/etc.
-  ;; To switch to in-Emacs viewing later, install pdf-tools (see shell
-  ;; block above) and change the selection to '((output-pdf "PDF Tools")).
-  (if (eq system-type 'darwin)
-      (setq TeX-view-program-selection '((output-pdf "Preview"))
-            TeX-view-program-list      '(("Preview" "open -a Preview.app %o")))
-    (setq TeX-view-program-selection '((output-pdf "xdg-open"))
-          TeX-view-program-list      '(("xdg-open" "xdg-open %o")))))
+  ;; AUCTeX ships a `PDF Tools' viewer entry; selecting it enables
+  ;; in-Emacs viewing and SyncTeX jumps without any OS-specific shelling out.
+  (setq TeX-view-program-selection '((output-pdf "PDF Tools"))))
 #+end_src
 
 ** AUCTeX-latexmk — robust build driver
@@ -4648,12 +4791,10 @@ Day-to-day workflow inside a =.tex= buffer:
 *Producing a PDF.* Press =C-c C-c=. AUCTeX prompts with =LatexMk= as
 the default command --- accept with =RET=. The =*compilation*= window
 shows latexmk's output; on success, =C-c C-v= opens the resulting PDF
-in the OS's default viewer (Preview.app on macOS; whatever GNOME / KDE
-/ etc. has registered for =application/pdf= on Linux --- typically
-Evince, Okular, or Atril). The PDF lives next to the =.tex= source (or
-under the directory set in a =% !TeX output-directory= magic comment,
-if any). Save-a-copy keys differ per app: =Cmd-S= in Preview, =Ctrl-S=
-in Evince / Okular / Atril --- that is "downloading" the PDF.
+inside Emacs through =pdf-tools=. The PDF lives next to the =.tex=
+source (or under the directory set in a =% !TeX output-directory=
+magic comment, if any). If that PDF should become a second permanent
+copy elsewhere, use =C-x C-w= from the PDF buffer.
 
 *Inline previews of math.* Place point inside any math environment
 (e.g., between the =$= delimiters of =$x^2 + y^2 = z^2$=) and press
@@ -4691,12 +4832,12 @@ in one shot.
   (=sudo port install texlive-<collection>= on macOS / MacPorts;
   =sudo dnf install texlive-<collection>= on Fedora; =sudo apt install
   texlive-<collection>= on Ubuntu).
-- /SyncTeX forward-search opens the PDF but does not jump to a
-  location./ Expected with system viewers --- Preview.app and most
-  Linux PDF readers (Evince, Atril, Okular under default settings)
-  don't honour SyncTeX forward-search reliably. Install =pdf-tools=
-  and switch =TeX-view-program-selection= to =PDF Tools= for true
-  bidirectional SyncTeX.
+- /=C-c C-v= says "PDF Tools are not available", or the first PDF visit
+  asks to build =epdfinfo= and then fails./ Install the native
+  dependencies from the PDF Tools shell block above and run
+  =M-x pdf-tools-install=. If it used to work and broke after a package
+  manager upgrade, rerun the same command so =epdfinfo= is rebuilt
+  against the new =poppler=.
 - /Inline preview =C-c C-p C-p= renders nothing or a blank box./
   =preview-latex= shells out to =dvipng= or =gs=. Both ship inside
   =texlive +full=; if previews come up empty, check
