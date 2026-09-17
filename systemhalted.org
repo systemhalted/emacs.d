@@ -262,7 +262,7 @@ Use after editing ~/.zshrc, installing a new SDKMAN candidate, etc."
 * Core Editing
 
 The editor baseline before any package loads: quiet startup, runtime files
-routed under =~/.emacs.d/=, fullscreen frames, line-number safety, an
+routed under =~/.emacs.d/=, maximized frames, line-number safety, an
 emergency UI reset for runaway sessions, and the commands that make this
 literate file easy to edit from inside Emacs.
 
@@ -338,41 +338,43 @@ all surface together under =M-x customize-group RET systemhalted=. The three
 frame is drawn — chrome that is dead weight when navigation is keyboard-first.
 
 #+begin_src emacs-lisp
-  (defgroup systemhalted nil
-    "Personal Emacs configuration."
-    :group 'convenience)
+    (defgroup systemhalted nil
+      "Personal Emacs configuration."
+      :group 'convenience)
 
-  ;; UI chrome (menu bar, tool bar, scroll bars) is suppressed in
-  ;; early-init.el so the first frame never renders them.  The mode
-  ;; calls below remain as a safety net for frames created via
-  ;; emacsclient or make-frame that might inherit a different alist.
-  (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
-  (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
-  (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+    ;; UI chrome (menu bar, tool bar, scroll bars) is suppressed in
+    ;; early-init.el so the first frame never renders them.  The mode
+    ;; calls below remain as a safety net for frames created via
+    ;; emacsclient or make-frame that might inherit a different alist.
+    (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
+    (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
+    (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1)
+  	(set-frame-parameter nil 'undecorated t)
+(add-to-list 'default-frame-alist '(undecorated . t)))
 #+end_src
 
-** Fullscreen frames
+** Maximized frames
 
-Both the initial frame and any subsequent frames open fullscreen. The
-portable bit is =(fullscreen . fullboth)= in the frame alists, which works
-under X11 and PGTK. =ns-use-native-fullscreen= is the macOS-only toggle that
-makes Cmd-Ctrl-F use the system's native fullscreen animation rather than a
-maximized-but-windowed state; setting it is wrapped in a darwin check
-because the variable is unbound on Linux.  When
+Both the initial frame and any subsequent frames open maximized rather than
+true fullscreen. The portable bit is =(fullscreen . maximized)= in the frame
+alists, which works under X11, NS, and PGTK. =ns-use-native-fullscreen=
+remains a separate macOS-only toggle for Cmd-Ctrl-F, so manual fullscreen
+still uses the system animation when requested. Setting it is wrapped in a
+darwin check because the variable is unbound on Linux. When
 =systemhalted/omarchy-owned-ui= is set (Omarchy hosts), this block is
-skipped so the tiling window manager controls fullscreen and window
+skipped so the tiling window manager controls startup geometry and window
 placement.
 
 #+begin_src emacs-lisp
   (unless (bound-and-true-p systemhalted/omarchy-owned-ui)
     (when (display-graphic-p)
       ;; ns-use-native-fullscreen is the NeXTSTEP (macOS) fullscreen mode
-      ;; toggle and is unbound on Linux; (fullscreen . fullboth) below is
-      ;; the portable bit that handles X11/PGTK.
+      ;; toggle and is unbound on Linux; (fullscreen . maximized) below is
+      ;; the portable startup geometry that handles NS/X11/PGTK.
       (when (eq system-type 'darwin)
         (setq ns-use-native-fullscreen t)))
-    (add-to-list 'initial-frame-alist '(fullscreen . fullboth))
-    (add-to-list 'default-frame-alist '(fullscreen . fullboth)))
+    (add-to-list 'initial-frame-alist '(fullscreen . maximized))
+    (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 #+end_src
 
 ** Line numbers, gated to safe buffers
