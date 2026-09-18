@@ -12,9 +12,9 @@
 
 ** Custom Settings
 
-Let's protect the startup file from changes made through Emacs' `Customize` interface.
+Let's protect the startup file from changes made through Emacs' =Customize= interface.
 By default, it can write settings into initialization file. However, we want those saved
-separately. The `custom.el` will be created only when `Customize` is used.
+separately. The =custom.el= will be created only when =Customize= is used.
 
 #+begin_src emacs-lisp :tangle yes
   (setq custom-file
@@ -70,4 +70,21 @@ Emacs' existing matching system.
     :ensure t
     :config
     (vertico-mode 1))
+#+end_src
+
+** Orderless
+
+[[https://github.com/oantolin/orderless#overview][Orderless]] matches space-separated pieces in any order. For example,
+=function describe= can match =describe-function=.
+
+We make orderless as the completion style and basic provides a fallback for completion
+tables that need it. Selecting the style enables its use.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package orderless
+    :ensure t
+    :custom
+    (completion-styles '(orderless basic))
+     (completion-category-overrides
+      '((file (styles basic partial-completion)))))
 #+end_src
