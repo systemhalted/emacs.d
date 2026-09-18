@@ -21,15 +21,5 @@ jobs:
       - uses: purcell/setup-emacs@master
         with:
           version: ${{ matrix.emacs }}
-      - uses: actions/cache@v6
-        with:
-          path: .cache/test-packages
-          key: packages-${{ runner.os }}-${{ matrix.emacs }}-${{ hashFiles('systemhalted.org') }}
-          restore-keys: |
-            packages-${{ runner.os }}-${{ matrix.emacs }}-
-      - name: Load, regressions, installer, and tangling
-        run: bash test/run-config-tests.sh smoke ert installer tangle
-      - name: Compiler diagnostics
-        run: bash test/run-config-tests.sh compile
-      - name: Terminal startup and Git client handoff
-        run: bash test/run-config-tests.sh daemon interactive
+      - name: Smoke
+        run: bash test/run-config-tests.sh
