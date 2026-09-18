@@ -2,30 +2,43 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository
+## Repository and source of truth
 
-Personal Emacs configuration. The repo *is* `~/.emacs.d`, so changes here directly affect the user's running Emacs.
+This is a personal literate Emacs configuration. Read `AGENTS.md` for repository
+rules and `README.org` for installation and verification.
 
-This config runs on macOS, Fedora, and Ubuntu — all three are first-class targets. Guard platform-specific code with `(eq system-type 'darwin)` (or equivalent), and when documenting external-tool installation, cover MacPorts and Homebrew for macOS plus `dnf` (Fedora) and `apt` (Ubuntu/Debian). Don't introduce paths like `/Library/...` without a Linux counterpart.
+`early-init.el` owns pre-init package activation and frame settings. `init.el`
+loads the current tangle or regenerates it from `systemhalted.org`. Edit the Org
+source; `systemhalted.el` is generated and ignored. Keep explanations beside
+source blocks. `C-c e` visits the folded configuration overview; `C-c r` reloads.
 
-## Source of truth: edit the Org file, not the `.el`
+The Org file is grouped by subsystem. Environment import runs before local
+checkout selection; SDKMAN precedes LSP integration; Projectile precedes
+Dashboard. Omarchy may own fonts/themes through an external home-config shim.
+Preserve that ownership and resolve runtime paths through `user-emacs-directory`.
 
-`init.el` is a 3-line shim that calls `(org-babel-load-file "~/.emacs.d/systemhalted.org")`. All real configuration lives in `systemhalted.org` as literate Emacs Lisp blocks. `systemhalted.el` is **generated output** (gitignored) — never edit it by hand; edits will be overwritten on the next reload/tangle.
+macOS, Fedora, Ubuntu, and Omarchy Linux installations remain supported. Guard
+platform-specific code. External-tool installation notes should cover MacPorts
+and Homebrew, plus `dnf` and `apt` where applicable.
 
-When making config changes:
-- Edit `systemhalted.org`.
-- Keep the literate prose near each `#+begin_src emacs-lisp` block; the prose explains *why* and is part of the contract.
-- Inside Emacs, `C-c r` (`systemhalted/config-reload`) saves and re-tangles+loads the file. `C-c e` jumps to it.
+## Verification
 
-Useful batch commands:
-- `emacs --batch -Q -l org --eval '(org-babel-tangle-file "systemhalted.org")'` — regenerate `systemhalted.el`.
-- `emacs --batch -Q -l init.el --eval '(message "init loaded")'` — smoke-test that the config loads.
-- `emacs --debug-init` — interactive startup with the debugger enabled.
+- `bash test/run-config-tests.sh smoke ert installer tangle compile`
+- `bash test/run-config-tests.sh daemon interactive` (Linux/util-linux)
+- `emacs --debug-init` for your actual GUI/host installation.
 
-Regression tests live in `test/`:
-- `emacs --batch -Q -l init.el -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit` — ERT suite for the config's own functions (the test file redirects `$HOME` to a temp directory before loading Org, so it never touches `~/organicely`).
-- `bash test/link-home-test.sh` — isolated cases for the installer script.
-- `emacs --batch -Q -l init.el --eval '(systemhalted/config--assert-no-package-errors)' --eval '(message "init loaded")'` — strict smoke test; fails on any recorded `use-package` install/load error.
+The runner copies packages/configuration and isolates HOME before init loads,
+including fresh tangles. ERT rejects direct unisolated execution. Test package
+state stays in ignored `.cache/test-packages/`; never commit it. Compiler
+warnings are informational; compilation errors fail. CI is configured for
+Emacs 30.2 and the Emacs 31 release branch (`release-snapshot`).
+
+Project discovery runs only on explicit request under `~/Work`; startup uses
+Projectile's saved list. Snippets activate in programming and Org buffers.
+Git input recovery is restricted to finish/abort keys in active Git client
+editor buffers, preserving pending input. Register advice and timers safely
+across reloads. Package retries apply only to missing configured archive
+artifacts; unrelated errors must propagate.
 
 ## Naming and style
 
@@ -55,7 +68,7 @@ Other notable bindings established in the config: `C-c r` reload, `C-c e` visit 
 
 Language intelligence is centralized on `lsp-mode` + `lsp-ui`. Older language-specific stacks (Elpy, Tide, company-*) were removed deliberately — do not reintroduce them. The current division of labor:
 
-- `lsp-mode` — protocol, completion provider is `:capf`.
+- `lsp-mode` — protocol; CAPF completion uses `:none` to avoid company auto-enabling.
 - `corfu` — in-buffer completion UI (not company).
 - `flycheck` — diagnostics in `prog-mode`.
 - `yasnippet` + `yasnippet-snippets` — snippets.

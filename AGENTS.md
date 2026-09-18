@@ -2,12 +2,13 @@
 
 ## Project Structure & Module Organization
 
-This repository is a personal Emacs configuration. `init.el` is the entry point: it evaluates `systemhalted.org` with `org-babel-load-file`. Treat `systemhalted.org` as the primary configuration source; `systemhalted.el` is generated output and should not be edited by hand. `var/custom.el` stores Emacs Custom state. `snippets/` contains Yasnippet snippets. Package and runtime state such as `elpa/`, `eclipse.jdt.ls/`, `backups/`, `auto-save-list/`, `transient/`, `url/`, and `history` should usually be left untouched.
+This repository is a personal Emacs configuration. `early-init.el` owns pre-init package activation and frame settings. `init.el` loads `systemhalted.el` when current and otherwise tangles and loads `systemhalted.org`. Treat `systemhalted.org` as the primary configuration source; `systemhalted.el` is generated output and should not be edited by hand. `var/custom.el` stores Emacs Custom state. `snippets/` contains Yasnippet snippets. Package and runtime state such as `elpa/`, `eclipse.jdt.ls/`, `backups/`, `auto-save-list/`, `transient/`, `url/`, and `history` should usually be left untouched.
 
 ## Build, Test, and Development Commands
 
 - `emacs --batch -Q -l org --eval '(org-babel-tangle-file "systemhalted.org")'`: regenerate tangled Emacs Lisp from the literate Org config.
-- `emacs --batch -Q -l init.el --eval '(systemhalted/config--assert-no-package-errors)' --eval '(message "init loaded")'`: smoke-test the configuration and fail on any `use-package` error.
+- `bash test/run-config-tests.sh smoke ert installer tangle compile`: strict load, ERT, installer, deterministic tangling, and compiler diagnostics in an isolated copy.
+- `bash test/run-config-tests.sh daemon interactive`: isolated terminal client handoff and `--debug-init` startup checks (Linux/util-linux).
 - `emacs --debug-init`: start Emacs interactively with startup debugging enabled.
 - `git status --short`: check for generated or runtime files before committing.
 
@@ -52,7 +53,13 @@ Minibuffer completion: `vertico` + `orderless` + `marginalia` + `consult` + `cor
 
 ## Testing Guidelines
 
-Focused regression tests live in `test/systemhalted-test.el`; run them with `emacs --batch -Q -l init.el -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit`. Run `bash test/link-home-test.sh` for the isolated installer cases. For configuration changes, run the strict batch load command above and then start Emacs with `--debug-init`. For Org Babel edits, retangle `systemhalted.org` and inspect the generated diff if `systemhalted.el` is tracked in your branch. Standalone package internals such as Wordwise are tested in their own repositories, not here.
+Focused regressions live in `test/systemhalted-test.el`. Run them through `bash test/run-config-tests.sh ert`, which isolates HOME before init can load Org. The test suite rejects direct unisolated invocation. `bash test/link-home-test.sh` runs standalone isolated installer cases. Configuration changes require the strict isolated load, relevant ERT tests, and terminal startup/client checks; perform GUI and macOS host checks manually where available. Generated Lisp is ignored; compare fresh tangles rather than committing it. Standalone package internals such as Wordwise are tested in their own repositories, not here.
+
+## Architecture and Ownership
+
+Keep one literate file organized by subsystem; preserve tutorial heading text for `C-h T`. Environment import precedes personal-checkout selection, SDKMAN precedes shared LSP integration, and Projectile precedes Dashboard. Omarchy hosts set `systemhalted/omarchy-owned-ui` and repoint `user-emacs-directory` in their external shim; do not edit desktop configuration as part of a repository refactor.
+
+Project discovery is manual (`systemhalted/discover-projects`), defaulting to `~/Work`; startup uses Projectile's saved list without recursive traversal. Snippets activate in programming and Org buffers. Git recovery handles only finish/abort keys in active server-client Git editor buffers and preserves pending input. Keep advice and timers safe across reloads. Package-install retries apply only to missing configured archive artifacts, never unrelated errors.
 
 ## Commit & Pull Request Guidelines
 

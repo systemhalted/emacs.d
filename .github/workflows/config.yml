@@ -1,0 +1,35 @@
+name: Emacs configuration
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # setup-emacs exposes the Emacs 31 branch as release-snapshot.
+        emacs: ['30.2', release-snapshot]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs }}
+      - uses: actions/cache@v6
+        with:
+          path: .cache/test-packages
+          key: packages-${{ runner.os }}-${{ matrix.emacs }}-${{ hashFiles('systemhalted.org') }}
+          restore-keys: |
+            packages-${{ runner.os }}-${{ matrix.emacs }}-
+      - name: Load, regressions, installer, and tangling
+        run: bash test/run-config-tests.sh smoke ert installer tangle
+      - name: Compiler diagnostics
+        run: bash test/run-config-tests.sh compile
+      - name: Terminal startup and Git client handoff
+        run: bash test/run-config-tests.sh daemon interactive
