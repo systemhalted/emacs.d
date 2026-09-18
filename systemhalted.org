@@ -45,6 +45,13 @@ separately. The =custom.el= will be created only when =Customize= is used.
   (require 'use-package)
 #+end_src
 
+** Files
+Do not make backup copies like =notes.org~=
+
+#+begin_src emacs-lisp :tangle yes
+  (setq make-backup-files nil)
+#+end_src
+
 
 * Interaction
 
