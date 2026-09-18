@@ -478,8 +478,9 @@ Terminal Emacs (=emacs -nw= inside Terminal.app, iTerm2, GNOME Terminal,
 Alacritty, etc.) talks to no display server and therefore cannot reach the
 host clipboard without help. =xclip= bridges the gap: on macOS it shells out
 to =pbcopy= / =pbpaste=, on X11 to =xclip= or =xsel=, on Wayland to =wl-copy=
-/ =wl-paste=. It is loaded only when the starting frame is non-graphical so
-it does not displace the native bridge in windowed GUI Emacs.
+/ =wl-paste=. It activates only in interactive, non-graphical sessions when
+its selected clipboard executable is available. Batch runs and hosts without
+that tool keep Emacs's normal kill ring.
 
 #+begin_src emacs-lisp
 (setq select-enable-clipboard t
@@ -490,9 +491,10 @@ it does not displace the native bridge in windowed GUI Emacs.
 
 (use-package xclip
   :ensure t
-  :if (not (display-graphic-p))
+  :if (and (not noninteractive) (not (display-graphic-p)))
   :config
-  (xclip-mode 1))
+  (when (executable-find xclip-program)
+    (xclip-mode 1)))
 #+end_src
 
 ** Text Manipulation
