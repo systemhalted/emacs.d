@@ -281,7 +281,8 @@ One =setq= block establishes the boring baseline; the clusters it covers:
   can't take down the session.
 - *Backups routed locally.* =backup-directory-alist= sends every =~filename=
   to =~/.emacs.d/backups/= and =auto-save-file-name-transforms= sends
-  =#filename#= to =~/.emacs.d/auto-save-list/=. The repository's
+  =#filename#= to =~/.emacs.d/auto-save-list/=. Both directories are created
+  at load, so auto-save cannot fail on a fresh clone. The repository's
   =.gitignore= excludes both, keeping the working tree clean.
 - *Lock files off.* =create-lockfiles nil= drops the =.#filename= symlinks
   Emacs writes next to a buffer on first edit. This is a single-user setup
@@ -320,6 +321,12 @@ and default I/O.
         kept-new-versions 3
         kept-old-versions 2
         version-control t)
+
+  ;; Create the local state dirs so auto-save never fails on a fresh
+  ;; clone or after the state directories are wiped.
+  (dolist (dir (list (expand-file-name "backups/" user-emacs-directory)
+                     (expand-file-name "auto-save-list/" user-emacs-directory)))
+    (make-directory dir t))
 
   (setq use-short-answers t)
 
@@ -782,7 +789,7 @@ to the source remain visible without losing place.  Quit with `q'."
                                   nil t))
          (heading (cdr (assoc choice systemhalted/tutorials)))
          (buf-name (format "*Tutorial: %s*" choice)))
-    (if-let ((existing (get-buffer buf-name)))
+    (if-let* ((existing (get-buffer buf-name)))
         (pop-to-buffer existing)
       (let* ((org-file (expand-file-name "systemhalted.org" user-emacs-directory))
              (base (find-file-noselect org-file))
@@ -1144,7 +1151,6 @@ Single-key shortcuts in the dashboard buffer:
          "Tutorials [t]" "Browse tutorials and package docs"
          (lambda (&rest _) (systemhalted/tutorial))))))
     :config
-    (dashboard-setup-startup-hook)
     (setq initial-buffer-choice #'dashboard-open)
     :bind
     (:map dashboard-mode-map
@@ -1608,10 +1614,13 @@ Setting =prefix-help-command= to =embark-prefix-help-command= replaces the
 default =C-h-after-prefix= help with a Vertico-rendered prompt: pressing
 =C-h= after =C-x= shows every =C-x= binding as a searchable list.
 
-The integration with Consult is built into Embark: =embark-export= from a
-=consult-line= or =consult-ripgrep= result produces an editable grep-mode
-buffer, and =consult-preview-at-point-mode= previews the underlying
-location as you move through an =embark-collect= buffer.
+- *Consult integration.* Embark's Consult glue moved to a separate
+  =embark-consult= package: =embark-consult-export= converts a
+  =consult-line= or =consult-ripgrep= result into an editable grep-mode
+  buffer, and =consult-preview-at-point-mode= previews the underlying
+  location as you move through an =embark-collect= buffer. Without
+  =embark-consult= installed, Embark warns at startup, so it is installed
+  alongside Embark here.
 
 #+begin_src emacs-lisp
 (use-package embark
@@ -1621,11 +1630,13 @@ location as you move through an =embark-collect= buffer.
    ("C-;"   . embark-dwim)
    ("C-h B" . embark-bindings))
   :custom
-  (prefix-help-command #'embark-prefix-help-command)
+  (prefix-help-command #'embark-prefix-help-command))
+
+(use-package embark-consult
+  :ensure t
+  :after (embark consult)
   :config
-  ;; Consult integration is built into embark; just enable the preview hook.
-  (with-eval-after-load 'consult
-    (add-hook 'embark-collect-mode-hook #'consult-preview-at-point-mode)))
+  (add-hook 'embark-collect-mode-hook #'consult-preview-at-point-mode))
 #+end_src
 
 ** Helpful — richer describe buffers
@@ -1800,7 +1811,7 @@ Common entry points (all under =C-c p=):
     (projectile-indexing-method 'alien)
     (projectile-sort-order 'recentf)
     :config
-    (defvar systemhalted/projects-root "~/Workspaces"
+    (defvar systemhalted/projects-root "~/Work"
       "Root directory under which every project is auto-registered with Projectile.")
 
     (defun systemhalted/discover-projects (&optional root visited)
@@ -3187,6 +3198,9 @@ stop you killing the buffer out from under =git=.
   :bind
   ("C-x g" . magit-status)
   :init
+  (defvar systemhalted/git-editor--preload-timer nil)
+  (when (timerp systemhalted/git-editor--preload-timer)
+    (cancel-timer systemhalted/git-editor--preload-timer))
   ;; Preload Git's editor machinery (`git-rebase' pulls in `magit',
   ;; `git-commit' and `with-editor').  Loading it lazily from `find-file'
   ;; instead would put ~0.7s of `require' inside the window where
@@ -3197,7 +3211,8 @@ stop you killing the buffer out from under =git=.
   ;; idle timer could ever fire.
   (if (daemonp)
       (require 'git-rebase)
-    (run-with-idle-timer 1 nil (lambda () (require 'git-rebase)))))
+    (setq systemhalted/git-editor--preload-timer
+          (run-with-idle-timer 1 nil (lambda () (require 'git-rebase))))))
 #+end_src
 
 Preloading is necessary but not sufficient: there is a second race that has
@@ -3213,26 +3228,47 @@ that just rejected it). On a warm daemon the window is a quarter of a
 second; on a cold start under load it stretches to seconds, which is
 exactly when muscle memory gets there first.
 
-The stale-map lookup cannot be un-latched from Lisp, but the swallowed
-keypress can be recovered: when =undefined= fires and the exact sequence
-*is* bound in the now-current buffer, push the keys back onto the input
-queue instead of beeping — the second read starts fresh and resolves
-against the right keymaps. Genuinely unbound keys still reach =undefined=
-and beep as before.
+Recovery is limited to finish and abort keys in Git buffers being edited for
+waiting server clients. The current binding must be the corresponding
+With-Editor command. Recovered keys precede pending input without discarding
+it, and the same failed recovery cannot replay indefinitely. Other buffers and
+keys retain Emacs' ordinary undefined-key behavior.
 
 #+begin_src emacs-lisp
+(defvar-local systemhalted/git-editor--replayed-keys nil
+  "Last key sequence recovered in this Git editor buffer.")
+
+(defun systemhalted/git-editor--clear-replay ()
+  "Allow future recovery after a successfully resolved command."
+  (unless (eq this-command 'undefined)
+    (setq systemhalted/git-editor--replayed-keys nil)))
+
+(defun systemhalted/git-editor--setup-replay ()
+  "Install recovery bookkeeping locally in With-Editor buffers."
+  (add-hook 'pre-command-hook #'systemhalted/git-editor--clear-replay nil t))
+
+(with-eval-after-load 'with-editor
+  (add-hook 'with-editor-mode-hook #'systemhalted/git-editor--setup-replay))
+
 (defun systemhalted/undefined-replay-bound-keys (orig-fun)
-  "Replay a key sequence that resolved against stale keymaps.
-Keys typed while emacsclient hands a file to the daemon are looked
-up in the buffer that was current before `server-switch-buffer'
-ran; when the sequence is bound in the buffer that is current by
-the time `undefined' executes, re-queue the keys instead of
-beeping."
-  (let ((keys (this-command-keys-vector)))
-    (if (and (length> keys 0) (key-binding keys))
-        (setq unread-command-events (listify-key-sequence keys))
+  "Recover Git client finish/abort keys looked up against stale keymaps.
+Call ORIG-FUN unchanged outside an active Git client editor."
+  (let* ((keys (this-command-keys-vector))
+         (expected (cond ((equal keys (kbd "C-c C-c")) 'with-editor-finish)
+                         ((equal keys (kbd "C-c C-k")) 'with-editor-cancel))))
+    (if (and expected
+             (bound-and-true-p server-buffer-clients)
+             (bound-and-true-p with-editor-mode)
+             (or (derived-mode-p 'git-rebase-mode)
+                 (bound-and-true-p git-commit-mode))
+             (eq (key-binding keys) expected)
+             (not (equal keys systemhalted/git-editor--replayed-keys)))
+        (setq systemhalted/git-editor--replayed-keys keys
+              unread-command-events
+              (append (listify-key-sequence keys) unread-command-events))
       (funcall orig-fun))))
 
+(advice-remove 'undefined #'systemhalted/undefined-replay-bound-keys)
 (advice-add 'undefined :around #'systemhalted/undefined-replay-bound-keys)
 #+end_src
 
@@ -3256,6 +3292,8 @@ with-editor guards the timer itself.
            (message (substitute-command-keys with-editor-usage-message))))))))
 
 (with-eval-after-load 'with-editor
+  (advice-remove 'with-editor-usage-message
+                 #'systemhalted/with-editor-usage-message--guarded)
   (advice-add 'with-editor-usage-message :override
               #'systemhalted/with-editor-usage-message--guarded))
 #+end_src
@@ -3425,8 +3463,12 @@ startup (~0.5 s saved).
   :ensure t
   :defer t
   :init
-  (add-hook 'emacs-startup-hook
-            (lambda () (run-with-idle-timer 1 nil #'yas-global-mode 1))))
+  ;; Clear the previous global setting when reloading an existing session.
+  (when (bound-and-true-p yas-global-mode)
+    (yas-global-mode -1))
+  :hook
+  ((prog-mode . yas-minor-mode)
+   (org-mode . yas-minor-mode)))
 
 (use-package yasnippet-snippets
   :ensure t

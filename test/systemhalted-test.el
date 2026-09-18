@@ -3,21 +3,11 @@
 (require 'cl-lib)
 (require 'ert)
 
-(defvar systemhalted-test--original-home (getenv "HOME")
-  "Real $HOME before the suite redirected it; see the test below.")
-
-(defvar systemhalted-test--org-preloaded (featurep 'org)
-  "Non-nil when init.el already loaded Org (a fresh retangle does).
-Then Org's :config ran against the real $HOME before this file could
-redirect it, and the hermeticity assertion below cannot apply.")
-
-;; Loading org fires the config's deferred :config, which scaffolds the
-;; Organicely tree under $HOME.  Point $HOME at a throwaway directory first
-;; (init.el has already loaded from the real one) so running the suite never
-;; writes into the user's notes tree.
-(setenv "HOME" (make-temp-file "systemhalted-test-home-" t))
+(unless (getenv "SYSTEMHALTED_TEST_ISOLATED")
+  (error "Run ERT through bash test/run-config-tests.sh ert (isolates HOME before init)"))
 
 (require 'org)
+(require 'eww)
 
 (ert-deftest systemhalted/package-install-refreshes-and-retries-once ()
   (let ((calls 0)
@@ -72,6 +62,7 @@ redirect it, and the hermeticity assertion below cannot apply.")
 
 (ert-deftest systemhalted/graphical-frame-fonts-apply-defaults-and-fallbacks ()
   (let ((frame (selected-frame))
+        (systemhalted/omarchy-owned-ui nil)
         face-calls
         fontset-calls)
     (cl-letf (((symbol-function 'display-graphic-p)
@@ -178,12 +169,11 @@ redirect it, and the hermeticity assertion below cannot apply.")
                    'demo))))
         (should (string-match-p "real cause" (cadr err)))))))
 
-(ert-deftest systemhalted/test-run-does-not-touch-real-home ()
-  (when systemhalted-test--org-preloaded
-    (ert-skip "init.el retangled and loaded Org before $HOME was redirected"))
-  (should-not
-   (string-prefix-p (file-name-as-directory systemhalted-test--original-home)
-                    org-directory)))
+(ert-deftest systemhalted/test-run-is-isolated-before-init ()
+  (should (getenv "SYSTEMHALTED_TEST_ISOLATED"))
+  (should (string-prefix-p (file-name-as-directory (getenv "HOME"))
+                          org-directory))
+  (should (file-in-directory-p custom-file user-emacs-directory)))
 
 (ert-deftest systemhalted/org-destination-validation ()
   (dolist (valid '("00-inbox" "20-personal/home" "30-learning/new section"))
@@ -377,6 +367,7 @@ redirect it, and the hermeticity assertion below cannot apply.")
           (insert "HTTP/1.1 200 OK\n\n%PDF-1.4\nhello\n")
           (goto-char (point-min))
           (search-forward "%PDF")
+          (goto-char (match-beginning 0))
           (let ((eww-data '(:url "https://example.com/paper.pdf")))
             (cl-letf (((symbol-function 'systemhalted/pdf--visit-temporary-file)
                        (lambda (path &optional _new-window)
@@ -424,38 +415,79 @@ redirect it, and the hermeticity assertion below cannot apply.")
        (equal "/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar"
               (systemhalted/lombok-jar-path))))))
 
-(ert-deftest systemhalted/undefined-replay-requeues-sequence-bound-now ()
-  "A sequence that is bound in the current buffer gets replayed, not beeped."
+(ert-deftest systemhalted/git-editor-recovery-preserves-pending-input ()
+  (dolist (key '("C-c C-c" "C-c C-k"))
+    (with-temp-buffer
+      (let* ((keys (kbd key))
+             (command (if (equal key "C-c C-c")
+                          'with-editor-finish 'with-editor-cancel))
+             (map (make-sparse-keymap))
+             (unread-command-events '(?x (t . ?y)))
+             orig-called)
+        (setq-local git-commit-mode t
+                    with-editor-mode t
+                    server-buffer-clients '(client))
+        (define-key map keys command)
+        (use-local-map map)
+        (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
+          (systemhalted/undefined-replay-bound-keys
+           (lambda () (setq orig-called t))))
+        (should-not orig-called)
+        (should (equal unread-command-events
+                       (append (listify-key-sequence keys) '(?x (t . ?y)))))))))
+
+(ert-deftest systemhalted/git-editor-recovery-ignores-other-contexts ()
+  (dolist (excluded '(ordinary-buffer no-client no-editor wrong-binding
+                     undefined-binding other-key))
+    (with-temp-buffer
+      (let* ((keys (kbd (if (eq excluded 'other-key) "C-c z" "C-c C-c")))
+             (map (make-sparse-keymap))
+             (unread-command-events '(?x))
+             orig-called)
+        (setq-local git-commit-mode (not (eq excluded 'ordinary-buffer))
+                    with-editor-mode (not (eq excluded 'no-editor))
+                    server-buffer-clients (unless (eq excluded 'no-client) '(client)))
+        (define-key map keys (pcase excluded
+                               ('wrong-binding #'ignore)
+                               ('undefined-binding #'undefined)
+                               (_ #'with-editor-finish)))
+        (use-local-map map)
+        (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
+          (systemhalted/undefined-replay-bound-keys
+           (lambda () (setq orig-called t))))
+        (should orig-called)
+        (should (equal unread-command-events '(?x)))))))
+
+(ert-deftest systemhalted/git-editor-recovery-does-not-loop ()
   (with-temp-buffer
-    (let ((map (make-sparse-keymap))
+    (let ((keys (kbd "C-c C-c"))
+          (map (make-sparse-keymap))
           (unread-command-events nil)
-          orig-called)
-      (define-key map (kbd "C-c C-c") #'ignore)
+          (calls 0))
+      (setq-local git-commit-mode t with-editor-mode t server-buffer-clients '(client))
+      (define-key map keys #'with-editor-finish)
       (use-local-map map)
-      (cl-letf (((symbol-function 'this-command-keys-vector)
-                 (lambda () (vconcat (kbd "C-c C-c")))))
-        (systemhalted/undefined-replay-bound-keys
-         (lambda () (setq orig-called t))))
-      (should-not orig-called)
-      (should (equal unread-command-events
-                     (listify-key-sequence (vconcat (kbd "C-c C-c"))))))))
+      (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
+        (dotimes (_ 2)
+          (systemhalted/undefined-replay-bound-keys
+           (lambda () (setq calls (1+ calls))))))
+      (should (= calls 1))
+      (should (equal unread-command-events (listify-key-sequence keys)))
+      (let ((this-command 'with-editor-finish))
+        (systemhalted/git-editor--clear-replay))
+      (should-not systemhalted/git-editor--replayed-keys))))
 
-(ert-deftest systemhalted/undefined-replay-leaves-unbound-sequence-alone ()
-  "A sequence unbound here still falls through to `undefined'."
+(ert-deftest systemhalted/snippets-are-scoped-to-code-and-org ()
+  (should-not (bound-and-true-p yas-global-mode))
   (with-temp-buffer
-    (fundamental-mode)
-    (let ((unread-command-events nil)
-          orig-called)
-      (cl-letf (((symbol-function 'this-command-keys-vector)
-                 (lambda () (vconcat (kbd "C-c C-c")))))
-        (systemhalted/undefined-replay-bound-keys
-         (lambda () (setq orig-called t))))
-      (should orig-called)
-      (should-not unread-command-events))))
-
-(ert-deftest systemhalted/undefined-replay-advice-is-installed ()
-  (should (advice-member-p #'systemhalted/undefined-replay-bound-keys
-                           'undefined)))
+    (emacs-lisp-mode)
+    (should (bound-and-true-p yas-minor-mode)))
+  (with-temp-buffer
+    (org-mode)
+    (should (bound-and-true-p yas-minor-mode)))
+  (with-temp-buffer
+    (dashboard-mode)
+    (should-not (bound-and-true-p yas-minor-mode))))
 
 (ert-deftest systemhalted/with-editor-usage-message-skips-killed-buffer ()
   "The guarded usage message must not select a buffer killed meanwhile."
