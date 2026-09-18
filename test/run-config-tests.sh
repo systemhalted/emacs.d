@@ -32,6 +32,8 @@ ln -s -- "$test_config" "${test_home}/.emacs.d"
 export HOME="$test_home"
 export XDG_CONFIG_HOME="${test_home}/.config"
 export XDG_CACHE_HOME="${test_home}/.cache"
+export XDG_RUNTIME_DIR="${test_home}/runtime"
+mkdir -m 700 -- "$XDG_RUNTIME_DIR"
 export SYSTEMHALTED_TEST_ISOLATED=1
 unset SDKMAN_EL_DIR TRUSTRAIL_EL_DIR WORDWISE_EL_DIR
 cd -- "$test_config"
@@ -50,6 +52,22 @@ for check in "${checks[@]}"; do
         -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit
       ;;
     daemon) bash test/daemon-editor-test.sh ;;
+    interactive)
+      # Use a current tangle so this checks startup without Org Babel loading.
+      emacs --batch -Q -l org \
+        --eval '(org-babel-tangle-file "systemhalted.org")'
+      export SYSTEMHALTED_TEST_RESULT="${test_root}/interactive-result"
+      if ! TERM=xterm-256color timeout 60 script -qefc \
+        'stty rows 30 cols 100; exec emacs -Q --debug-init -l early-init.el -l init.el -l test/interactive-probe.el' \
+        "${test_root}/debug-init.log" >/dev/null 2>&1; then
+        cat -- "${test_root}/debug-init.log" >&2
+        exit 1
+      fi
+      [[ -f "$SYSTEMHALTED_TEST_RESULT" ]] || {
+        printf 'Interactive startup wrote no result\n' >&2; exit 1;
+      }
+      cat -- "$SYSTEMHALTED_TEST_RESULT"
+      ;;
     installer) bash test/link-home-test.sh ;;
     tangle)
       emacs --batch -Q -l org \

@@ -9,6 +9,64 @@
 (require 'org)
 (require 'eww)
 
+(defvar systemhalted-test--init-file
+  (expand-file-name "init.el" user-emacs-directory))
+(defvar systemhalted-test--freshness nil)
+
+(ert-deftest systemhalted/init-loads-missing-stale-and-current-tangles ()
+  (dolist (state '(missing stale current))
+    (let* ((root (make-temp-file "tangle-freshness-" t))
+           (user-emacs-directory (file-name-as-directory root))
+           (source (expand-file-name "systemhalted.org" root))
+           (generated (expand-file-name "systemhalted.el" root))
+           (systemhalted-test--freshness nil))
+      (unwind-protect
+          (progn
+            (with-temp-file source
+              (insert "#+property: header-args:emacs-lisp :tangle yes\n"
+                      "#+begin_src emacs-lisp\n"
+                      ";;; fixture -*- lexical-binding: t; -*-\n"
+                      "(setq systemhalted-test--freshness 'source)\n"
+                      "#+end_src\n"))
+            (unless (eq state 'missing)
+              (with-temp-file generated
+                (insert ";;; fixture -*- lexical-binding: t; -*-\n"
+                        "(setq systemhalted-test--freshness 'generated)\n"))
+              (set-file-times generated (seconds-to-time 1000))
+              (set-file-times source (seconds-to-time (if (eq state 'stale) 2000 500))))
+            (load systemhalted-test--init-file nil 'nomessage)
+            (should (eq systemhalted-test--freshness
+                        (if (eq state 'current) 'generated 'source))))
+        (delete-directory root t)))))
+
+(ert-deftest systemhalted/reload-clears-global-snippets-and-keeps-single-git-timer ()
+  (let* ((generated (expand-file-name "systemhalted.el" user-emacs-directory))
+         (legacy-timer (run-with-idle-timer 3600 nil #'yas-global-mode 1)))
+    (unwind-protect
+        (progn
+          (yas-global-mode 1)
+          (load generated nil 'nomessage)
+          (systemhalted/config--assert-no-package-errors)
+          (should-not yas-global-mode)
+          (should-not (memq legacy-timer timer-idle-list))
+          (let ((previous systemhalted/git-editor--preload-timer))
+            (load generated nil 'nomessage)
+            (systemhalted/config--assert-no-package-errors)
+            (should-not (memq previous timer-idle-list))
+            (should (memq systemhalted/git-editor--preload-timer timer-idle-list))))
+      (cancel-timer legacy-timer)
+      (yas-global-mode -1))))
+
+(ert-deftest systemhalted/project-scan-finds-inner-root-without-registering-ancestor ()
+  (let* ((root (make-temp-file "nested-project-" t))
+         (repo (expand-file-name "repo" root)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name ".git" repo) t)
+          (should (equal (systemhalted/projects--scan root)
+                         (list (file-name-as-directory (file-truename repo))))))
+      (delete-directory root t))))
+
 (ert-deftest systemhalted/package-install-refreshes-and-retries-once ()
   (let ((calls 0)
         (refreshes 0)
