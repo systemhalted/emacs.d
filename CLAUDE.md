@@ -35,8 +35,9 @@ Emacs 30.2 and the Emacs 31 release branch (`release-snapshot`).
 
 Project discovery runs only on explicit request under `~/Work`; startup uses
 Projectile's saved list. Snippets activate in programming and Org buffers.
-Git input recovery is restricted to finish/abort keys in active Git client
-editor buffers, preserving pending input. Register advice and timers safely
+Git editor libraries load eagerly in regular and daemon sessions.
+Emacs handles Git editor input without custom key replay; keep the With-Editor
+hint timer's buffer-liveness guard. Register advice and timers safely
 across reloads. Shell imports are direct, without a disk cache. Package-install
 failures are reported without automatic retries; refresh stale metadata manually.
 

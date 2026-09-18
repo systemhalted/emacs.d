@@ -59,7 +59,7 @@ Focused regressions live in `test/systemhalted-test.el`. Run them through `bash 
 
 Keep one literate file organized by subsystem; preserve tutorial heading text for `C-h T`. Environment import precedes personal-checkout selection, SDKMAN precedes shared LSP integration, and Projectile precedes Dashboard. Omarchy hosts set `systemhalted/omarchy-owned-ui` and repoint `user-emacs-directory` in their external shim; do not edit desktop configuration as part of a repository refactor.
 
-Project discovery is manual (`systemhalted/discover-projects`), defaulting to `~/Work`; startup uses Projectile's saved list without recursive traversal. Snippets activate in programming and Org buffers. Git recovery handles only finish/abort keys in active server-client Git editor buffers and preserves pending input. Keep advice and timers safe across reloads. Shell imports are direct, with no environment cache. Package-install failures are reported without automatic retries; stale archive metadata is refreshed manually.
+Project discovery is manual (`systemhalted/discover-projects`), defaulting to `~/Work`; startup uses Projectile's saved list without recursive traversal. Snippets activate in programming and Org buffers. Git editor libraries load eagerly in regular and daemon sessions. Emacs handles Git editor input without custom key replay; retain the With-Editor delayed-hint buffer guard. Keep advice and timers safe across reloads. Shell imports are direct, with no environment cache. Package-install failures are reported without automatic retries; stale archive metadata is refreshed manually.
 
 ## Commit & Pull Request Guidelines
 

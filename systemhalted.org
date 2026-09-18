@@ -2391,13 +2391,8 @@ Magit owns Git operations; the client-editor compatibility fixes stay together h
 
 ** Magit — Git through a status buffer
 
-[[https://magit.vc/][Magit]] is the only Git interface here because it is
-high-leverage and self-contained: =C-x g= opens the status buffer, every
-git operation has a discoverable keybinding from there (=s= stage, =u=
-unstage, =c c= commit, =b b= switch branch, =l l= log, =P p= push, =F u=
-pull), and there's no global behavior change outside that buffer. No
-custom hunks-on-save, no auto-commit, no smart-staging — explicit Git
-remains explicit.
+=C-x g= opens Magit status. From there, =s= stages, =u= unstages, =c c=
+commits, =b b= switches branches, and =l l= shows the log.
 
 Commits and rebases done from inside Magit (=c c=, =r= …) open their edit
 buffer right here in this Emacs and finish with =C-c C-c= — the shell's
@@ -2414,84 +2409,22 @@ point Git's editor at the client with =git config --global core.editor
 finish key come from =with-editor= and =git-rebase=, which ride in as
 Magit's own dependencies.
 
-Three small compatibility fixes protect external Git editing:
+Every session loads =git-rebase= during startup, including =git-commit= and
+=with-editor=. This removes the idle timer and keeps library loading out of the
+first client handoff, at the cost of startup time. Emacs handles input normally;
+there is no advice on =undefined= or custom key replay.
 
-- *Preload the editor libraries.* A daemon loads =git-rebase= before accepting
-  clients; a normal session loads it once when idle. This also loads
-  =git-commit= and =with-editor=, so commit messages receive their editor keys.
-- *Recover a stale key lookup.* During a client handoff, Emacs can still use
-  the previous buffer's keymap. Recovery below handles only Git finish/abort
-  keys in buffers belonging to waiting clients, preserving other queued input.
-- *Guard the delayed hint.* With-Editor's hint timer can run after an editor
-  buffer is killed. The local override checks the buffer is still alive.
-
-=test/daemon-editor-test.sh= reproduces the client handoff before idle time and
-checks a keypress sent during the transition. Keep these fixes until their
-regressions pass without them; there is no custom Git file-detection hook.
+=test/daemon-editor-test.sh= checks commit/rebase finish and abort at several
+points during a delayed client handoff. The delayed hint guard below remains
+because the installed With-Editor version can access a buffer after it is killed.
 
 #+begin_src emacs-lisp
 (use-package magit
   :ensure t
-  :bind
-  ("C-x g" . magit-status)
-  :init
-  (defvar systemhalted/git-editor--preload-timer nil)
-  (when (timerp systemhalted/git-editor--preload-timer)
-    (cancel-timer systemhalted/git-editor--preload-timer))
-  ;; Preload Git's editor machinery (`git-rebase' pulls in `magit',
-  ;; `git-commit' and `with-editor').  Loading it lazily from `find-file'
-  ;; instead would put ~0.7s of `require' inside the window where
-  ;; emacsclient's frame is already up but still showing the previous
-  ;; buffer, and a `C-c C-c' typed during that window is read against the
-  ;; wrong keymap and lost.  A daemon loads eagerly: when git's editor
-  ;; command starts the daemon itself, the client connects before the
-  ;; idle timer could ever fire.
-  (if (daemonp)
-      (require 'git-rebase)
-    (setq systemhalted/git-editor--preload-timer
-          (run-with-idle-timer 1 nil (lambda () (require 'git-rebase))))))
-#+end_src
-
-The following advice is installed on =undefined=, but its guards restrict
-recovery to active Git client edits. Ordinary undefined keys are unaffected.
-A repeated failed replay falls through to Emacs instead of looping.
-
-#+begin_src emacs-lisp
-(defvar-local systemhalted/git-editor--replayed-keys nil
-  "Last key sequence recovered in this Git editor buffer.")
-
-(defun systemhalted/git-editor--clear-replay ()
-  "Allow future recovery after a successfully resolved command."
-  (unless (eq this-command 'undefined)
-    (setq systemhalted/git-editor--replayed-keys nil)))
-
-(defun systemhalted/git-editor--setup-replay ()
-  "Install recovery bookkeeping locally in With-Editor buffers."
-  (add-hook 'pre-command-hook #'systemhalted/git-editor--clear-replay nil t))
-
-(with-eval-after-load 'with-editor
-  (add-hook 'with-editor-mode-hook #'systemhalted/git-editor--setup-replay))
-
-(defun systemhalted/undefined-replay-bound-keys (orig-fun)
-  "Recover Git client finish/abort keys looked up against stale keymaps.
-Call ORIG-FUN unchanged outside an active Git client editor."
-  (let* ((keys (this-command-keys-vector))
-         (expected (cond ((equal keys (kbd "C-c C-c")) 'with-editor-finish)
-                         ((equal keys (kbd "C-c C-k")) 'with-editor-cancel))))
-    (if (and expected
-             (bound-and-true-p server-buffer-clients)
-             (bound-and-true-p with-editor-mode)
-             (or (derived-mode-p 'git-rebase-mode)
-                 (bound-and-true-p git-commit-mode))
-             (eq (key-binding keys) expected)
-             (not (equal keys systemhalted/git-editor--replayed-keys)))
-        (setq systemhalted/git-editor--replayed-keys keys
-              unread-command-events
-              (append (listify-key-sequence keys) unread-command-events))
-      (funcall orig-fun))))
-
-(advice-remove 'undefined #'systemhalted/undefined-replay-bound-keys)
-(advice-add 'undefined :around #'systemhalted/undefined-replay-bound-keys)
+  :demand t
+  :bind ("C-x g" . magit-status)
+  :config
+  (require 'git-rebase))
 #+end_src
 
 The hint timer guard can be removed when With-Editor performs the same

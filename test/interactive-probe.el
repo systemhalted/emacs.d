@@ -1,5 +1,10 @@
 ;;; interactive-probe.el --- Isolated startup check -*- lexical-binding: t; -*-
 
+;; Check before startup timers can run: regular sessions preload Git too.
+(dolist (feature '(git-rebase git-commit with-editor))
+  (unless (featurep feature)
+    (error "Git editor feature %S was not loaded during init" feature)))
+
 (defun systemhalted/test--interactive-check ()
   "Verify the startup screen after Emacs has entered its command loop."
   (condition-case err

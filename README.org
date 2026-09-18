@@ -116,7 +116,8 @@ for subsequent runs. First use may need network access. Tests use the same
 repository entry point on symlink and Omarchy installations.
 
 =daemon= tests commit/rebase finish and abort keys during a delayed terminal
-client handoff; =interactive= checks a terminal =--debug-init= startup with
+client handoff at several keypress timings; =interactive= checks a terminal
+=--debug-init= startup with Git editor libraries loaded before idle time,
 Dashboard, no global snippets, and no unnecessary Org load. Both need
 =timeout= and util-linux =script= (macOS can run the batch checks and perform
 these checks manually).
@@ -146,3 +147,12 @@ paths. Terminal and batch sessions inherit their environment. The old
 
 Restart once after this update to remove the old package-install advice and
 any legacy global Yasnippet timer from a running session.
+
+* Git editor startup
+
+Magit and its commit/rebase editor libraries load during startup in both regular
+and daemon sessions. There is no Git preload timer or custom key replay.
+With-Editor's delayed hint still checks that its buffer is alive.
+
+Restart after this update to clear the old idle preload timer and key-replay
+advice.

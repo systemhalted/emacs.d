@@ -39,16 +39,6 @@
                         (if (eq state 'current) 'generated 'source))))
         (delete-directory root t)))))
 
-(ert-deftest systemhalted/reload-keeps-single-git-timer ()
-  (let ((generated (expand-file-name "systemhalted.el" user-emacs-directory)))
-    (load generated nil 'nomessage)
-    (systemhalted/config--assert-no-package-errors)
-    (let ((previous systemhalted/git-editor--preload-timer))
-      (load generated nil 'nomessage)
-      (systemhalted/config--assert-no-package-errors)
-      (should-not (memq previous timer-idle-list))
-      (should (memq systemhalted/git-editor--preload-timer timer-idle-list)))))
-
 (ert-deftest systemhalted/project-scan-finds-inner-root-without-registering-ancestor ()
   (let* ((root (make-temp-file "nested-project-" t))
          (repo (expand-file-name "repo" root)))
@@ -439,68 +429,6 @@
       (should
        (equal "/cache/edge-SNAPSHOT/lombok-edge-SNAPSHOT.jar"
               (systemhalted/lombok-jar-path))))))
-
-(ert-deftest systemhalted/git-editor-recovery-preserves-pending-input ()
-  (dolist (key '("C-c C-c" "C-c C-k"))
-    (with-temp-buffer
-      (let* ((keys (kbd key))
-             (command (if (equal key "C-c C-c")
-                          'with-editor-finish 'with-editor-cancel))
-             (map (make-sparse-keymap))
-             (unread-command-events '(?x (t . ?y)))
-             orig-called)
-        (setq-local git-commit-mode t
-                    with-editor-mode t
-                    server-buffer-clients '(client))
-        (define-key map keys command)
-        (use-local-map map)
-        (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
-          (systemhalted/undefined-replay-bound-keys
-           (lambda () (setq orig-called t))))
-        (should-not orig-called)
-        (should (equal unread-command-events
-                       (append (listify-key-sequence keys) '(?x (t . ?y)))))))))
-
-(ert-deftest systemhalted/git-editor-recovery-ignores-other-contexts ()
-  (dolist (excluded '(ordinary-buffer no-client no-editor wrong-binding
-                     undefined-binding other-key))
-    (with-temp-buffer
-      (let* ((keys (kbd (if (eq excluded 'other-key) "C-c z" "C-c C-c")))
-             (map (make-sparse-keymap))
-             (unread-command-events '(?x))
-             orig-called)
-        (setq-local git-commit-mode (not (eq excluded 'ordinary-buffer))
-                    with-editor-mode (not (eq excluded 'no-editor))
-                    server-buffer-clients (unless (eq excluded 'no-client) '(client)))
-        (define-key map keys (pcase excluded
-                               ('wrong-binding #'ignore)
-                               ('undefined-binding #'undefined)
-                               (_ #'with-editor-finish)))
-        (use-local-map map)
-        (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
-          (systemhalted/undefined-replay-bound-keys
-           (lambda () (setq orig-called t))))
-        (should orig-called)
-        (should (equal unread-command-events '(?x)))))))
-
-(ert-deftest systemhalted/git-editor-recovery-does-not-loop ()
-  (with-temp-buffer
-    (let ((keys (kbd "C-c C-c"))
-          (map (make-sparse-keymap))
-          (unread-command-events nil)
-          (calls 0))
-      (setq-local git-commit-mode t with-editor-mode t server-buffer-clients '(client))
-      (define-key map keys #'with-editor-finish)
-      (use-local-map map)
-      (cl-letf (((symbol-function 'this-command-keys-vector) (lambda () keys)))
-        (dotimes (_ 2)
-          (systemhalted/undefined-replay-bound-keys
-           (lambda () (setq calls (1+ calls))))))
-      (should (= calls 1))
-      (should (equal unread-command-events (listify-key-sequence keys)))
-      (let ((this-command 'with-editor-finish))
-        (systemhalted/git-editor--clear-replay))
-      (should-not systemhalted/git-editor--replayed-keys))))
 
 (ert-deftest systemhalted/snippets-are-scoped-to-code-and-org ()
   (should-not (bound-and-true-p yas-global-mode))

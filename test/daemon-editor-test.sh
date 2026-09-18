@@ -72,14 +72,9 @@ want="(t t t t with-editor-finish (t with-editor-finish))"
 [[ "$got" == "$want" ]] ||
   fail "editor machinery not resident at daemon init end: got $got, want $want"
 
-# --- Second race: keys typed during the emacsclient handoff -----------------
-# The daemon's command loop latches the pre-handoff buffer's keymaps inside
-# read-key-sequence, so a C-c C-c typed before `server-switch-buffer' runs
-# resolves against the wrong maps and hits `undefined'.  The config replays
-# such a sequence (systemhalted/undefined-replay-bound-keys); without the
-# replay, the keypress is swallowed and the client below never exits.
-# Needs util-linux script(1) for a pty; skipped elsewhere (ERT covers the
-# advice logic itself).
+# Send finish/abort while a client frame is transitioning to its Git buffer.
+# Vary keypress timing around a delayed server visit to catch swallowed input.
+# Needs util-linux script(1) for a pty; skipped elsewhere.
 if script --version 2>/dev/null | rg -q util-linux; then
   sock="daemon-editor-test-$$"
   daemon_up=""
@@ -102,12 +97,12 @@ if script --version 2>/dev/null | rg -q util-linux; then
     >/dev/null || fail "could not instrument handoff daemon"
 
   run_handoff() {
-    local action="$1" file="$2" label="$3" status=0 expected=0 client_command
+    local action="$1" file="$2" label="$3" delay="$4" status=0 expected=0 client_command
     printf -v client_command '%q ' emacsclient -s "$sock" -t "$file"
     client_command="stty rows 30 cols 100; exec ${client_command}"
     # Abort should return an error to Git; finish should return success.
     [[ "$action" == abort ]] && expected=1
-    { sleep 0.8
+    { sleep "$delay"
       if [[ "$action" == abort ]]; then printf '\x03\x0b'; else printf '\x03\x03'; fi
       sleep 4
     } | TERM=xterm-256color HOME="$test_home" timeout 30 \
@@ -125,10 +120,12 @@ if script --version 2>/dev/null | rg -q util-linux; then
         fail "$label: client failed without the expected cancellation"
     fi
   }
-  run_handoff finish "$todo" rebase-finish
-  run_handoff abort "$todo" rebase-abort
-  run_handoff finish "$commit_message" commit-finish
-  run_handoff abort "$commit_message" commit-abort
+  for delay in 0.2 0.8 1.6; do
+    run_handoff finish "$todo" "rebase-finish-${delay}" "$delay"
+    run_handoff abort "$todo" "rebase-abort-${delay}" "$delay"
+    run_handoff finish "$commit_message" "commit-finish-${delay}" "$delay"
+    run_handoff abort "$commit_message" "commit-abort-${delay}" "$delay"
+  done
 else
   printf 'SKIP: terminal handoff tests require util-linux script(1)\n'
 fi
