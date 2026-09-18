@@ -4131,14 +4131,9 @@ the directory with Info on its own; a plain load-path checkout gets no
 such activation, so the local branch below adds the checkout to
 =Info-additional-directory-list= itself.
 
-The definition cache still persists through savehist, and the
-registration happens here — eagerly, not only inside the package —
-because savehist rewrites its file from the live variable list on every
-save: if registration waited for the package to load, any session that
-never touched =C-c w= would silently drop the cache from =history=.  The
-migration below re-homes definitions saved under the pre-extraction
-variable name; once a migrated session saves, the old entry is gone from
-=history= and the form reduces to a no-op.
+The definition cache persists through savehist. Register =wordwise-cache=
+here so sessions that never load Wordwise still preserve its definitions
+when savehist rewrites =history=.
 
 Toggle with =C-c w=.  Change difficulty interactively with
 =M-x wordwise-set-difficulty=.
@@ -4153,16 +4148,6 @@ Toggle with =C-c w=.  Change difficulty interactively with
 ;; has not loaded this session (savehist-save would drop it otherwise).
 (with-eval-after-load 'savehist
   (add-to-list 'savehist-additional-variables 'wordwise-cache))
-
-;; One-time migration from the pre-extraction variable name.  Savehist
-;; restored the old symbol from =history=; hand its table to the new
-;; name before the package's defvar can install an empty one.
-(when (and (boundp 'systemhalted/wordwise-cache)
-           (hash-table-p systemhalted/wordwise-cache)
-           (not (boundp 'wordwise-cache)))
-  (setq wordwise-cache systemhalted/wordwise-cache))
-(when (boundp 'systemhalted/wordwise-cache)
-  (makunbound 'systemhalted/wordwise-cache))
 
 (if systemhalted/wordwise-local-checkout
     (use-package wordwise

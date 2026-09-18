@@ -95,7 +95,7 @@ All tutorials are managed through indirect-org buffer. `systemhalted/tutorials` 
 
 Packages maintained in this account are loaded with a hybrid pattern, not a hardcoded path. An environment variable names a local checkout when one exists (`SDKMAN_EL_DIR`, `TRUSTRAIL_EL_DIR`, `WORDWISE_EL_DIR`); that directory goes on `load-path` so edits take effect on the next `C-c r`. When the variable is unset or points nowhere real, `use-package`'s `:vc` keyword has `package-vc` install from GitHub with `:rev :newest`.
 
-`wordwise.el` (Kindle-style vocabulary hints, `C-c w`) was extracted from this config; its section in `systemhalted.org` keeps the savehist registration of `wordwise-cache` (eager, so sessions that never load the package don't drop the cache from `history`) plus a one-time migration from the old `systemhalted/wordwise-cache` name. Wordwise config bugs are usually package bugs — fix them in the wordwise.el repo, not here.
+`wordwise.el` (Kindle-style vocabulary hints, `C-c w`) was extracted from this config; its section in `systemhalted.org` keeps the savehist registration of `wordwise-cache` (eager, so sessions that never load the package don't drop the cache from `history`). Wordwise config bugs are usually package bugs — fix them in the wordwise.el repo, not here.
 
 Follow this pattern for any further self-maintained package, and add its variable to `exec-path-from-shell-variables` — GUI Emacs does not inherit the shell environment, so without that import it would never see the local checkout. Never commit a `:load-path` pointing at a developer-specific absolute path; one committed config has to work on macOS, Fedora and Ubuntu.
 
