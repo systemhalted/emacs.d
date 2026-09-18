@@ -22,7 +22,15 @@ responsibilities are listed at the top, and explanations stay beside the code.
 Startup settings live in Core, completion in Interaction & Completion,
 language tools in Development & Languages, notes in Org / Knowledge, and
 Dashboard/fonts/themes in Presentation. Terminal and personal packages have
-their own sections. =C-c r= reloads after an edit.
+their own sections. =C-c r= reloads settings after an edit. Restart Emacs after
+removing hooks, advice, or bindings, or changing package sources.
+
+Markdown tables use =valign= for display. Run =M-x markdown-table-align= inside
+a table when you want to reformat its text; visiting and saving files leave
+table whitespace alone. File prompts show dotfiles normally. Dashboard uses
+its standard Projectile project list. =C-c T= opens Consult's theme picker;
+the former =C-c t= theme cycle and =M-h= dotfile toggle are retired.
+Restart once after updating from the version with those customizations.
 
 * Projects
 
@@ -68,7 +76,7 @@ watchers) in charge:
   before package activation.
 - =systemhalted/omarchy-owned-ui= is set to =t=, so the config defers its
   default and variable-pitch fonts (and any startup theme) to Omarchy;
-  =C-c t= and =C-c T= still work as a manual override until the Omarchy
+  =C-c T= works as a manual override until the Omarchy
   theme changes again.
 
 The hook-based =./link-home.sh= install is unaffected and remains the

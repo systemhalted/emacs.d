@@ -200,41 +200,13 @@ TYPE and LEVEL are as in `display-warning'."
 
 ** Editor defaults and runtime files
 
-One =setq= block establishes the boring baseline; the clusters it covers:
+Dashboard supplies the startup screen; scratch stays in Lisp Interaction mode.
+Backups and auto-saves live in ignored directories under =user-emacs-directory=,
+created here for fresh installations. Lock files are disabled to avoid confusing
+external file watchers; this also disables their concurrent-edit protection.
 
-- *Quiet startup.* =inhibit-startup-screen=, =initial-scratch-message nil=,
-  and =initial-major-mode 'lisp-interaction-mode= keep the scratch buffer light;
-  Dashboard supplies the startup screen without activating Org in =*scratch*=.
-- *Sensory quiet.* =ring-bell-function 'ignore= silences the system beep;
-  =echo-keystrokes 0.01= makes the minibuffer show the in-progress chord
-  almost immediately so which-key has something to attach to.
-- *Confirm kill.* =confirm-kill-emacs= guards =C-x C-c= so a stray chord
-  can't take down the session.
-- *Backups routed locally.* =backup-directory-alist= sends every =~filename=
-  to =~/.emacs.d/backups/= and =auto-save-file-name-transforms= sends
-  =#filename#= to =~/.emacs.d/auto-save-list/=. Both directories are created
-  at load, so auto-save cannot fail on a fresh clone. The repository's
-  =.gitignore= excludes both, keeping the working tree clean.
-- *Lock files off.* =create-lockfiles nil= drops the =.#filename= symlinks
-  Emacs writes next to a buffer on first edit. This is a single-user setup
-  where the concurrent-edit warning effectively never fires, and the
-  symlinks confuse external watchers (bundlers, file-system watchers,
-  language servers, Git GUIs).
-- *Pixelwise frame sizing.* =frame-resize-pixelwise t= lets Emacs size
-  borderless frames to a monitor's usable work area exactly instead of
-  rounding to character cells.
-- *Versioned backups.* =backup-by-copying=, =delete-old-versions=, and the
-  =kept-new=/=kept-old= caps keep a small rolling history per file.
-
-After the =setq=, =use-short-answers= makes every yes/no prompt accept a
-one-key =y= / =n= (the Emacs 28+ replacement for the old
-=(fset 'yes-or-no-p #'y-or-n-p)= trick). The one deliberate exception is
-the kill-Emacs guard: =use-short-answers= would reduce it to a single
-keypress too, which defeats the point of guarding =C-x C-c= against stray
-chords, so =systemhalted/confirm-kill-emacs= rebinds =use-short-answers=
-to nil around that one prompt and a typed "yes" is required to quit.
-Finally, UTF-8 is asserted across coding system, language environment,
-and default I/O.
+Most confirmation prompts accept =y= or =n=. Quitting Emacs deliberately requires
+a typed "yes" to protect against an accidental =C-x C-c=.
 
 #+begin_src emacs-lisp
   (setq inhibit-startup-screen t
@@ -275,10 +247,9 @@ against stray chords."
 
 ** Customization group and chrome
 
-=defgroup systemhalted= namespaces every =defcustom= in this config so they
-all surface together under =M-x customize-group RET systemhalted=. The three
-=…-mode -1= calls strip the menu bar, tool bar, and scroll bars before any
-frame is drawn — chrome that is dead weight when navigation is keyboard-first.
+Personal options appear under =M-x customize-group RET systemhalted=.
+=early-init.el= hides frame chrome before startup; these mode calls also apply
+when the configuration is loaded into an existing session.
 
 #+begin_src emacs-lisp
     (defgroup systemhalted nil
@@ -296,24 +267,10 @@ frame is drawn — chrome that is dead weight when navigation is keyboard-first.
 
 ** Line numbers, gated to safe buffers
 
-Long-running Emacs sessions can become memory-bound when redisplay is forced
-to combine expensive features in large or visually complex buffers. The
-=display-line-numbers-mode= margin is one of those features. Rather than
-turning it on globally, an eligibility predicate filters down to ordinary
-local programming buffers:
-
-- Mode must derive from =prog-mode= — text and Org buffers don't get the
-  margin.
-- Must be visiting a local file (not TRAMP, not =*scratch*=, not a generated
-  Org export buffer like =systemhalted.html=).
-- Buffer size below =systemhalted/line-number-max-buffer-size= (1 MiB) — at
-  that point the margin's per-redisplay cost stops being free.
-- No unusually long lines in the first 2 000 lines (=systemhalted/long-line-buffer-p=).
-  Pathological long lines are what =so-long= is for, and the line-number
-  gutter compounds their slowness.
-
-=systemhalted/display-line-numbers-disable-all= is the explicit escape
-hatch, also called from the emergency UI reset further down.
+Line numbers are enabled only for local programming files below 1 MiB, excluding
+generated config exports and buffers with lines over 1,000 characters in the
+first 2,000 lines. These limits reduce redisplay cost in large or complex buffers.
+The emergency UI reset can disable line numbers in all buffers.
 
 #+begin_src emacs-lisp
   (defcustom systemhalted/line-number-max-buffer-size (* 1024 1024)
@@ -377,28 +334,10 @@ hatch, also called from the emergency UI reset further down.
 
 ** Always-on minor modes and shared infrastructure
 
-Eight short minor-mode toggles cover the everyday quality-of-life baseline:
-
-- =column-number-mode= shows column position in the mode line; pairs with
-  the default line count.
-- =display-time-mode= / =display-battery-mode= add clock and battery
-  indicators so a long-running Emacs session doesn't need a side glance.
-- =electric-pair-mode= auto-inserts matching brackets and quotes in
-  prog-mode; =show-paren-mode= highlights the matching delimiter under
-  point.
-- =save-place-mode= remembers point per file across restarts.
-- =recentf-mode= keeps a recently-opened-files list that =consult-buffer=
-  surfaces under the =f= narrowing key.
-- =global-auto-revert-mode= refreshes buffers whose backing files changed
-  on disk — important when language servers or formatters rewrite files
-  underneath us.
-
-The three =use-package= forms wire in built-ins the rest of the config
-depends on: =seq= (used by helpers like =systemhalted/active-minor-modes=),
-=so-long= (protects against pathological long lines that the line-number
-gate above also accounts for), and =server= (starts the Emacs server when
-not in batch mode, so =emacsclient= and the macOS =/Applications/Emacs.app=
-icon attach to this process instead of spawning a new one).
+These modes provide status indicators, paired delimiters, saved cursor positions,
+recent files, and automatic refresh after external file changes. =so-long=
+protects against unusually long lines. The Emacs server starts in interactive
+sessions so =emacsclient= can connect.
 
 #+begin_src emacs-lisp
   (column-number-mode 1)
@@ -536,24 +475,9 @@ backtrace if =py-spy= happens to be installed.
 
 ** Small convenience keys and windmove
 
-These micro-tweaks live alone because they don't belong with any package:
-
-- =C-x k= rebinds =kill-buffer= → =kill-current-buffer=. The stock binding
-  prompts even when point is in the buffer you want to kill, which adds a
-  =RET= for nothing.
-- =s-u= binds =revert-buffer=, reloading the current buffer from disk. This
-  is handy when an external tool rewrites the file underneath you — rustfmt
-  on a cargo command, a git rebase, a generated file — since the recursive
-  LSP file-watchers are disabled (see the LSP-mode section), so such changes
-  don't refresh the buffer on their own. Note the Super key: on macOS
-  Command is Super by default (=ns-command-modifier=), so =s-u= is reachable;
-  on Linux desktops Super is usually grabbed by the window manager (e.g.
-  GNOME Activities), so the chord may not reach Emacs there — fall back to
-  =M-x revert-buffer= (or =C-x x g=, =revert-buffer-quick=, which skips the
-  confirmation prompt).
-- =windmove= is built-in and provides directional window navigation on
-  =S-<arrow>=. Loading the library alone binds nothing —
-  =windmove-default-keybindings= is what installs the shift-arrow keys.
+=C-x k= kills the current buffer without a buffer-selection prompt.
+=s-u= reverts from disk; use =M-x revert-buffer= if the desktop intercepts Super.
+=windmove= binds =S-<arrow>= to move between windows.
 
 #+begin_src emacs-lisp
   (global-set-key (kbd "C-x k") #'kill-current-buffer)
@@ -568,15 +492,10 @@ These micro-tweaks live alone because they don't belong with any package:
 
 ** Reload and visit the literate file
 
-This config is iterated on inside Emacs, so the two commands below close
-the loop:
-
-- =C-c e= (=systemhalted/config-visit=) opens =systemhalted.org=.
-- =C-c r= (=systemhalted/config-reload=) saves the open Org buffer if
-  modified, then re-runs =org-babel-load-file= on it. Equivalent to
-  restarting Emacs for most config edits, without losing window/buffer
-  state. Errors during reload land in =*Messages*= but don't take down
-  the session.
+=C-c e= opens this file. =C-c r= saves it and loads the tangled configuration.
+Reload is useful for changing settings, but it cannot undo removed hooks,
+advice, or bindings. Restart Emacs after removing behavior or changing package
+sources. A failed reload can leave a partially updated session.
 
 #+begin_src emacs-lisp
   (defun systemhalted/config-visit ()
@@ -983,81 +902,6 @@ package, so =:ensure nil :after vertico= is correct — no separate install.
               ("DEL"   . vertico-directory-delete-char)
               ("M-DEL" . vertico-directory-delete-word))
   :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
-#+end_src
-
-** Hidden file toggle in file prompts
-
-Pressing =M-h= inside any file prompt flips visibility of dotfiles for the
-current and subsequent prompts. The implementation is small:
-=systemhalted/vertico-show-hidden-files= is a global flag (defaults to =t=
-to match plain =read-file-name= behavior — show everything). An =:around=
-advice on =read-file-name= installs a wrapping predicate that drops dotfiles
-when the flag is nil, /except/ when the basename being typed in the prompt
-already starts with =.= — that escape hatch lets you reach a hidden file
-without first hitting the toggle.
-
-The toggle command flips the flag and forces Vertico to re-filter the
-current candidate set in place by invalidating its input cache and calling
-=vertico--exhibit=, so you don't have to abort and re-prompt to see the
-effect. =M-h= is bound in =vertico-map=, not in
-=minibuffer-local-filename-completion-map=, because Vertico's setup hook
-replaces the local map outright (=use-local-map vertico-map=); the latter
-map is never consulted during a Vertico-driven file prompt. The command
-guards itself with =minibuffer-completing-file-name= so pressing =M-h= in a
-buffer / command / variable prompt is a clear no-op rather than a surprise.
-
-#+begin_src emacs-lisp
-(defvar systemhalted/vertico-show-hidden-files t
-  "When non-nil, file-name completion shows hidden files (dotfiles).
-Toggle with `systemhalted/vertico-toggle-hidden-files' inside a file prompt.")
-
-(defun systemhalted/vertico--file-name-hidden-p (file)
-  "Return non-nil if FILE's basename is a dotfile (excluding `.' and `..')."
-  (let ((name (file-name-nondirectory (directory-file-name file))))
-    (and (string-prefix-p "." name)
-         (not (member name '("." ".."))))))
-
-(defun systemhalted/vertico--read-file-name-with-hidden-filter
-    (orig prompt &optional dir default-filename mustmatch initial predicate)
-  "Around-advice for `read-file-name' that hides dotfiles per the toggle."
-  (let ((merged
-         (lambda (f)
-           (and (or systemhalted/vertico-show-hidden-files
-                    (string-prefix-p
-                     "."
-                     (file-name-nondirectory
-                      (or (and (minibufferp)
-                               (minibuffer-contents-no-properties))
-                          "")))
-                    (not (systemhalted/vertico--file-name-hidden-p f)))
-                (or (null predicate) (funcall predicate f))))))
-    (funcall orig prompt dir default-filename mustmatch initial merged)))
-
-(advice-add 'read-file-name :around
-            #'systemhalted/vertico--read-file-name-with-hidden-filter)
-
-(defun systemhalted/vertico-toggle-hidden-files ()
-  "Toggle visibility of hidden files in the current minibuffer file prompt.
-Flips `systemhalted/vertico-show-hidden-files' and refreshes Vertico in
-place when called from inside an active file prompt. No-op on non-file
-prompts so the keybinding does not surprise in `M-x' or buffer prompts."
-  (interactive)
-  (cond
-   ((and (minibufferp) (not minibuffer-completing-file-name))
-    (message "Hidden-file toggle only applies to file prompts"))
-   (t
-    (setq systemhalted/vertico-show-hidden-files
-          (not systemhalted/vertico-show-hidden-files))
-    (when (and (minibufferp) (boundp 'vertico--input))
-      (setq vertico--input t)
-      (when (fboundp 'vertico--exhibit)
-        (vertico--exhibit)))
-    (message "Hidden files: %s"
-             (if systemhalted/vertico-show-hidden-files "shown" "hidden")))))
-
-(with-eval-after-load 'vertico
-  (define-key vertico-map (kbd "M-h")
-              #'systemhalted/vertico-toggle-hidden-files))
 #+end_src
 
 ** Marginalia — annotations in the minibuffer
@@ -1470,9 +1314,9 @@ scan during startup. Run =M-x systemhalted/discover-projects= after adding a
 repository. The scan follows symlinked parents, stops at project roots, skips
 hidden directories and unreadable branches, and deduplicates canonical paths.
 
-Dashboard keeps the Projectile backend and ranks projects by open buffers and
-=recentf= activity. A manual scan refreshes an existing Dashboard without
-selecting it. There are no discovery workers, timers, or separate cache files.
+Dashboard displays saved projects through its standard Projectile backend.
+A manual scan refreshes an existing Dashboard without selecting it. There are
+no discovery workers, timers, or separate cache files.
 
 Common entry points (all under =C-c p=):
 
@@ -1543,53 +1387,6 @@ Saved projects remain available at startup; discovery runs only on request."
     (projectile-indexing-method 'alien)
     (projectile-sort-order 'recentf)
     :config
-    (defun systemhalted/dashboard-projects--normalize-root (project-root)
-      "Return PROJECT-ROOT in canonical Projectile/dashboard form."
-      (file-name-as-directory
-       (abbreviate-file-name (expand-file-name project-root))))
-
-    (defun systemhalted/dashboard-projects--project-for-file (file project-prefixes)
-      "Return the most specific project root from PROJECT-PREFIXES containing FILE."
-      (let ((expanded-file (expand-file-name file)))
-        (seq-some (lambda (project-prefix)
-                    (when (string-prefix-p (car project-prefix) expanded-file)
-                      (cdr project-prefix)))
-                  project-prefixes)))
-
-    (defun systemhalted/dashboard-projects--sort-by-activity (projects)
-      "Return PROJECTS reordered by open buffers and recent file activity."
-      (let* ((projects (mapcar #'systemhalted/dashboard-projects--normalize-root
-                               projects))
-             (project-prefixes
-              (sort (mapcar (lambda (project)
-                              (cons (expand-file-name project) project))
-                            projects)
-                    (lambda (left right)
-                      (> (length (car left)) (length (car right))))))
-             (open-projects
-              (mapcar #'systemhalted/dashboard-projects--normalize-root
-                      (projectile-open-projects)))
-             recent-projects)
-        (dolist (file (or (bound-and-true-p recentf-list) '()))
-          (when-let* ((project
-                       (systemhalted/dashboard-projects--project-for-file
-                        file project-prefixes)))
-            (push project recent-projects)))
-        (delete-dups
-         (append open-projects (nreverse recent-projects) projects))))
-
-    (defun systemhalted/dashboard-projects--load-projects-by-activity (original)
-      "Wrap ORIGINAL dashboard loader to re-rank Projectile projects by activity."
-      (let ((projects (funcall original)))
-        (if (eq dashboard-projects-backend 'projectile)
-            (systemhalted/dashboard-projects--sort-by-activity projects)
-          projects)))
-
-    (unless (advice-member-p #'systemhalted/dashboard-projects--load-projects-by-activity
-                             'dashboard-projects-backend-load-projects)
-      (advice-add 'dashboard-projects-backend-load-projects
-                  :around #'systemhalted/dashboard-projects--load-projects-by-activity))
-
     (projectile-mode 1))
 #+end_src
 
@@ -3562,88 +3359,23 @@ Reading views, document editing, and exporters.
 
 ** Markdown mode — README and prose docs
 
-Three file globs: =README.md= opens in =gfm-mode= since that's what GitHub
-renders it as; every other =.md= or =.markdown= file uses plain
-=markdown-mode=. =gfm-mode= is a thin derived mode over =markdown-mode= —
-same keymap, same fontification, same table commands — that adds GFM alert
-blocks (=> [!NOTE]=, =[!WARNING]= and friends) to =paragraph-separate=,
-electric closing of =```= fences, hyphens rather than underscores when
-generating anchors, and =markdown-gfm-parse-buffer-for-languages=, which
-registers the languages named on fence lines so fenced code is highlighted
-natively.
+=README.md= uses =gfm-mode=; other Markdown files use =markdown-mode=.
+The README pattern comes last because =:mode= prepends entries to
+=auto-mode-alist=, giving the most specific pattern precedence.
 
-*Ordering matters here, in a way that is easy to get wrong.* =use-package=
-expands =:mode= into one =add-to-list= per entry, and =add-to-list=
-/prepends/ — so the list ends up *reversed* in =auto-mode-alist=, and the
-most specific pattern has to come *last* to win. With =README\.md\'= written
-first, =\.md\'= is prepended after it, shadows it, and every README quietly
-opens in plain =markdown-mode= with the =gfm-mode= entry never reached. The
-generic globs therefore come first in the list below and =README\.md\'= last.
-Both still precede =markdown-mode='s own =auto-mode-alist= autoload, because
-that is installed at =package-initialize= time and these prepend after it.
-
-Pipe tables are the sore spot. =markdown-mode= re-aligns a table *while you
-edit it* (=markdown-table-align-p= is =t= by default), but a table that was
-pasted or generated elsewhere — a blog post table, say — stays ragged in the
-buffer until you happen to touch a cell, so the columns don't line up and
-it's hard to read. =systemhalted/markdown-align-all-tables= closes that gap:
-it walks the buffer and runs =markdown-table-align= on every table. The
-=markdown-mode= hook wires it in at both ends — it runs once *when a file is
-visited*, so a freshly opened buffer shows neat columns straight away, and
-again on a buffer-local =before-save-hook=, so the aligned form is what lands
-on disk. The visit-time pass binds =buffer-undo-list= to =t= and restores the
-buffer's modified flag afterward, so opening a file neither dirties the buffer
-nor writes anything — the on-disk file is only rewritten by a *real* save.
-=markdown-table-align= is still there to align a single table on demand.
-Alignment is cosmetic whitespace only — Kramdown/GFM ignore it — so it never
-changes how the table renders on the published site.
-
-For proportional fonts or mixed-width table content, =valign-mode= provides a
-visual overlay that keeps table columns lined up in the buffer without changing
-the file contents. It is enabled only in Markdown buffers.
+=valign= aligns tables visually without changing their text. Opening or saving
+a file does not reformat its tables. To change table whitespace, put point in
+the table and run =M-x markdown-table-align=.
 
 #+begin_src emacs-lisp
-(defun systemhalted/markdown-align-all-tables ()
-  "Re-align every pipe table in the current Markdown buffer.
-`markdown-mode' realigns a table as you edit it (`markdown-table-align-p'
-is t), but a pasted or generated table stays ragged until touched.  Walk
-the buffer and run `markdown-table-align' on each table so the columns
-line up.  Used on `before-save-hook'; also callable interactively.
-No-op in read-only buffers — the visit-time pass would otherwise signal
-`buffer-read-only' from inside the mode hook on unwritable files."
-  (interactive)
-  (when (and (derived-mode-p 'markdown-mode)
-             (not buffer-read-only))
-    (save-excursion
-      (goto-char (point-min))
-      (while (re-search-forward "^[ \t]*|" nil t)
-        (if (markdown-table-at-point-p)
-            (progn
-              (markdown-table-align)
-              (goto-char (markdown-table-end)))
-          (forward-line 1))))))
-
 (use-package markdown-mode
   :ensure t
   :mode
-  ;; `:mode' becomes one `add-to-list' per entry and `add-to-list' prepends, so
-  ;; this list lands reversed in `auto-mode-alist': most specific goes LAST.
-  ;; With README first, "\\.md\\'" would be prepended over it and shadow it.
   (("\\.markdown\\'" . markdown-mode)
    ("\\.md\\'" . markdown-mode)
    ("README\\.md\\'" . gfm-mode))
-  :hook
-  (markdown-mode . (lambda ()
-                     (add-hook 'before-save-hook
-                               #'systemhalted/markdown-align-all-tables nil t)
-                     ;; Align on visit too, so a freshly opened file shows neat
-                     ;; columns without waiting for a save.  Suppress undo and
-                     ;; keep the buffer's modified state so opening writes
-                     ;; nothing and leaves nothing to undo.
-                     (let ((was-modified (buffer-modified-p))
-                           (buffer-undo-list t))
-                       (systemhalted/markdown-align-all-tables)
-                       (unless was-modified (set-buffer-modified-p nil))))))
+  :custom
+  (markdown-table-align-p nil))
 
 (use-package valign
   :ensure t
@@ -4184,59 +3916,18 @@ placement.
 
 ** Dired, fonts, and theme
 
-Three small finishing touches:
+In Dired, =c= creates an empty file. GUI frames use Fira Code (or its Nerd Font
+variant) and Cantarell at 15 pt when available. The font helper also runs for
+new client frames. On Omarchy, the host owns these faces; this config only adds
+Nerd Font fallbacks for icons and terminal prompt glyphs.
 
-- *Dired.* =c= in a Dired buffer creates an empty file (overriding the
-  stock binding for =dired-do-copy=, which uses =C= anyway). One-key file
-  creation is the move most often made from a Dired listing.
-- *Fonts.* Fira Code for fixed-pitch (default face) and Cantarell for
-  variable-pitch when both are installed. Where plain Fira Code isn't
-  installed but =FiraCode Nerd Font= is (the Fedora machine), the Nerd
-  Font build serves as the default face instead — it is a complete Fira
-  Code, ligatures included. =mixed-pitch-mode= consumes the
-  variable-pitch face for the book-style reading view further down. Sizes
-  are =150= (=15pt=) on both faces; the =find-font= guards make the block
-  no-op when a font isn't installed instead of leaving a missing-font
-  warning.  The helper below runs for the current GUI frame and every
-  later graphical frame, so =emacs --daemon= + =emacsclient -c= gets the
-  same fonts as a regular app launch.  When =systemhalted/omarchy-owned-ui=
-  is set (Omarchy hosts), the default and variable-pitch faces are left to
-  the host and the helper only installs the Nerd Font fallback below.
-- *Nerd Font fallback.* Shell prompts (Powerlevel10k, Starship, etc.) and
-  UI packages use glyphs from the Nerd Fonts Private Use Area that plain
-  Fira Code doesn't carry.  =set-fontset-font= registers a Nerd Font on
-  both the default fontset and the current frame's fontset so the icons
-  render correctly in Ghostel, Eshell, and anywhere else they appear.
-  The lookup order is =FiraCode Nerd Font Mono= → =MesloLGS NF= (the
-  family name Powerlevel10k's recommended font installs under) →
-  =MesloLGS Nerd Font Mono= → =JetBrainsMono Nerd Font Mono= →
-  =MesloLGM Nerd Font Mono=; the first one found wins.
-  The =Mono= variant is essential: it forces Nerd Font glyphs to
-  single-cell width so powerline separators align correctly in Ghostel
-  and other terminal buffers.
-- *Theme.* No theme is auto-loaded at startup; the cycle list below
-  defaults to Nord via =systemhalted/load-theme=, which disables every
-  currently-enabled theme first because repeated config reloads otherwise
-  stack faces or leave stale theme state behind. =nord-region-highlight
-  'frost= is the one face customization — selection in the bluer "frost"
-  palette rather than the default muted gray.
+The fallback is registered for both current and future fontsets. Prefer a
+=Mono= Nerd Font so terminal icons occupy one cell.
 
-  The theme system supports:
-  - **Cycling themes**: Pressing =C-c t= (runs =systemhalted/cycle-theme=)
-    cycles through Nord, Catppuccin (all four flavors: latte, frappé,
-    macchiato, mocha), all =ef-themes=, and all =doom-themes=.
-  - **Selecting themes**: Pressing =C-c T= (runs =systemhalted/select-theme=)
-    prompts you via the completion system (Vertico/Orderless) to select from
-    the 100+ available themes.
-  - **Checking the active theme**: You can run =C-h v custom-enabled-themes RET=
-    or evaluate =(car custom-enabled-themes)= via =M-:=.
-
-- *Host-owned UI.* =systemhalted/omarchy-owned-ui= is nil by default; set
-  it to =t= in =~/.config/emacs/init.el= (before this config loads) on a
-  host that owns the Emacs look, such as Omarchy.  The config then skips
-  its own default and variable-pitch fonts and any startup theme so the
-  host's theme and font drive Emacs, while the Nerd Font fallback and the
-  manual =C-c t= / =C-c T= commands keep working as an override.
+No theme is loaded at startup. =C-c T= opens Consult's theme picker with previews;
+the existing theme packages remain available. On Omarchy, a manual selection
+lasts until the host changes the theme again. Catppuccin's flavor is controlled
+by =catppuccin-flavor=.
 
 #+begin_src emacs-lisp
   (defvar systemhalted/omarchy-owned-ui nil
@@ -4316,93 +4007,38 @@ renders them.  Ligatures are enabled globally — this covers
 #+end_src
 
 #+begin_src emacs-lisp
-        (defun systemhalted/load-theme (&optional theme)
-          "Load THEME (defaulting to 'nord) without stacking themes on reload.
-      When THEME is a catppuccin pseudo-symbol (catppuccin-latte, catppuccin-frappe,
-      catppuccin-macchiato, catppuccin-mocha), set `catppuccin-flavor' and load
-      the real `catppuccin' theme."
-          (interactive)
-          (let* ((t-to-load (or theme 'nord))
-                 (name (symbol-name t-to-load))
-                 (catppuccin-prefix "catppuccin-")
-                 (is-catppuccin (string-prefix-p catppuccin-prefix name)))
-            (mapc #'disable-theme custom-enabled-themes)
-            (if is-catppuccin
-                (let ((flavor (intern (substring name (length catppuccin-prefix)))))
-                  (setq catppuccin-flavor flavor)
-                  (load-theme 'catppuccin t)
-                  (message "Loaded theme: catppuccin (%s)" flavor))
-              (load-theme t-to-load t)
-              (message "Loaded theme: %s" t-to-load))))
+(use-package nord-theme
+  :ensure t
+  :defer t
+  :custom
+  (nord-region-highlight "frost"))
 
-        (use-package nord-theme
-          :ensure t
-          :defer t
-          :custom
-          (nord-region-highlight "frost"))
+(use-package modus-themes
+  :ensure t
+  :defer t)
 
-        (use-package modus-themes
-          :ensure t
-          :defer t)
+(use-package ef-themes
+  :ensure t
+  :defer t)
 
-        (use-package ef-themes
-          :ensure t
-          :defer t)
+(use-package catppuccin-theme
+  :ensure t
+  :defer t)
 
-        (use-package catppuccin-theme
-          :ensure t
-          :config
-          :defer t)
+(use-package doom-themes
+  :ensure t
+  :defer t
+  :config
+  (setq doom-themes-enable-bold t
+        doom-themes-enable-italic t))
 
-        (use-package doom-themes
-          :ensure t
-          :defer t
-          :config
-          (setq doom-themes-enable-bold t
-                doom-themes-enable-italic t))
-
-        (defun systemhalted/get-theme-cycle-list ()
-          "Get the list of themes to cycle through: nord, catppuccin flavors, ef-themes, and doom-themes."
-          (let ((all-themes (custom-available-themes)))
-            (append
-             '(nord catppuccin-latte catppuccin-frappe catppuccin-macchiato catppuccin-mocha)
-             (seq-filter (lambda (x) (string-prefix-p "ef-" (symbol-name x))) all-themes)
-             (seq-filter (lambda (x) (string-prefix-p "doom-" (symbol-name x))) all-themes))))
-
-        (defun systemhalted/cycle-theme ()
-          "Cycle to the next theme in `systemhalted/get-theme-cycle-list'."
-          (interactive)
-          (let* ((themes (systemhalted/get-theme-cycle-list))
-                 (current (car custom-enabled-themes))
-                 ;; Map the real catppuccin theme back to its pseudo-symbol
-                 (effective (if (and (eq current 'catppuccin)
-                                     (boundp 'catppuccin-flavor))
-                                (intern (concat "catppuccin-" (symbol-name catppuccin-flavor)))
-                              current))
-                 (next (or (cadr (member effective themes))
-                           (car themes))))
-            (systemhalted/load-theme next)))
-
-        (defun systemhalted/select-theme ()
-          "Interactively select a theme from the filtered cycle list."
-          (interactive)
-          (let* ((themes (systemhalted/get-theme-cycle-list))
-                 (theme-names (mapcar #'symbol-name themes))
-                 (choice (completing-read "Select theme: " theme-names nil t)))
-            (systemhalted/load-theme (intern choice))))
-
-        (global-set-key (kbd "C-c t") #'systemhalted/cycle-theme)
-        (global-set-key (kbd "C-c T") #'systemhalted/select-theme)
+(global-set-key (kbd "C-c T") #'consult-theme)
 #+end_src
 
 ** Nerd-icons — icon glyphs via Nerd Fonts
 
-[[https://github.com/rainstormstudio/nerd-icons.el][nerd-icons]] provides
-a library of icon glyphs drawn from the Nerd Fonts Private Use Area.
-The font fallback for those ranges is already configured above in the
-font block; this package gives Emacs Lisp a clean API to insert them.
-The dashboard and other UI packages consume =nerd-icons= for file-type
-and section-heading decorations.
+=nerd-icons= supplies Dashboard's file and heading icons. The font fallback
+above provides the corresponding glyphs.
 
 #+begin_src emacs-lisp
   (use-package nerd-icons
@@ -4411,32 +4047,19 @@ and section-heading decorations.
 
 ** Dashboard — startup screen
 
-Rather than starting with a blank scratch buffer, Emacs opens a
-purpose-built dashboard showing recent files, Projectile projects,
-bookmarks, and one-click navigator buttons for the most-used personal
-commands (journal, notes search, tutorials, Magit).
+Dashboard shows recent files, Projectile's saved projects, bookmarks, and
+buttons for the journal, notes search, and tutorials. It uses the standard
+Projectile backend without custom project ranking.
 
-The dashboard uses =nerd-icons= for file-type and heading icons — the
-Nerd Font fallback registered in the font section above provides the
-glyphs.  Content is centered and the ASCII text banner keeps things
-lightweight in both GUI and terminal frames.
+=initial-buffer-choice= selects Dashboard for startup and new client frames
+when no file is requested. Nerd Font fallbacks supply the icons.
 
-=initial-buffer-choice= is set to =dashboard-open= so =emacsclient -c=
-frames also land on the dashboard instead of a bare scratch buffer.
-Projects still come from Projectile, but the list is re-ranked locally
-by activity: projects with open buffers come first, then projects
-inferred from =recentf=, then the untouched remainder. The stock widget
-mostly reflects startup discovery order, which barely moves in a
-long-lived Emacs session.
-
-Single-key shortcuts in the dashboard buffer:
-
-| Key | Action              |
-|-----+---------------------|
+| Key | Action               |
+|-----+----------------------|
 | =j= | Open today's journal |
 | =n= | Search notes         |
 | =t= | Browse tutorials     |
-| =g= | Refresh dashboard    |
+| =g= | Refresh Dashboard    |
 
 #+begin_src emacs-lisp
   (use-package dashboard

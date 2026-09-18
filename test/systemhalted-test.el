@@ -232,53 +232,36 @@
     (should-not face-calls)
     (should-not fontset-calls)))
 
-(ert-deftest systemhalted/dashboard-projects-normalize-root-adds-trailing-slash ()
-  (should
-   (equal "/tmp/example-project/"
-          (systemhalted/dashboard-projects--normalize-root
-           "/tmp/example-project"))))
-
-(ert-deftest systemhalted/dashboard-projects-prefers-most-specific-root ()
-  (should
-   (equal "/tmp/work/app/"
-          (systemhalted/dashboard-projects--project-for-file
-           "/tmp/work/app/src/main.el"
-           '(("/tmp/work/app/" . "/tmp/work/app/")
-             ("/tmp/work/" . "/tmp/work/"))))))
-
-(ert-deftest systemhalted/dashboard-projects-sort-by-activity-prioritizes-open-then-recentf ()
-  (let ((recentf-list '("/tmp/work/eventing/src/main.el"
-                        "/tmp/work/notes/index.org"
-                        "/tmp/work/shell/README.md")))
-    (cl-letf (((symbol-function 'projectile-open-projects)
-               (lambda ()
-                 '("/tmp/work/emacs.d/" "/tmp/work/shell/"))))
-      (should
-       (equal '("/tmp/work/emacs.d/"
-                "/tmp/work/shell/"
-                "/tmp/work/eventing/"
-                "/tmp/work/notes/"
-                "/tmp/work/misc/")
-              (systemhalted/dashboard-projects--sort-by-activity
-               '("/tmp/work/shell"
-                 "/tmp/work/misc"
-                 "/tmp/work/eventing"
-                 "/tmp/work/notes"
-                 "/tmp/work/emacs.d")))))))
-
-(ert-deftest systemhalted/dashboard-projects-loader-only-sorts-projectile-backend ()
-  (cl-letf (((symbol-function 'systemhalted/dashboard-projects--sort-by-activity)
-             (lambda (_projects) '("sorted"))))
-    (let ((dashboard-projects-backend 'projectile))
-      (should
-       (equal '("sorted")
-              (systemhalted/dashboard-projects--load-projects-by-activity
-               (lambda () '("original"))))))
-    (let ((dashboard-projects-backend 'project-el))
-      (should
-       (equal '("original")
-              (systemhalted/dashboard-projects--load-projects-by-activity
-               (lambda () '("original"))))))))
+(ert-deftest systemhalted/markdown-preserves-table-text-until-explicit-alignment ()
+  (let ((root (make-temp-file "markdown-tables-" t))
+        (text "| Name | Value |\n|---|---|\n| x | longer value |\n"))
+    (unwind-protect
+        (dolist (entry '(("README.md" . gfm-mode)
+                         ("notes.md" . markdown-mode)))
+          (let ((file (expand-file-name (car entry) root))
+                buffer)
+            (unwind-protect
+                (progn
+                  (with-temp-file file (insert text))
+                  (setq buffer (find-file-noselect file))
+                  (with-current-buffer buffer
+                    (should (eq major-mode (cdr entry)))
+                    (should (equal (buffer-string) text))
+                    (should-not (buffer-modified-p))
+                    (goto-char (point-max))
+                    (insert "\nA note.\n")
+                    (save-buffer)
+                    (should (equal (buffer-string) (concat text "\nA note.\n")))
+                    (with-temp-buffer
+                      (insert-file-contents file)
+                      (should (equal (buffer-string) (concat text "\nA note.\n"))))
+                    (goto-char (point-min))
+                    (call-interactively #'markdown-table-align)
+                    (should-not (equal (buffer-string) (concat text "\nA note.\n")))))
+              (when (buffer-live-p buffer)
+                (with-current-buffer buffer (set-buffer-modified-p nil))
+                (kill-buffer buffer)))))
+      (delete-directory root t))))
 
 (ert-deftest systemhalted/use-package-error-warnings-are-recorded ()
   (let ((systemhalted/use-package-errors nil))
