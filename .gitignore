@@ -58,6 +58,7 @@ emacs-config.txt
 *.iml
 *~
 *~$
-#init.el#
+\#*\#
+.#*
 README.el
 README.org~
