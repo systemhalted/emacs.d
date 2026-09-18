@@ -39,23 +39,15 @@
                         (if (eq state 'current) 'generated 'source))))
         (delete-directory root t)))))
 
-(ert-deftest systemhalted/reload-clears-global-snippets-and-keeps-single-git-timer ()
-  (let* ((generated (expand-file-name "systemhalted.el" user-emacs-directory))
-         (legacy-timer (run-with-idle-timer 3600 nil #'yas-global-mode 1)))
-    (unwind-protect
-        (progn
-          (yas-global-mode 1)
-          (load generated nil 'nomessage)
-          (systemhalted/config--assert-no-package-errors)
-          (should-not yas-global-mode)
-          (should-not (memq legacy-timer timer-idle-list))
-          (let ((previous systemhalted/git-editor--preload-timer))
-            (load generated nil 'nomessage)
-            (systemhalted/config--assert-no-package-errors)
-            (should-not (memq previous timer-idle-list))
-            (should (memq systemhalted/git-editor--preload-timer timer-idle-list))))
-      (cancel-timer legacy-timer)
-      (yas-global-mode -1))))
+(ert-deftest systemhalted/reload-keeps-single-git-timer ()
+  (let ((generated (expand-file-name "systemhalted.el" user-emacs-directory)))
+    (load generated nil 'nomessage)
+    (systemhalted/config--assert-no-package-errors)
+    (let ((previous systemhalted/git-editor--preload-timer))
+      (load generated nil 'nomessage)
+      (systemhalted/config--assert-no-package-errors)
+      (should-not (memq previous timer-idle-list))
+      (should (memq systemhalted/git-editor--preload-timer timer-idle-list)))))
 
 (ert-deftest systemhalted/project-scan-finds-inner-root-without-registering-ancestor ()
   (let* ((root (make-temp-file "nested-project-" t))
@@ -66,114 +58,6 @@
           (should (equal (systemhalted/projects--scan root)
                          (list (file-name-as-directory (file-truename repo))))))
       (delete-directory root t))))
-
-(ert-deftest systemhalted/package-install-refreshes-and-retries-once ()
-  (let ((calls 0)
-        (refreshes 0)
-        (systemhalted/package-install--refreshing nil)
-        (descriptor
-         (package-desc-create :name 'demo
-                              :version '(1 0)
-                              :summary "demo"
-                              :reqs nil
-                              :kind 'tar
-                              :archive "melpa"))
-        seen)
-    (cl-letf (((symbol-function 'package-refresh-contents)
-               (lambda () (setq refreshes (1+ refreshes)))))
-      (should
-       (eq 'installed
-           (systemhalted/package-install--with-refresh
-            (lambda (package &rest _args)
-              (setq calls (1+ calls)
-                    seen package)
-              (if (= calls 1)
-                  (signal 'file-error '("https://melpa.org/packages/demo-1.0.tar" "Not Found"))
-                'installed))
-            descriptor)))
-      (should (= calls 2))
-      (should (= refreshes 1))
-      (should (eq seen 'demo)))))
-
-(ert-deftest systemhalted/package-install-propagates-second-failure ()
-  (let ((calls 0)
-        (refreshes 0)
-        (systemhalted/package-install--refreshing nil))
-    (cl-letf (((symbol-function 'package-refresh-contents)
-               (lambda () (setq refreshes (1+ refreshes)))))
-      (should-error
-       (systemhalted/package-install--with-refresh
-        (lambda (&rest _args)
-          (setq calls (1+ calls))
-          (if (= calls 1)
-              (signal 'file-error '("https://melpa.org/packages/demo-1.0.tar" "Not Found"))
-            (error "still broken")))
-        'demo))
-      (should (= calls 2))
-      (should (= refreshes 1)))))
-
-(ert-deftest systemhalted/package-install-does-not-retry-unrelated-errors ()
-  (dolist (failure '((error "signature verification failed")
-                     (error "invalid dependency")
-                     (file-error "/local/demo.el" "Permission denied")
-                     (file-error "https://melpa.org/packages/demo-1.0.tar" "No Data")
-                     (file-error "https://melpa.org/packages/demo-1.0.tar" "Forbidden")
-                     (file-error "https://melpa.org/packages/archive-contents" "Not Found")
-                     (file-error "https://other.example/demo-1.0.tar" "Not Found")))
-    (let ((calls 0) (refreshes 0))
-      (cl-letf (((symbol-function 'package-refresh-contents)
-                 (lambda () (setq refreshes (1+ refreshes)))))
-        (should (equal failure
-                       (should-error
-                        (systemhalted/package-install--with-refresh
-                         (lambda (&rest _args)
-                           (setq calls (1+ calls))
-                           (signal (car failure) (cdr failure)))
-                         'demo))))
-        (should (= calls 1))
-        (should (= refreshes 0))))))
-
-(ert-deftest systemhalted/package-install-preserves-arguments-and-recursion-guard ()
-  (let ((calls 0) seen)
-    (cl-letf (((symbol-function 'package-refresh-contents) #'ignore))
-      (systemhalted/package-install--with-refresh
-       (lambda (_package &rest args)
-         (setq calls (1+ calls) seen args)
-         (when (= calls 1)
-           (signal 'file-error '("https://melpa.org/packages/demo-1.0.el" "Gone"))))
-       'demo t 'interactive)
-      (should (= calls 2))
-      (should (equal seen '(t interactive))))
-    (let ((systemhalted/package-install--refreshing t))
-      (cl-letf (((symbol-function 'package-refresh-contents)
-                 (lambda () (ert-fail "Nested retry refreshed archives"))))
-        (should-error
-         (systemhalted/package-install--with-refresh
-          (lambda (&rest _args)
-            (signal 'file-error '("https://melpa.org/packages/demo-1.0.el" "Gone")))
-          'demo))))))
-
-(ert-deftest systemhalted/env-import-scopes-prompt-override-and-keeps-imports ()
-  (require 'exec-path-from-shell)
-  (let ((process-environment (copy-sequence process-environment))
-        (exec-path-from-shell-variables '("PATH" "JAVA_HOME"))
-        (exec-path exec-path))
-    (setenv "POWERLEVEL9K_INSTANT_PROMPT" "original")
-    (cl-letf (((symbol-function 'exec-path-from-shell-initialize)
-               (lambda ()
-                 (should (equal (getenv "POWERLEVEL9K_INSTANT_PROMPT") "quiet"))
-                 (setenv "PATH" "/imported/bin")
-                 (setenv "JAVA_HOME" "/imported/jdk")
-                 (setq exec-path '("/imported/bin")))))
-      (systemhalted/env-import--initialize))
-    (should (equal (getenv "POWERLEVEL9K_INSTANT_PROMPT") "original"))
-    (should (equal (getenv "PATH") "/imported/bin"))
-    (should (equal (getenv "JAVA_HOME") "/imported/jdk"))
-    (should (equal exec-path '("/imported/bin")))
-    (cl-letf (((symbol-function 'exec-path-from-shell-initialize)
-               (lambda () (error "shell failure"))))
-      (should-error (systemhalted/env-import--initialize)))
-    (should (equal (getenv "POWERLEVEL9K_INSTANT_PROMPT") "original"))))
 
 (ert-deftest systemhalted/dashboard-owns-startup-display ()
   (should (eq initial-major-mode 'lisp-interaction-mode))
@@ -270,17 +154,6 @@
     (display-warning 'emacs "unrelated" :error)
     (should (equal systemhalted/use-package-errors
                    '("Failed to install demo: no match")))))
-
-(ert-deftest systemhalted/package-install-keeps-original-error-when-refresh-fails ()
-  (let ((systemhalted/package-install--refreshing nil))
-    (cl-letf (((symbol-function 'package-refresh-contents)
-               (lambda () (error "network down"))))
-      (let ((err (should-error
-                  (systemhalted/package-install--with-refresh
-                   (lambda (&rest _args)
-                     (signal 'file-error '("https://melpa.org/packages/demo-1.0.tar" "Not Found")))
-                   'demo))))
-        (should (equal err '(file-error "https://melpa.org/packages/demo-1.0.tar" "Not Found")))))))
 
 (ert-deftest systemhalted/test-run-is-isolated-before-init ()
   (should (getenv "SYSTEMHALTED_TEST_ISOLATED"))

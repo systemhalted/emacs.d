@@ -133,6 +133,16 @@ Before committing, run =git diff --check= and =git status --short=.
 Archive packages declare =:ensure t=, built-ins and package-bundled extensions
 declare =:ensure nil=, and local checkout branches also declare =:ensure nil=.
 A =:vc= declaration is already an explicit package installer and is not paired
-with =:ensure=.  Only a missing package artifact (HTTP Not Found or Gone from a configured
-archive) refreshes metadata and retries once. Other failures propagate without
-retrying.
+with =:ensure=. Package installation failures are reported without automatic
+retries. For a stale archive download, run =M-x package-refresh-contents=,
+then =M-x package-install= for that package and restart Emacs.
+
+* Shell environment
+
+GUI and daemon sessions import the shell environment directly at startup.
+=C-c R= re-imports after shell changes; restart after changing personal checkout
+paths. Terminal and batch sessions inherit their environment. The old
+=var/env-cache.el= file is no longer read or written.
+
+Restart once after this update to remove the old package-install advice and
+any legacy global Yasnippet timer from a running session.

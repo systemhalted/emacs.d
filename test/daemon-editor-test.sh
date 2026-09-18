@@ -43,6 +43,8 @@ printf 'Placeholder commit\n' >"$commit_message"
 # daemon never rewrites savehist/recentf state shared with real sessions.
 probe="(progn
   (systemhalted/config--assert-no-package-errors)
+  (unless (featurep 'exec-path-from-shell)
+    (error \"Daemon startup did not load the shell environment importer\"))
   (setq kill-emacs-hook nil)
   (with-temp-file \"$result\"
     (insert (format \"%S\" (list

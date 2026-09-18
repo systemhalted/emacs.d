@@ -37,8 +37,8 @@ Project discovery runs only on explicit request under `~/Work`; startup uses
 Projectile's saved list. Snippets activate in programming and Org buffers.
 Git input recovery is restricted to finish/abort keys in active Git client
 editor buffers, preserving pending input. Register advice and timers safely
-across reloads. Package retries apply only to missing configured archive
-artifacts; unrelated errors must propagate.
+across reloads. Shell imports are direct, without a disk cache. Package-install
+failures are reported without automatic retries; refresh stale metadata manually.
 
 ## Naming and style
 

@@ -18,7 +18,7 @@ configures the editor and packages.
 | To change…                         | Open…                          |
 |------------------------------------+--------------------------------|
 | Startup, backups, basic editing     | [[*Core][Core]]                           |
-| PATH, Java environment, shell cache | [[*Environment][Environment]]                    |
+| PATH, Java environment, shell import | [[*Environment][Environment]]                    |
 | Completion, search, help            | [[*Interaction & Completion][Interaction & Completion]]       |
 | Project root or discovery           | [[*Projects][Projects]]                       |
 | Language tools, snippets, debugging | [[*Development & Languages][Development & Languages]]        |
@@ -50,41 +50,20 @@ Startup, packages, basic editing, and configuration commands.
 
 ** Startup and packages
 
-Startup is intentionally boring. =early-init.el= sets
-=package-enable-at-startup= to nil — since Emacs 27 the automatic activation
-pass runs /before/ init.el, so disabling it there (and only there; setting the
-variable in this file would be too late) makes the explicit
-=package-initialize= below the single activation per startup. Package archives
-are current and explicit:
-GNU/Nongnu provide core ecosystem packages, MELPA provides actively maintained
-tooling, and MELPA Stable remains lower priority. =use-package= is used only to
-make package ownership and configuration boundaries obvious. Archive packages
-declare =:ensure t=; built-ins, bundled extensions, and local checkouts declare
-=:ensure nil=; =:vc= is already an explicit installer. There is no global
-auto-install switch because broad implicit installs make reloads harder to
-reason about.
+=early-init.el= disables automatic package activation; =package-initialize=
+below owns activation. GNU, NonGNU, MELPA, and MELPA Stable are configured in
+priority order. Archive packages declare =:ensure t=; built-ins and local
+checkouts use =:ensure nil=; =:vc= handles Git installs.
 
-Archive metadata can outlive MELPA's rolling tarballs. Only a missing package
-artifact (HTTP Not Found or Gone from a configured archive) triggers a refresh
-and one retry by package name. Signature, permission, connection, dependency,
-and compilation errors propagate immediately. =use-package= errors are also
-recorded for the strict batch smoke test; interactive startup still reports
-them normally without being terminated.
+Package installation failures are reported without an automatic retry. If an
+archive download is missing because metadata is stale, run
+=M-x package-refresh-contents=, then =M-x package-install= for the affected
+package and restart Emacs. Other errors need their reported cause addressed.
+The strict batch check fails on recorded =use-package= errors.
 
-Emacs Custom can still write local state, but it is redirected under
-=var/custom.el= so generated choices do not churn this repository. Settings that
-are part of the intentional configuration should live here instead. Opaque
-fingerprints, such as trusted theme hashes, can remain in ignored Custom state;
-readable preferences, such as the =lsp-ui= face overrides below, belong in the
-literate config.
-
-Native compilation runs asynchronously for installed packages, and several
-upstream packages (=dap-mode=, =lsp-java=, =posframe=, =lsp-treemacs=) emit
-"function not known to be defined" warnings because cross-package references are
-visible to the byte compiler before their =declare-function= forms load. The
-warnings are benign — every symbol resolves at runtime via autoloads — so the
-Warnings buffer is silenced. Messages are still written to the
-=*Native-compile-Log*= buffer if a real failure ever needs investigation.
+Custom state lives in ignored =var/custom.el=. Keep intentional settings here.
+Native compilation warnings are kept out of the Warnings buffer; inspect
+=*Native-compile-Log*= when investigating compilation failures.
 
 #+begin_src emacs-lisp
 ;;; systemhalted.el --- Personal Emacs configuration -*- lexical-binding: t; -*-
@@ -124,47 +103,6 @@ Warnings buffer is silenced. Messages are still written to the
 (package-initialize)
 (unless package-archive-contents
   (package-refresh-contents))
-
-(defvar systemhalted/package-install--refreshing nil
-  "Non-nil while retrying a package install after refreshing archives.")
-
-(defun systemhalted/package-install--stale-download-p (err)
-  "Return non-nil when ERR describes a missing configured archive artifact."
-  (let ((url (nth 1 err))
-        (description (nth 2 err)))
-    (and (eq (car err) 'file-error)
-         (stringp url)
-         (member description '("Not Found" "Gone"))
-         (string-match-p "\\`https?://.+/[^/?]+\\.\\(?:tar\\|el\\)\\'" url)
-         (seq-some (lambda (archive)
-                     (string-prefix-p (file-name-as-directory (cdr archive)) url))
-                   package-archives))))
-
-(defun systemhalted/package-install--with-refresh (orig package &rest args)
-  "Call ORIG to install PACKAGE, retrying a stale archive download once.
-ARGS are the remaining arguments to `package-install'.  A stale
-`package-desc' is retried by package name so the refreshed descriptor wins."
-  (condition-case err
-      (apply orig package args)
-    (error
-     (if (or systemhalted/package-install--refreshing
-             (not (systemhalted/package-install--stale-download-p err)))
-         (signal (car err) (cdr err))
-       (let ((systemhalted/package-install--refreshing t)
-             (package-name (if (package-desc-p package)
-                               (package-desc-name package)
-                             package)))
-         (message "Missing archive download; refreshing and retrying %s once..."
-                  package-name)
-         ;; Offline, the refresh fails too; its error would replace the more
-         ;; useful install error, so surface the original instead.
-         (condition-case nil
-             (package-refresh-contents)
-           (error (signal (car err) (cdr err))))
-         (apply orig package-name args))))))
-
-(advice-remove 'package-install #'systemhalted/package-install--with-refresh)
-(advice-add 'package-install :around #'systemhalted/package-install--with-refresh)
 
 (unless (package-installed-p 'use-package)
   (package-install 'use-package))
@@ -643,69 +581,22 @@ Import the shell environment before packages inspect local checkout paths.
 
 ** Process I/O and shell environment
 
-Two startup-time settings that later sections depend on:
+=read-process-output-max= allows 1 MiB reads for language-server responses.
+GUI and daemon sessions import =PATH=, =MANPATH=, =JAVA_HOME=, and personal
+package checkout variables directly from the shell. Terminal and batch sessions
+use their inherited environment.
 
-- =read-process-output-max= controls the largest chunk Emacs reads from a
-  subprocess in one go. The default (4 KiB on most systems) is fine for
-  =grep= but pathological for =lsp-mode=, which streams large JSON
-  responses from JDT LS and Pyright. Raising it to 1 MiB cuts the
-  per-response syscall count by ~250×, which is the single biggest
-  responsiveness win for Java buffers.
-- =exec-path-from-shell= imports =PATH=, =MANPATH=, =JAVA_HOME=,
-  =SDKMAN_EL_DIR=, =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= from a login
-  + interactive shell
-  on startup. GUI Emacs
-  (macOS, Linux Wayland via PGTK, Linux X11 launched from outside a
-  terminal) does *not* inherit the interactive shell environment, so
-  SDKMAN / Homebrew / MacPorts / =update-alternatives= entries are
-  otherwise invisible to the Emacs process. =SDKMAN_EL_DIR=,
-  =TRUSTRAIL_EL_DIR= and =WORDWISE_EL_DIR= are imported for the same
-  reason: each points its
-  section at a local checkout of a package maintained in this
-  account, and without the import a GUI Emacs would never see them and
-  would always fall back to the GitHub install. SDKMAN's init only runs in interactive shells
-  (=~/.zshrc=), not login shells (=~/.zprofile=), which is why the
-  arguments are =-l -i= — both flags are needed to source the full
-  shell startup. The =:if= guard skips this in headless batch runs where
-  there's no shell to spawn.
-
-This section lives in the startup chapter deliberately: the import must
-run before any section that reads environment variables at load time.
-The Wordwise block resolves =WORDWISE_EL_DIR= the moment it is
-evaluated, and when this import sat later in the file (its old home in
-the Programming chapter) a GUI Emacs was still blind to the variable at
-that point and silently fell back to the GitHub install.
-
-*** Environment cache
-
-Spawning =zsh -l -i= on every startup costs over a second. The cache
-layer below writes the imported variables to =var/env-cache.el= after the
-first shell spawn and reads them back on subsequent starts, skipping the
-shell entirely. The cache auto-expires after 24 hours so changes to
-=~/.zshrc= (new SDKMAN candidates, PATH edits) are picked up within a
-day. =C-c R= (=systemhalted/refresh-env-cache=) forces an immediate
-re-import when you need it sooner. The Powerlevel10k prompt override applies
-only while importing; it is never exported to terminals opened later.
+The shell runs with =-l -i= because SDKMAN is initialized in =~/.zshrc=.
+Import happens before packages choose their local checkouts. =C-c R= re-imports
+the environment after shell changes; restart Emacs after changing checkout paths.
+There is no disk cache or expiry policy.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
 
-(defvar exec-path-from-shell-variables)
-
-(defun systemhalted/env-import--initialize ()
-  "Import the shell environment with a temporary Powerlevel10k override."
-  (let (imported)
-    (let ((process-environment (copy-sequence process-environment)))
-      (setenv "POWERLEVEL9K_INSTANT_PROMPT" "quiet")
-      (exec-path-from-shell-initialize)
-      (setq imported (mapcar (lambda (variable)
-                              (cons variable (getenv variable)))
-                            exec-path-from-shell-variables)))
-    (dolist (entry imported)
-      (setenv (car entry) (cdr entry)))))
-
 (use-package exec-path-from-shell
   :ensure t
+  :demand t
   :if (or (daemonp) (memq window-system '(mac ns x pgtk)))
   :init
   (setq exec-path-from-shell-variables
@@ -714,53 +605,9 @@ only while importing; it is never exported to terminals opened later.
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
-  (defvar systemhalted/env-cache-file
-    (expand-file-name "var/env-cache.el" user-emacs-directory)
-    "File where cached shell environment variables are stored.")
-
-  (defvar systemhalted/env-cache-ttl-hours 24
-    "Hours before the environment cache is considered stale.")
-
-  (defun systemhalted/env-cache-valid-p ()
-    "Return non-nil when the env cache exists and is younger than TTL."
-    (and (file-exists-p systemhalted/env-cache-file)
-         (< (float-time
-             (time-subtract (current-time)
-                            (file-attribute-modification-time
-                             (file-attributes systemhalted/env-cache-file))))
-            (* systemhalted/env-cache-ttl-hours 3600))))
-
-  (defun systemhalted/env-cache-write ()
-    "Snapshot the current values of `exec-path-from-shell-variables' to disk."
-    (make-directory (file-name-directory systemhalted/env-cache-file) t)
-    (with-temp-file systemhalted/env-cache-file
-      (insert ";;; env-cache.el --- auto-generated shell env cache  -*- no-byte-compile: t -*-\n")
-      (dolist (var exec-path-from-shell-variables)
-        (let ((val (getenv var)))
-          (when val
-            (insert (format "(setenv %S %S)\n" var val)))))
-      (insert (format "(setq exec-path (split-string (getenv \"PATH\") path-separator))\n"))
-      (insert ";;; env-cache.el ends here\n")))
-
-  (defun systemhalted/env-cache-load ()
-    "Apply cached environment variables from disk."
-    (load systemhalted/env-cache-file nil 'nomessage 'nosuffix))
-
-  (defun systemhalted/refresh-env-cache ()
-    "Re-import the shell environment and update the cache.
-Use after editing ~/.zshrc, installing a new SDKMAN candidate, etc."
-    (interactive)
-    (systemhalted/env-import--initialize)
-    (systemhalted/env-cache-write)
-    (message "Environment cache refreshed."))
-
   :config
-  (if (systemhalted/env-cache-valid-p)
-      (systemhalted/env-cache-load)
-    (systemhalted/env-import--initialize)
-    (systemhalted/env-cache-write))
-
-  :bind ("C-c R" . systemhalted/refresh-env-cache))
+  (exec-path-from-shell-initialize)
+  :bind ("C-c R" . exec-path-from-shell-initialize))
 #+end_src
 
 * Interaction & Completion
@@ -1465,28 +1312,14 @@ configure beyond the hook.
 
 ** Yasnippet — template expansion
 
-=yasnippet= turns named triggers into multi-line templates with tab stops
-and mirror fields; =yasnippet-snippets= ships a community-maintained
-collection covering every major mode used here. Both are enabled globally
-because LSP completion candidates can carry snippet payloads
-(=lsp-enable-snippet t= further below), and accepting one of those
-candidates expands through yasnippet — so the package needs to be live in
-every LSP buffer even when it's never invoked by name. Activation is local to programming and Org buffers. Dashboard and other
-buffers do not receive snippets. Reload also clears the former global mode
-and any pending timer that would enable it.
+Yasnippet expands templates and LSP snippet completions in programming and Org
+buffers. =yasnippet-snippets= supplies the templates. Dashboard and other buffer
+types do not enable snippets.
 
 #+begin_src emacs-lisp
 (use-package yasnippet
   :ensure t
   :defer t
-  :init
-  (dolist (timer timer-idle-list)
-    (when (and (eq (timer--function timer) #'yas-global-mode)
-               (equal (timer--args timer) '(1)))
-      (cancel-timer timer)))
-  ;; Clear the previous global setting when reloading an existing session.
-  (when (bound-and-true-p yas-global-mode)
-    (yas-global-mode -1))
   :hook
   ((prog-mode . yas-minor-mode)
    (org-mode . yas-minor-mode)))
