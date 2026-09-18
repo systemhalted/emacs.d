@@ -45,6 +45,9 @@ separately. The `custom.el` will be created only when `Customize` is used.
   (require 'use-package)
 #+end_src
 
+
+* Interaction
+
 ** Minibuffer history
 
 #+begin_src emacs-lisp :tangle yes
@@ -54,4 +57,17 @@ separately. The `custom.el` will be created only when `Customize` is used.
     :ensure nil
     :config
     (savehist-mode 1))
+#+end_src
+
+
+** Vertico
+
+Vertico display completion candidates vertically while keping
+Emacs' existing matching system.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package vertico
+    :ensure t
+    :config
+    (vertico-mode 1))
 #+end_src
