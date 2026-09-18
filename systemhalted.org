@@ -33,9 +33,10 @@ declare =:ensure t=; built-ins, bundled extensions, and local checkouts declare
 auto-install switch because broad implicit installs make reloads harder to
 reason about.
 
-Archive metadata can outlive MELPA's rolling tarballs. If an install fails, a
-small advice refreshes the archives and retries once by package name so a stale
-descriptor cannot keep requesting a removed URL. =use-package= errors are also
+Archive metadata can outlive MELPA's rolling tarballs. Only a missing package
+artifact (HTTP Not Found or Gone from a configured archive) triggers a refresh
+and one retry by package name. Signature, permission, connection, dependency,
+and compilation errors propagate immediately. =use-package= errors are also
 recorded for the strict batch smoke test; interactive startup still reports
 them normally without being terminated.
 
@@ -61,12 +62,17 @@ Warnings buffer is silenced. Messages are still written to the
 
 (setq native-comp-async-report-warnings-errors 'silent)
 
-(add-hook 'emacs-startup-hook
-          (lambda ()
-            (setq gc-cons-threshold (* 2 1000 1000))
-            (message "Emacs loaded in %.2f seconds with %d garbage collections."
-                     (float-time (time-subtract after-init-time before-init-time))
-                     gcs-done)))
+(defun systemhalted/startup--finish ()
+  "Restore the normal GC threshold and report startup time."
+  (setq gc-cons-threshold (* 2 1000 1000))
+  (message "Emacs loaded in %.2f seconds with %d garbage collections."
+           (float-time (time-subtract after-init-time before-init-time))
+           gcs-done))
+
+(add-hook 'emacs-startup-hook #'systemhalted/startup--finish)
+;; A reload has no subsequent startup hook to restore this threshold.
+(when after-init-time
+  (setq gc-cons-threshold (* 2 1000 1000)))
 
 (setq custom-file (expand-file-name "var/custom.el" user-emacs-directory))
 (make-directory (file-name-directory custom-file) t)
@@ -91,20 +97,33 @@ Warnings buffer is silenced. Messages are still written to the
 (defvar systemhalted/package-install--refreshing nil
   "Non-nil while retrying a package install after refreshing archives.")
 
+(defun systemhalted/package-install--stale-download-p (err)
+  "Return non-nil when ERR describes a missing configured archive artifact."
+  (let ((url (nth 1 err))
+        (description (nth 2 err)))
+    (and (eq (car err) 'file-error)
+         (stringp url)
+         (member description '("Not Found" "Gone"))
+         (string-match-p "\\`https?://.+/[^/?]+\\.\\(?:tar\\|el\\)\\'" url)
+         (seq-some (lambda (archive)
+                     (string-prefix-p (file-name-as-directory (cdr archive)) url))
+                   package-archives))))
+
 (defun systemhalted/package-install--with-refresh (orig package &rest args)
-  "Call ORIG to install PACKAGE, refreshing stale archives on first failure.
+  "Call ORIG to install PACKAGE, retrying a stale archive download once.
 ARGS are the remaining arguments to `package-install'.  A stale
 `package-desc' is retried by package name so the refreshed descriptor wins."
   (condition-case err
       (apply orig package args)
     (error
-     (if systemhalted/package-install--refreshing
+     (if (or systemhalted/package-install--refreshing
+             (not (systemhalted/package-install--stale-download-p err)))
          (signal (car err) (cdr err))
        (let ((systemhalted/package-install--refreshing t)
              (package-name (if (package-desc-p package)
                                (package-desc-name package)
                              package)))
-         (message "Package install failed; refreshing archives and retrying %s once..."
+         (message "Missing archive download; refreshing and retrying %s once..."
                   package-name)
          ;; Offline, the refresh fails too; its error would replace the more
          ;; useful install error, so surface the original instead.
@@ -191,10 +210,23 @@ first shell spawn and reads them back on subsequent starts, skipping the
 shell entirely. The cache auto-expires after 24 hours so changes to
 =~/.zshrc= (new SDKMAN candidates, PATH edits) are picked up within a
 day. =C-c R= (=systemhalted/refresh-env-cache=) forces an immediate
-re-import when you need it sooner.
+re-import when you need it sooner. The Powerlevel10k prompt override applies
+only while importing; it is never exported to terminals opened later.
 
 #+begin_src emacs-lisp
 (setq read-process-output-max (* 1024 1024))
+
+(defun systemhalted/env-import--initialize ()
+  "Import the shell environment with a temporary Powerlevel10k override."
+  (let (imported)
+    (let ((process-environment (copy-sequence process-environment)))
+      (setenv "POWERLEVEL9K_INSTANT_PROMPT" "quiet")
+      (exec-path-from-shell-initialize)
+      (setq imported (mapcar (lambda (variable)
+                              (cons variable (getenv variable)))
+                            exec-path-from-shell-variables)))
+    (dolist (entry imported)
+      (setenv (car entry) (cdr entry)))))
 
 (use-package exec-path-from-shell
   :ensure t
@@ -206,10 +238,6 @@ re-import when you need it sooner.
   ;; SDKMAN init lives in ~/.zshrc (interactive), not ~/.zprofile (login),
   ;; so a plain login shell sees no JAVA_HOME. Use -l -i to source both.
   (setq exec-path-from-shell-arguments '("-l" "-i"))
-  ;; Silence Powerlevel10k's instant-prompt warning when the shell is
-  ;; spawned non-interactively by exec-path-from-shell.
-  (setenv "POWERLEVEL9K_INSTANT_PROMPT" "quiet")
-
   (defvar systemhalted/env-cache-file
     (expand-file-name "var/env-cache.el" user-emacs-directory)
     "File where cached shell environment variables are stored.")
@@ -246,14 +274,14 @@ re-import when you need it sooner.
     "Re-import the shell environment and update the cache.
 Use after editing ~/.zshrc, installing a new SDKMAN candidate, etc."
     (interactive)
-    (exec-path-from-shell-initialize)
+    (systemhalted/env-import--initialize)
     (systemhalted/env-cache-write)
     (message "Environment cache refreshed."))
 
   :config
   (if (systemhalted/env-cache-valid-p)
       (systemhalted/env-cache-load)
-    (exec-path-from-shell-initialize)
+    (systemhalted/env-import--initialize)
     (systemhalted/env-cache-write))
 
   :bind ("C-c R" . systemhalted/refresh-env-cache))
@@ -272,8 +300,8 @@ literate file easy to edit from inside Emacs.
 One =setq= block establishes the boring baseline; the clusters it covers:
 
 - *Quiet startup.* =inhibit-startup-screen=, =initial-scratch-message nil=,
-  and =initial-major-mode 'org-mode= replace the splash screen with an empty
-  =*scratch*= in Org mode — this file's native format.
+  and =initial-major-mode 'lisp-interaction-mode= keep the scratch buffer light;
+  Dashboard supplies the startup screen without activating Org in =*scratch*=.
 - *Sensory quiet.* =ring-bell-function 'ignore= silences the system beep;
   =echo-keystrokes 0.01= makes the minibuffer show the in-progress chord
   almost immediately so which-key has something to attach to.
@@ -308,7 +336,7 @@ and default I/O.
 #+begin_src emacs-lisp
   (setq inhibit-startup-screen t
         initial-scratch-message nil
-        initial-major-mode 'org-mode
+        initial-major-mode 'lisp-interaction-mode
         ring-bell-function 'ignore
         echo-keystrokes 0.01
         confirm-kill-emacs #'systemhalted/confirm-kill-emacs
