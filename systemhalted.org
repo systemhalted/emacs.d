@@ -28,6 +28,10 @@ separately. The =custom.el= will be created only when =Customize= is used.
 
 ** Packages
 
+=gnu= and =nongnu= host official packages, =melpa= community ones. The
+priorities pick the more official archive first when a package exists in
+several.
+
 #+begin_src emacs-lisp :tangle yes
   ;; require loads a library unless it has already been loaded
   (require 'package)
@@ -59,17 +63,44 @@ Do not make backup copies like =notes.org~=
 
 ** Key Conventions
 
+If parentheses are not paired, it makes life difficult. So,
+=electric-pair-mode= is just for that.
+
+Programs cry when tabs are present for indentation. However, I like pressing tab a lot.
+So turning them off so indentation even on tab is space based.
+
+Emacs by default shows the list of buffers that can be killed on =C-x k=.
+But my intention is always to kill the current buffer. So, remap it to =kill-current-buffer=.
+
+Also, mapping =s-u= to =revert-buffer= from disk.
+
+Handy conveniences: the column number in the mode line, the clock,
+remembering where point was when a file is reopened, and a list of recently
+opened files.
+
 #+begin_src emacs-lisp :tangle yes
   (electric-pair-mode 1)
   (setq-default indent-tabs-mode nil)
+
+  (global-set-key (kbd "C-x k") #'kill-current-buffer)
+  (global-set-key (kbd "s-u") #'revert-buffer)
+
+  (column-number-mode 1)
+  (display-time-mode 1)
+  (save-place-mode 1)
+  (recentf-mode 1)
 #+end_src
 
 * Interaction
 
 ** Minibuffer history
 
+The minibuffer history (previous commands, file names, search terms) is lost
+when Emacs exits. [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Savehist.html][savehist]] is built into Emacs (hence =:ensure nil=) and
+restores that history on the next start.
+
 #+begin_src emacs-lisp :tangle yes
-  ;; enable savhist-mode;
+  ;; enable savehist-mode;
   ;; `:ensure nil` means it would use existing library
   (use-package savehist
     :ensure nil
@@ -77,11 +108,35 @@ Do not make backup copies like =notes.org~=
     (savehist-mode 1))
 #+end_src
 
+** iBuffer
+=ibuffer= ships with Emacs, so this is a built-in (=:ensure nil=). It
+replaces the basic =list-buffers= menu on =C-x C-b= with a full
+major-mode listing where buffers can be marked, filtered (by mode, file
+name, size, project), killed or saved in bulk, and grouped. Think of it
+as =dired= for buffers.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package ibuffer
+    :ensure nil
+    :bind ("C-x C-b" . ibuffer))
+#+end_src
+
 
 ** Vertico
 
-Vertico display completion candidates vertically while keping
-Emacs' existing matching system.
+[[https://github.com/minad/vertico][Vertico]] shows completion candidates as a vertical list instead of the
+default single line, so far more candidates are visible at once. It keeps
+Emacs' own matching machinery, which the Orderless style (below) drives.
+
+=vertico-directory= adds file-aware helpers to the minibuffer:
+
+- =C-l= (=vertico-directory-up=) moves one directory up.
+- =RET= (=vertico-directory-enter=) enters the highlighted directory and keeps
+  completing inside it, instead of accepting it as the final value.
+
+Example: with =~/Work/e= typed, =C-l= pops you up to =~/Work/=; when a directory
+such as =emacs.d= is highlighted, =RET= opens it and completion continues
+inside.
 
 #+begin_src emacs-lisp :tangle yes
   (use-package vertico
@@ -100,11 +155,17 @@ Emacs' existing matching system.
 
 ** Orderless
 
-[[https://github.com/oantolin/orderless#overview][Orderless]] matches space-separated pieces in any order. For example,
-=function describe= can match =describe-function=.
+[[https://github.com/oantolin/orderless#overview][Orderless]] matches space-separated pieces in any order, treating each piece
+as a regexp. Example: =function describe= completes =describe-function=.
 
-We make orderless as the completion style and basic provides a fallback for completion
-tables that need it. Selecting the style enables its use.
+Orderless is the first entry in =completion-styles=; when it finds nothing,
+Emacs falls back to =basic=, the stock prefix style — a safety net for
+completion tables that do not play well with regexps.
+
+File paths are the one deliberate exception: =completion-category-overrides=
+switches the =file= category to =basic= plus =partial-completion=, so path
+components expand by prefix and wildcards are honored. Example: =~/Wo/e/emac=
+expands to =~/Work/environment/emacs=.
 
 #+begin_src emacs-lisp :tangle yes
   (use-package orderless
@@ -117,6 +178,9 @@ tables that need it. Selecting the style enables its use.
 
 ** which-key
 
+[[https://github.com/justbur/emacs-which-key][which-key]] pops up the possible completions shortly after a prefix key like
+=C-c p= is pressed, so bindings can be discovered instead of memorized.
+
  #+begin_src emacs-lisp :tangle yes
     (use-package which-key
       :ensure t
@@ -124,15 +188,42 @@ tables that need it. Selecting the style enables its use.
       (which-key-mode 1))
   #+end_src
 
+** Config Reload and Visit
+
+I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
+This is a utility function mapped to =C-c r=.
+
+#+begin_src emacs-lisp :tangle yes
+  (defun systemhalted/config-reload ()
+      "Save and reload the current config"
+    (interactive)
+    (let* ((config-buffer (get-file-buffer systemhalted/config-file)))
+    (when (and config-buffer (buffer-modified-p config-buffer))
+      (with-current-buffer config-buffer
+      (save-buffer)))
+    (message "Reload Emacs Configuration...")
+    (org-babel-load-file systemhalted/config-file)
+    (message "Reloaded Emacs Configuration")))
+   (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
+
+  (defun systemhalted/config-visit ()
+    "Open the literate config as a buffer in Emacs for editing"
+    (interactive)
+    (find-file systemhalted/config-file))
+  (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
+#+end_src
+
+
 * Development
 
 ** Language Servers
 
 *** Eglot
 
-Eglot is used as LSP Client. It is included with Emacs provides
-completion, go-to-definition, documentation, refactoring and diagnostics
-when a server is available
+Eglot is used as the LSP client. It is [[https://www.gnu.org/software/emacs/manual/html_node/eglot/][shipped with Emacs]] (hence
+=:ensure nil=) and is far lighter than lsp-mode. When an LSP server is present
+it provides completion, go-to-definition, documentation, refactoring and
+diagnostics.
 
 #+begin_src emacs-lisp :tangle yes
     (use-package eglot
@@ -148,12 +239,20 @@ when a server is available
 
 *** Rust
 
+[[https://github.com/rust-lang/rust-mode][rust-mode]] provides Rust syntax highlighting, indentation and compilation
+support. It stays deliberately small: the language server (rust-analyzer,
+managed by mise) is connected through Eglot.
+
 #+begin_src emacs-lisp :tangle yes
   (use-package rust-mode
     :ensure t)
 #+end_src
 
 ** Projectile
+
+[[https://docs.projectile.mx/en/latest/][Projectile]] tracks which project the current file belongs to and gives a single
+keymap (prefix =C-c p=) for finding files, switching buffers and searching the
+whole project.
 
 #+begin_src emacs-lisp :tangle yes
   (use-package projectile
@@ -166,12 +265,17 @@ when a server is available
 
 ** Yasnippet
 
+[[https://joaotavora.github.io/yasnippet/][Yasnippet]] expands short trigger strings into full templates. It is enabled
+only in =prog-mode=, =org-mode= and =markdown-mode= so it stays out of the way while writing
+prose. [[https://github.com/AndreaCrotti/yasnippet-snippets][yasnippet-snippets]] adds a collection of ready-made snippets.
+
 #+begin_src emacs-lisp :tangle yes
   (use-package yasnippet
     :ensure t
     :hook
     ((prog-mode . yas-minor-mode)
-     (org-mode . yas-minor-mode)))
+     (org-mode . yas-minor-mode)
+     (markdown-mode . yas-minor-mode)))
 
   ;; for ready-made snippets
   (use-package yasnippet-snippets
@@ -184,33 +288,84 @@ when a server is available
 
 ** Org
 
-Setup organicely and make Org aware of it.
-The files is created in =inbox= first. If later, need migration,
-=M-x dired-jump= and =R (dired-do-rename)= to push to destination path.
+[[https://orgmode.org/][Org]] stores my knowledge base: notes and outlines. Notes live under
+=~/Work/organicely/= and are first created in the =00-inbox/= subfolder. To move
+a note to its final place, use =M-x dired-jump= then =R (dired-do-rename)=.
+
+The tasks are currently not managed in Emacs.
 
 #+begin_src emacs-lisp :tangle yes
 
   (defun systemhalted/org-new-inbox-note ()
          "Create a new Org note in the Organicely inbox"
          (interactive)
+         (let* ((note-title (read-string "Note Title:"))
+                (file-name (concat note-title ".org")))
          (find-file
-          (expand-file-name
-           (concat (read-string "Note Filename:") ".org")
-           (expand-file-name "00-inbox/" org-directory))))
+          (expand-file-name file-name
+           (expand-file-name "00-inbox/" org-directory)))
+         (insert (concat "#+TITLE:" note-title))))
 
   (use-package org
      :ensure nil
      :custom
      (org-directory
       (expand-file-name "organicely" "~/Work"))
+     :mode
+     (("\\.org\\'" . org-mode))
      :bind
      (("C-c c" . systemhalted/org-new-inbox-note)))
 #+end_src
+
+** Markdown
+
+[[https://jblevins.org/projects/markdown-mode/][markdown-mode]] gives Markdown files editing support: syntax highlighting,
+headline navigation and markup helpers. Since Wordwise works on Markdown
+buffers, =.md= files are associated with this mode so they get the vocabulary
+hints too.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package markdown-mode
+    :ensure t
+    :mode
+    (("\\.md\\'" . markdown-mode)))
+
+#+end_src
+
+
+** Wordwise
+
+[[https://github.com/systemhalted/wordwise.el][Wordwise]] displays a short dictionary definition above uncommon English words,
+like Kindle's Word Wise. It lives in a local checkout rather than a package
+archive, so that directory is added to =load-path= and its manual is registered
+with Info. =C-c w= toggles the mode.
+
+#+begin_src emacs-lisp :tangle yes
+  (defvar wordwise-local-path
+        (expand-file-name "~/Work/products/emacs-packages/wordwise.el")
+        "Directory holding the local wordwise checkout.")
+
+  (use-package wordwise
+    :ensure nil
+    :load-path
+      wordwise-local-path
+    :init
+    (with-eval-after-load 'info
+      (add-to-list
+       'Info-additional-directory-list wordwise-local-path))
+    :bind
+    ("C-c w" . wordwise-mode))
+#+end_src
+
 
 
 * Tools
 
 ** Magit
+
+[[https://magit.vc/][Magit]] shows the whole Git working tree in a single status buffer where every
+action (staging, committing, branching, diffing, pushing) is one or two keys
+away. =C-x g= opens that status buffer.
 
 #+begin_src emacs-lisp :tangle yes
   (use-package magit
