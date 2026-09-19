@@ -176,6 +176,8 @@ when a server is available
 ** Org
 
 Setup organicely and make Org aware of it.
+The files is created in =inbox= first. If later, need migration,
+=M-x dired-jump= and =R (dired-do-rename)= to push to destination path.
 
 #+begin_src emacs-lisp :tangle yes
 
@@ -187,11 +189,24 @@ Setup organicely and make Org aware of it.
            (concat (read-string "Note Filename:") ".org")
            (expand-file-name "00-inbox/" org-directory))))
 
-   (use-package org
+  (use-package org
      :ensure nil
      :custom
      (org-directory
-      (expand-file-name "organicely" "~"))
+      (expand-file-name "organicely" "~/Work"))
      :bind
      (("C-c c" . systemhalted/org-new-inbox-note)))
+#+end_src
+
+
+* Tools
+
+** Magit
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package magit
+    :ensure t
+    :bind
+    (("C-x g" . magit-status)))
+
 #+end_src
