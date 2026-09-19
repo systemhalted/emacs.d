@@ -60,7 +60,8 @@ Do not make backup copies like =notes.org~=
 ** Key Conventions
 
 #+begin_src emacs-lisp :tangle yes
-(electric-pair-mode 1)
+  (electric-pair-mode 1)
+  (setq-default indent-tabs-mode nil)
 #+end_src
 
 * Interaction
@@ -87,6 +88,14 @@ Emacs' existing matching system.
     :ensure t
     :config
     (vertico-mode 1))
+
+  (use-package vertico-directory
+    :ensure nil
+    :after vertico
+    :bind
+    (:map vertico-map
+          ("C-l" . vertico-directory-up)
+          ("RET" . vertico-directory-enter)))
 #+end_src
 
 ** Orderless
@@ -208,5 +217,4 @@ The files is created in =inbox= first. If later, need migration,
     :ensure t
     :bind
     (("C-x g" . magit-status)))
-
 #+end_src
