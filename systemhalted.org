@@ -49,9 +49,19 @@ separately. The =custom.el= will be created only when =Customize= is used.
 Do not make backup copies like =notes.org~=
 
 #+begin_src emacs-lisp :tangle yes
-  (setq make-backup-files nil)
+  (let ((auto-save-dir
+         (expand-file-name "var/auto-save" user-emacs-directory)))
+        (make-directory auto-save-dir t)
+        (setq make-backup-files nil
+              auto-save-file-name-transforms
+              (list (list ".*" auto-save-dir t))))
 #+end_src
 
+** Key Conventions
+
+#+begin_src emacs-lisp :tangle yes
+(electric-pair-mode 1)
+#+end_src
 
 * Interaction
 
@@ -94,4 +104,94 @@ tables that need it. Selecting the style enables its use.
     (completion-styles '(orderless basic))
      (completion-category-overrides
       '((file (styles basic partial-completion)))))
+#+end_src
+
+** which-key
+
+ #+begin_src emacs-lisp :tangle yes
+    (use-package which-key
+      :ensure t
+      :config
+      (which-key-mode 1))
+  #+end_src
+
+* Development
+
+** Language Servers
+
+*** Eglot
+
+Eglot is used as LSP Client. It is included with Emacs provides
+completion, go-to-definition, documentation, refactoring and diagnostics
+when a server is available
+
+#+begin_src emacs-lisp :tangle yes
+    (use-package eglot
+      :ensure nil
+      :hook
+        ((java-mode . eglot-ensure)
+         (rust-mode . eglot-ensure)))
+        ;; equivalent to   (add-hook 'java-mode-hook #'eglot-ensure)
+        ;;  (add-hook 'rust-mode-hook #'eglot-ensure)
+#+end_src
+
+** Language Modes
+
+*** Rust
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package rust-mode
+    :ensure t)
+#+end_src
+
+** Projectile
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package projectile
+    :ensure t
+    :bind-keymap
+    ("C-c p" . projectile-command-map)
+    :config
+    (projectile-mode 1))
+#+end_src
+
+** Yasnippet
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package yasnippet
+    :ensure t
+    :hook
+    ((prog-mode . yas-minor-mode)
+     (org-mode . yas-minor-mode)))
+
+  ;; for ready-made snippets
+  (use-package yasnippet-snippets
+    :ensure t
+    :after yasnippet)
+
+#+end_src
+
+* Knowledge
+
+** Org
+
+Setup organicely and make Org aware of it.
+
+#+begin_src emacs-lisp :tangle yes
+
+  (defun systemhalted/org-new-inbox-note ()
+         "Create a new Org note in the Organicely inbox"
+         (interactive)
+         (find-file
+          (expand-file-name
+           (concat (read-string "Note Filename:") ".org")
+           (expand-file-name "00-inbox/" org-directory))))
+
+   (use-package org
+     :ensure nil
+     :custom
+     (org-directory
+      (expand-file-name "organicely" "~"))
+     :bind
+     (("C-c c" . systemhalted/org-new-inbox-note)))
 #+end_src
