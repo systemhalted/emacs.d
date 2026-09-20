@@ -7,7 +7,7 @@
 #+begin_src emacs-lisp :tangle yes
   ;; -*- lexical-binding: t; -*-
     (setq inhibit-startup-screen t)
-  
+
 #+end_src
 
 
@@ -164,7 +164,7 @@ Emacs' own matching machinery, which the Orderless style (below) drives.
   Outside that context it is an ordinary backspace.
 - =M-DEL= (=vertico-directory-delete-word=) deletes a word inside the path.
 
-  
+
 Example: with =~/Work/e= typed, =C-l= pops you up to =~/Work/=; when a directory
 such as =emacs.d= is highlighted, =RET= opens it and completion continues
 inside.
@@ -554,11 +554,11 @@ away. =C-x g= opens that status buffer.
     (("C-x g" . magit-status)))
 #+end_src
 
-** Try
+** Ghostel
 
 #+begin_src emacs-lisp :tangle yes
-
-    (use-package try
-      :ensure t)
-
+  (use-package ghostel
+    :ensure t
+    :bind
+    (("C-c m" . ghostel)))
 #+end_src
