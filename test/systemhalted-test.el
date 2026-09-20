@@ -24,13 +24,11 @@
           (length "function describe"))))
     (should (member "describe-function" matches))))
 
-(ert-deftest systemhalted-test/projectile-and-dashboard-are-wired-together ()
-  "Dashboard should use Projectile, whose lazy config should enable its mode."
-  ;; `:bind-keymap' intentionally defers Projectile.  Loading it here exercises
-  ;; the deferred `:config' without turning lazy startup into an eager load.
-  (require 'projectile)
-  (should (bound-and-true-p projectile-mode))
-  (should (eq dashboard-projects-backend 'projectile))
+(ert-deftest systemhalted-test/project-and-dashboard-are-wired-together ()
+  "Dashboard should read its projects from the built-in project library."
+  (require 'project)
+  (should (bound-and-true-p project-mode-line))
+  (should (eq dashboard-projects-backend 'project-el))
   (should (equal dashboard-items
                  '((recents . 5)
                    (projects . 5)
@@ -107,9 +105,13 @@ systemhalted.el because the block omitted its :tangle header argument."
                       "(use-package orderless"
                       "(use-package corfu"
                       "(use-package eglot"
-                      "(use-package projectile"
+                      "(use-package project"
                       "(use-package yasnippet"
-                      "(use-package dashboard"))
+                      "(use-package dashboard"
+                      "(use-package ghostel"
+                      "(use-package magit"
+                      "(use-package wordwise"
+                      "(use-package consult"))
         (goto-char (point-min))
         (should (search-forward form nil t))))))
 

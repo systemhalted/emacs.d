@@ -465,19 +465,27 @@ managed by mise) is connected through Eglot.
     :ensure t)
 #+end_src
 
-** Projectile
+** Project Management - project.el
 
-[[https://docs.projectile.mx/en/latest/][Projectile]] tracks which project the current file belongs to and gives a single
-keymap (prefix =C-c p=) for finding files, switching buffers and searching the
-whole project.
+[[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]] is built into Emacs (=:ensure nil=). It recognizes
+version-controlled roots, remembers known projects, and groups its commands
+under =C-x p=. Setting =project-mode-line= shows the current project in the
+mode line.
+
+After startup, an idle timer registers projects below =~/Work=. The final =t=
+makes the search recursive. The same scan can be started manually with
+=C-u M-x project-remember-projects-under=.
 
 #+begin_src emacs-lisp :tangle yes
-  (use-package projectile
-    :ensure t
-    :bind-keymap
-    ("C-c p" . projectile-command-map)
-    :config
-    (projectile-mode 1))
+  (use-package project
+     :ensure nil
+     :config
+     (run-with-idle-timer
+      2 nil
+      #'project-remember-projects-under
+      (expand-file-name "~/Work")
+      t)
+     (setq project-mode-line t))
 #+end_src
 
 ** Yasnippet
@@ -574,6 +582,48 @@ hints too.
 
 #+end_src
 
+*** Blog Capture Template
+
+#+begin_src emacs-lisp :tangle yes
+
+  (defun systemhalted/blog ()
+    "Create a new Jekyll Markdown post."
+    (interactive)
+    (let* ((directory
+            (expand-file-name
+             "Work/blog/systemhalted.github.io/collections/_posts"
+             "~"))
+           (title (string-trim (read-string
+           "Post title: ")))
+           (slug (string-trim
+                  (replace-regexp-in-string
+                   "[^[:alnum:]]+" "-"
+                   (downcase title))
+                  "-"))
+           (filename
+            (format "%s-%s.md"
+                    (format-time-string
+                    "%Y-%m-%d")
+                    slug))
+           (file (expand-file-name filename
+           directory)))
+      (when (string-empty-p title)
+        (user-error "Title cannot be
+        empty"))
+      (when (file-exists-p file)
+        (user-error "Post already exists:
+        %s" file))
+      (make-directory directory t)
+      (find-file file)
+      (insert "blog-post")
+      (unless (yas-expand)
+        (user-error "Could not expand the blog-post snippet"))))
+
+  (global-set-key (kbd "C-c b") #'systemhalted/blog)
+
+#+end_src
+
+
 ** Wordwise
 
 [[https://github.com/systemhalted/wordwise.el][Wordwise]] displays a short dictionary definition above uncommon English words,
@@ -644,6 +694,9 @@ away. =C-x g= opens that status buffer.
 
 ** Dashboard
 
+The projects section reads the projects remembered by =project.el=. Dashboard
+calls this backend =project-el=.
+
 #+begin_src emacs-lisp :tangle yes
   (use-package dashboard
     :ensure t
@@ -653,7 +706,7 @@ away. =C-x g= opens that status buffer.
                        (projects . 5)
                        (bookmarks . 5)))
     (dashboard-projects-backend
-     'projectile)
+     'project-el)
     :config
     (dashboard-setup-startup-hook))
 
