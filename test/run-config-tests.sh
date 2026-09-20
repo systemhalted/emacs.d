@@ -42,12 +42,12 @@ checks=("${@:-smoke}")
 for check in "${checks[@]}"; do
   case "$check" in
     smoke)
-      emacs --batch -Q -l early-init.el -l init.el \
+      emacs --batch -Q -l test/package-error-check.el -l early-init.el -l init.el \
         --eval '(systemhalted/config--assert-no-package-errors)' \
         --eval '(message "init loaded")'
       ;;
     ert)
-      emacs --batch -Q -l early-init.el -l init.el \
+      emacs --batch -Q -l test/package-error-check.el -l early-init.el -l init.el \
         --eval '(systemhalted/config--assert-no-package-errors)' \
         -l test/systemhalted-test.el -f ert-run-tests-batch-and-exit
       ;;
@@ -58,7 +58,7 @@ for check in "${checks[@]}"; do
         --eval '(org-babel-tangle-file "systemhalted.org")'
       export SYSTEMHALTED_TEST_RESULT="${test_root}/interactive-result"
       if ! TERM=xterm-256color timeout 60 script -qefc \
-        'stty rows 30 cols 100; exec emacs -Q --debug-init -l early-init.el -l init.el -l test/interactive-probe.el' \
+        'stty rows 30 cols 100; exec emacs -Q --debug-init -l test/package-error-check.el -l early-init.el -l init.el -l test/interactive-probe.el' \
         "${test_root}/debug-init.log" >/dev/null 2>&1; then
         cat -- "${test_root}/debug-init.log" >&2
         exit 1
@@ -78,7 +78,7 @@ for check in "${checks[@]}"; do
       cmp -- systemhalted.el "${test_root}/first-tangle.el"
       ;;
     compile)
-      emacs --batch -Q -l early-init.el -l init.el \
+      emacs --batch -Q -l test/package-error-check.el -l early-init.el -l init.el \
         --eval '(systemhalted/config--assert-no-package-errors)' \
         --eval '(unless (byte-compile-file "systemhalted.el") (error "Compilation failed"))'
       ;;

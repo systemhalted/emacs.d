@@ -39,16 +39,6 @@
                         (if (eq state 'current) 'generated 'source))))
         (delete-directory root t)))))
 
-(ert-deftest systemhalted/project-scan-finds-inner-root-without-registering-ancestor ()
-  (let* ((root (make-temp-file "nested-project-" t))
-         (repo (expand-file-name "repo" root)))
-    (unwind-protect
-        (progn
-          (make-directory (expand-file-name ".git" repo) t)
-          (should (equal (systemhalted/projects--scan root)
-                         (list (file-name-as-directory (file-truename repo))))))
-      (delete-directory root t))))
-
 (ert-deftest systemhalted/dashboard-owns-startup-display ()
   (should (eq initial-major-mode 'lisp-interaction-mode))
   (should (eq initial-buffer-choice #'dashboard-open))
@@ -216,95 +206,6 @@
         (kill-buffer buffer))
       (delete-directory root t))))
 
-(ert-deftest systemhalted/project-discovery-survives-symlink-cycles ()
-  (let* ((root (make-temp-file "project-discovery-" t))
-         (child (expand-file-name "child" root))
-         (loop (expand-file-name "loop" root))
-         (checks 0))
-    (unwind-protect
-        (progn
-          (make-directory child)
-          (make-symbolic-link root loop)
-          (cl-letf (((symbol-function 'projectile-project-p)
-                     (lambda (_dir)
-                       (setq checks (1+ checks))
-                       nil)))
-            (systemhalted/projects--scan root))
-          (should (< checks 5)))
-      (delete-directory root t))))
-
-(ert-deftest systemhalted/project-discovery-traverses-symlinked-parents ()
-  (let* ((root (make-temp-file "project-discovery-" t))
-         (outside (make-temp-file "project-outside-" t))
-         (repo (expand-file-name "repo" outside))
-         registered)
-    (unwind-protect
-        (progn
-          (make-directory repo)
-          (make-symbolic-link outside (expand-file-name "shared" root))
-          (cl-letf (((symbol-function 'projectile-project-p)
-                     (lambda (dir)
-                       (string= (file-name-nondirectory
-                                 (directory-file-name dir))
-                                "repo")))
-                    ((symbol-function 'projectile-project-root)
-                     (lambda (dir) dir))
-                    ((symbol-function 'projectile-add-known-project)
-                     (lambda (dir) (push dir registered))))
-            (setq registered (systemhalted/projects--scan root)))
-          (should (= (length registered) 1)))
-      (delete-directory outside t)
-      (delete-directory root t))))
-
-(ert-deftest systemhalted/project-discovery-tolerates-unreadable-directories ()
-  (let ((root (make-temp-file "project-unreadable-" t)))
-    (unwind-protect
-        (cl-letf (((symbol-function 'directory-files)
-                   (lambda (&rest _args)
-                     (signal 'file-error '("permission denied"))))
-                  ((symbol-function 'message) #'ignore))
-          (should-not (systemhalted/projects--scan root)))
-      (delete-directory root t))))
-
-(ert-deftest systemhalted/project-discovery-merges-with-saved-projects ()
-  (let* ((root (make-temp-file "manual-discovery-" t))
-         (projectile-known-projects '("/saved/"))
-         (dashboard-buffer-name " *manual discovery dashboard*")
-         (dashboard (get-buffer-create dashboard-buffer-name))
-         (selected (current-buffer))
-         saved refreshed)
-    (unwind-protect
-        (cl-letf (((symbol-function 'systemhalted/projects--scan)
-                   (lambda (_) (list (file-name-as-directory root))))
-                  ((symbol-function 'projectile-add-known-project)
-                   (lambda (project) (push project projectile-known-projects)))
-                  ((symbol-function 'projectile-save-known-projects)
-                   (lambda () (setq saved t)))
-                  ((symbol-function 'dashboard-insert-startupify-lists)
-                   (lambda (&optional _) (setq refreshed t))))
-          (systemhalted/discover-projects root)
-          (should (member "/saved/" projectile-known-projects))
-          (should (member (file-name-as-directory root) projectile-known-projects))
-          (should saved)
-          (should refreshed)
-          (should (eq selected (current-buffer))))
-      (kill-buffer dashboard)
-      (delete-directory root t))))
-
-(ert-deftest systemhalted/project-discovery-deduplicates-symlinked-roots ()
-  (let* ((root (make-temp-file "project-aliases-" t))
-         (repo (expand-file-name "repo" root)))
-    (unwind-protect
-        (progn
-          (make-directory repo)
-          (make-symbolic-link repo (expand-file-name "alias" root))
-          (cl-letf (((symbol-function 'projectile-project-p)
-                     (lambda (dir) (file-equal-p dir repo)))
-                    ((symbol-function 'projectile-project-root) #'identity))
-            (should (equal (systemhalted/projects--scan root)
-                           (list (file-name-as-directory (file-truename repo)))))))
-      (delete-directory root t))))
-
 (ert-deftest systemhalted/org-buffers-default-links-to-eww-with-pdf-dispatch ()
   (with-temp-buffer
     (org-mode)
@@ -453,6 +354,60 @@
     ;; The temp buffer is dead by now; firing the timer must be a no-op.
     (should (functionp timer-fn))
     (funcall timer-fn)))
+
+(ert-deftest systemhalted/project-discovery-is-explicit-and-refreshes-dashboard ()
+  "Startup must not scan; the manual command delegates to Projectile."
+  (should-not projectile-auto-discover-projects)
+  (should (equal projectile-project-search-path
+                 `((,systemhalted/projects-root . 3))))
+  (let* ((dashboard-buffer-name " *manual discovery dashboard*")
+         (dashboard (get-buffer-create dashboard-buffer-name))
+         (selected (current-buffer))
+         discovered refreshed)
+    (unwind-protect
+        (cl-letf (((symbol-function 'projectile-discover-projects-in-search-path)
+                   (lambda () (setq discovered t)))
+                  ((symbol-function 'dashboard-insert-startupify-lists)
+                   (lambda (&optional _) (setq refreshed t))))
+          (systemhalted/discover-projects)
+          (should discovered)
+          (should refreshed)
+          (should (eq selected (current-buffer))))
+      (kill-buffer dashboard))))
+
+(ert-deftest systemhalted/savehist-persists-lazy-package-caches ()
+  "corfu-history and wordwise-cache must survive a session that never loaded them."
+  (dolist (var '(search-ring regexp-search-ring kill-ring
+                 corfu-history wordwise-cache))
+    (should (memq var savehist-additional-variables))))
+
+(ert-deftest systemhalted/line-number-sample-stops-once-over-the-limit ()
+  (with-temp-buffer
+    (insert (make-string 40 ?x) "\n" (make-string 500 ?y) "\n")
+    ;; Without a stop value the true maximum comes back...
+    (should (= (systemhalted/buffer-longest-line-sample) 500))
+    ;; ...and the eligibility predicate agrees a 500-char line is not long.
+    (let ((systemhalted/line-number-max-line-length 1000))
+      (should-not (systemhalted/long-line-buffer-p)))
+    (let ((systemhalted/line-number-max-line-length 100))
+      (should (systemhalted/long-line-buffer-p)))))
+
+(ert-deftest systemhalted/personal-packages-pick-branch-at-load-time ()
+  "The checkout probe must read the environment when called, not when compiled."
+  (let ((dir (make-temp-file "personal-checkout-" t)))
+    (unwind-protect
+        (progn
+          (setenv "SYSTEMHALTED_TEST_CHECKOUT" dir)
+          (should (equal (systemhalted/personal-package-checkout
+                          "SYSTEMHALTED_TEST_CHECKOUT")
+                         (file-name-as-directory dir)))
+          (setenv "SYSTEMHALTED_TEST_CHECKOUT" (expand-file-name "missing" dir))
+          (should-not (systemhalted/personal-package-checkout
+                       "SYSTEMHALTED_TEST_CHECKOUT"))
+          (setenv "SYSTEMHALTED_TEST_CHECKOUT" nil)
+          (should-not (systemhalted/personal-package-checkout
+                       "SYSTEMHALTED_TEST_CHECKOUT")))
+      (delete-directory dir t))))
 
 (provide 'systemhalted-test)
 ;;; systemhalted-test.el ends here

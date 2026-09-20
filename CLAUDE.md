@@ -28,13 +28,19 @@ and Homebrew, plus `dnf` and `apt` where applicable.
 - `emacs --debug-init` for your actual GUI/host installation.
 
 The runner copies packages/configuration and isolates HOME before init loads,
-including fresh tangles. ERT rejects direct unisolated execution. Test package
+including fresh tangles. ERT rejects direct unisolated execution.
+`test/package-error-check.el` is loaded ahead of `init.el` by every check that
+asserts on package failures — it records `use-package` error warnings and
+defines `systemhalted/config--assert-no-package-errors`. That scaffolding lives
+in `test/`, not in the config. Test package
 state stays in ignored `.cache/test-packages/`; never commit it. Compiler
 warnings are informational; compilation errors fail. CI is configured for
 Emacs 30.2 and the Emacs 31 release branch (`release-snapshot`).
 
-Project discovery runs only on explicit request under `~/Work`; startup uses
-Projectile's saved list. Snippets activate in programming and Org buffers.
+Project discovery runs only on explicit request under `~/Work`
+(`systemhalted/discover-projects` wraps Projectile's own
+`projectile-discover-projects-in-search-path`); `projectile-auto-discover-projects`
+is nil, so startup uses Projectile's saved list. Snippets activate in programming and Org buffers.
 Git editor libraries load eagerly in regular and daemon sessions.
 Emacs handles Git editor input without custom key replay; keep the With-Editor
 hint timer's buffer-liveness guard. Register advice and timers safely
@@ -94,6 +100,8 @@ All tutorials are managed through indirect-org buffer. `systemhalted/tutorials` 
 ## Locally-maintained packages (`sdkman.el`, `trustrail.el`, `wordwise.el`)
 
 Packages maintained in this account are loaded with a hybrid pattern, not a hardcoded path. An environment variable names a local checkout when one exists (`SDKMAN_EL_DIR`, `TRUSTRAIL_EL_DIR`, `WORDWISE_EL_DIR`); that directory goes on `load-path` so edits take effect on the next `C-c r`. When the variable is unset or points nowhere real, `use-package`'s `:vc` keyword has `package-vc` install from GitHub with `:rev :newest`.
+
+All three go through one macro, `systemhalted/use-personal-package` (defined in *Startup and packages*): `(NAME ENV-VAR URL LOCAL-EXTRAS &rest BODY)`, where BODY is the `use-package` keywords both branches share and LOCAL-EXTRAS are keywords for the checkout branch only. It expands to an `if`, never branching at macro-expansion time — the tangle is byte-compiled in CI, so a compile-time `getenv` would bake the build machine's environment into `systemhalted.elc`. For the same reason the checkout is put on `load-path` in the expansion body rather than via `:preface`, which `use-package` evaluates at compile time.
 
 `wordwise.el` (Kindle-style vocabulary hints, `C-c w`) was extracted from this config; its section in `systemhalted.org` keeps the savehist registration of `wordwise-cache` (eager, so sessions that never load the package don't drop the cache from `history`). Wordwise config bugs are usually package bugs — fix them in the wordwise.el repo, not here.
 

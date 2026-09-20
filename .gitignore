@@ -3,6 +3,7 @@ eclipse.jdt.ls/
 elpa/
 elpa_bkup/
 systemhalted.el
+systemhalted.elc
 eln-cache/
 
 # Runtime state

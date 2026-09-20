@@ -60,7 +60,7 @@ probe="(progn
   (kill-emacs 0))"
 
 HOME="$test_home" timeout 300 emacs --fg-daemon="daemon-editor-test-$$" -Q \
-  -l "${repo_dir}/init.el" --eval "$probe" \
+  -l "${repo_dir}/test/package-error-check.el" -l "${repo_dir}/init.el" --eval "$probe" \
   >"${test_root}/daemon.log" 2>&1 || {
   cat "${test_root}/daemon.log" >&2
   fail "daemon did not start and run the probe cleanly"
@@ -86,7 +86,7 @@ if script --version 2>/dev/null | rg -q util-linux; then
   trap 'cleanup_daemon; rm -rf -- "$test_root"' EXIT
 
   HOME="$test_home" timeout 120 emacs --daemon="$sock" -Q \
-    -l "${repo_dir}/init.el" \
+    -l "${repo_dir}/test/package-error-check.el" -l "${repo_dir}/init.el" \
     --eval '(systemhalted/config--assert-no-package-errors)' \
     >"${test_root}/daemon2.log" 2>&1 ||
     fail "handoff daemon did not start"
