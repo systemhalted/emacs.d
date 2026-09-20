@@ -49,6 +49,26 @@
     (dashboard-mode)
     (should-not (bound-and-true-p yas-minor-mode))))
 
+(ert-deftest systemhalted-test/visual-wrapping-is-scoped-to-prose ()
+  "Visual wrapping should follow text-oriented modes without hard filling."
+  (should (systemhalted-test/hook-contains-p 'text-mode-hook #'visual-line-mode))
+  (with-temp-buffer
+    (fundamental-mode)
+    (should-not (bound-and-true-p visual-line-mode))
+    (should-not (bound-and-true-p auto-fill-function)))
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (should-not (bound-and-true-p visual-line-mode))
+    (should-not (bound-and-true-p auto-fill-function)))
+  (with-temp-buffer
+    (org-mode)
+    (should (bound-and-true-p visual-line-mode))
+    (should-not (bound-and-true-p auto-fill-function)))
+  (with-temp-buffer
+    (markdown-mode)
+    (should (bound-and-true-p visual-line-mode))
+    (should-not (bound-and-true-p auto-fill-function))))
+
 (ert-deftest systemhalted-test/eglot-hooks-cover-current-languages ()
   "The rewrite currently promises Eglot for Java and Rust."
   (should (systemhalted-test/hook-contains-p 'java-mode-hook #'eglot-ensure))
