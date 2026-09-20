@@ -63,3 +63,6 @@ emacs-config.txt
 .#*
 README.el
 README.org~
+
+# Local git worktrees
+.worktrees/
