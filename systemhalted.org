@@ -479,12 +479,35 @@ The tasks are currently not managed in Emacs.
   (defun systemhalted/org-new-inbox-note ()
          "Create a new Org note in the Organicely inbox"
          (interactive)
-         (let* ((note-title (read-string "Note Title:"))
+         (let* ((note-title (read-string "Note Title: "))
                 (file-name (concat note-title ".org")))
          (find-file
           (expand-file-name file-name
            (expand-file-name "00-inbox/" org-directory)))
-         (insert (concat "#+TITLE:" note-title))))
+         (insert "#+TITLE: " note-title "\n"
+                 "#+DATE: " (format-time-string "[%Y-%m-%d %a]") "\n\n")))
+
+  (defun systemhalted/journal ()
+    "Create a new Journal with current date"
+    (interactive)
+      (let* ((day (string-to-number (format-time-string "%d")))
+         (suffix (cond ((memq day '(11 12 13)) "th")
+                       ((= (% day 10) 1) "st")
+                       ((= (% day 10) 2) "nd")
+                       ((= (% day 10) 3) "rd")
+                       (t "th")))
+         (title (format "%d%s %s, %s" day suffix
+                        (format-time-string "%B %Y")
+                        (format-time-string "%A")))
+         (dir (expand-file-name "50-journal/daily" org-directory)))
+    (make-directory dir t)
+    (find-file (expand-file-name (format-time-string "%Y-%m-%d.org") dir))
+    (delete-other-windows)
+    (when (= (buffer-size) 0)
+      (insert "#+TITLE: " title "\n"
+              "#+DATE: " (format-time-string "[%Y-%m-%d %a]") "\n\n"))
+    (goto-char (point-max))
+    (unless (bolp) (insert "\n"))))
 
   (use-package org
      :ensure nil
@@ -494,7 +517,8 @@ The tasks are currently not managed in Emacs.
      :mode
      (("\\.org\\'" . org-mode))
      :bind
-     (("C-c c" . systemhalted/org-new-inbox-note)))
+     (("C-c c" . systemhalted/org-new-inbox-note)
+     ("C-c J" . systemhalted/journal)))
 #+end_src
 
 ** Markdown
@@ -570,5 +594,23 @@ away. =C-x g= opens that status buffer.
     :ensure nil
     :load-path "~/Work/products/emacs-packages/trustrail.el"
     :commands trustrail-list-packages)
+#+end_src
+
+* Presentation
+
+** Dashboard
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package dashboard
+    :ensure t
+    :custom
+    (dashboard-startup-banner 'official)
+    (dashboard-items '((recents . 5)
+                       (projects . 5)
+                       (bookmarks . 5)))
+    (dashboard-projects-backend
+     'projectile)
+    :config
+    (dashboard-setup-startup-hook))
 
 #+end_src
