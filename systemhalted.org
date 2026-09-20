@@ -117,6 +117,30 @@ opened files.
   (visual-line-mode 1)
 #+end_src
 
+
+* Environment
+
+** Process I/O and shell environment
+
+#+begin_src emacs-lisp :tangle yes
+  (setq read-process-output-max (* 1024 1024))
+
+  (use-package exec-path-from-shell
+    :ensure t
+    :demand t
+    :if (or (daemonp) (display-graphic-p))
+    :init
+    (setq exec-path-from-shell-variables
+          '("PATH" "JAVA_HOME")
+          exec-path-from-shell-arguments
+          '("-l" "-i"))
+    :config
+     (exec-path-from-shell-initialize)
+     :bind
+     ("C-c R" . exec-path-from-shell-initialize))
+#+end_src
+
+
 * Interaction
 
 ** Minibuffer history
