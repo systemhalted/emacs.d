@@ -21,7 +21,9 @@ trap cleanup EXIT
 mkdir -p -- "$test_config" "$test_home"
 cp -- "${repo_dir}/init.el" "${repo_dir}/systemhalted.org" "$test_config/"
 mkdir -p -- "${test_config}/test"
-cp -- "${repo_dir}/test/systemhalted-test.el" "${test_config}/test/"
+cp -- "${repo_dir}/test/systemhalted-test.el" \
+      "${repo_dir}/test/package-bootstrap.el" \
+      "${test_config}/test/"
 
 package_seed="${SYSTEMHALTED_TEST_PACKAGES:-${repo_dir}/.cache/test-packages}"
 if [[ -d "$package_seed" ]]; then
@@ -43,11 +45,15 @@ fi
 for check in "$@"; do
   case "$check" in
     smoke)
-      emacs --batch -Q --init-directory "$test_config" -l init.el \
+      emacs --batch -Q --init-directory "$test_config" \
+        -l test/package-bootstrap.el \
+        -l init.el \
         --eval '(message "rewrite config loaded")'
       ;;
     ert)
-      emacs --batch -Q --init-directory "$test_config" -l init.el \
+      emacs --batch -Q --init-directory "$test_config" \
+        -l test/package-bootstrap.el \
+        -l init.el \
         -l test/systemhalted-test.el \
         -f ert-run-tests-batch-and-exit
       ;;
@@ -60,7 +66,9 @@ for check in "$@"; do
       cmp -- systemhalted.el "${test_root}/first-tangle.el"
       ;;
     compile)
-      emacs --batch -Q --init-directory "$test_config" -l init.el \
+      emacs --batch -Q --init-directory "$test_config" \
+        -l test/package-bootstrap.el \
+        -l init.el \
         --eval '(unless (byte-compile-file "systemhalted.el") (error "Compilation failed"))'
       ;;
     *)
