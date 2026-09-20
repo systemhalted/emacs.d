@@ -25,7 +25,10 @@
     (should (member "describe-function" matches))))
 
 (ert-deftest systemhalted-test/projectile-and-dashboard-are-wired-together ()
-  "Dashboard should use the active Projectile project backend."
+  "Dashboard should use Projectile, whose lazy config should enable its mode."
+  ;; `:bind-keymap' intentionally defers Projectile.  Loading it here exercises
+  ;; the deferred `:config' without turning lazy startup into an eager load.
+  (require 'projectile)
   (should (bound-and-true-p projectile-mode))
   (should (eq dashboard-projects-backend 'projectile))
   (should (equal dashboard-items
