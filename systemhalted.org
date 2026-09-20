@@ -240,7 +240,7 @@ full annotations show on the first prompt — no override required. =M-A=
 inside the minibuffer cycles each category to its lighter variants
 (=builtin=, =none=) when the default annotation feels too long.
 
-#+begin_src emacs-lisp
+#+begin_src emacs-lisp :tangle yes
 (use-package marginalia
   :ensure t
   :after vertico
