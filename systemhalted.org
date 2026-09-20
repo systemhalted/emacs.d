@@ -240,6 +240,24 @@ past the last entry.
       (which-key-mode 1))
   #+end_src
 
+** Helpful
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package helpful
+    :ensure t
+    :bind
+    (([remap describe-function] . helpful-callable)
+     ([remap describe-command]  . helpful-command)
+     ([remap describe-variable] . helpful-variable)
+     ([remap describe-key]      . helpful-key)
+     ("C-h ."                   . helpful-at-point)
+     ("C-h C-."                 . display-local-help)
+     ("C-h F"                   . helpful-function)
+     ("C-h S"                   . helpful-symbol)))
+
+#+end_src
+
+
 ** Config Reload and Visit
 
 I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
