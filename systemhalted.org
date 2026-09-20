@@ -52,11 +52,29 @@ several.
 ** Files
 Do not make backup copies like =notes.org~=
 
+Auto-save files (=#notes.org#=) are still written, because they are what
+=M-x recover-this-file= reads after a crash. They just do not belong next to
+the file being edited, so every one of them is redirected into a single
+directory, with the full path folded into the name to keep them distinct.
+
+The trailing slash on =auto-save-dir= matters. With the uniquify flag set,
+Emacs concatenates this string directly onto the mangled file name, so without
+the separator the auto-saves land in =var/= as =#!home!...#= instead of inside
+=var/auto-save/=. =file-name-as-directory= guarantees the separator.
+
+Lock files are the last stray artifact. Emacs drops a =.#notes.org= symlink
+beside a file while it has unsaved changes, so a second Emacs opening the same
+file can warn about the clash. Nothing here opens one file from two Emacs
+instances at once, and the symlinks confuse tools that walk a directory, so
+they are turned off.
+
 #+begin_src emacs-lisp :tangle yes
   (let ((auto-save-dir
-         (expand-file-name "var/auto-save" user-emacs-directory)))
+         (file-name-as-directory
+          (expand-file-name "var/auto-save" user-emacs-directory))))
         (make-directory auto-save-dir t)
         (setq make-backup-files nil
+              create-lockfiles nil
               auto-save-file-name-transforms
               (list (list ".*" auto-save-dir t))))
 #+end_src
