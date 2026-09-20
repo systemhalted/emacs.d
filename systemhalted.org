@@ -488,6 +488,7 @@ prose. [[https://github.com/AndreaCrotti/yasnippet-snippets][yasnippet-snippets]
 
 #+end_src
 
+
 * Knowledge
 
 ** Org
@@ -560,7 +561,6 @@ hints too.
 
 #+end_src
 
-
 ** Wordwise
 
 [[https://github.com/systemhalted/wordwise.el][Wordwise]] displays a short dictionary definition above uncommon English words,
@@ -619,6 +619,7 @@ away. =C-x g= opens that status buffer.
     :load-path "~/Work/products/emacs-packages/trustrail.el"
     :commands trustrail-list-packages)
 #+end_src
+
 
 * Presentation
 
