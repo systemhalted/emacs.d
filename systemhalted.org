@@ -218,6 +218,65 @@ inside the minibuffer cycles each category to its lighter variants
   (marginalia-mode 1))
 #+end_src
 
+** Consult — focused search and navigation commands
+
+[[https://github.com/minad/consult][Consult]] is a collection of commands purpose-built to feed the
+Vertico-style minibuffer. They take something Emacs already knows about
+(buffer lines, open buffers, project files, recent files, bookmarks, the
+kill ring, marks, …) and expose it as a narrowable, previewable list.
+
+The daily bindings here:
+
+- =C-s= runs =consult-line= — incremental search across the current
+  buffer's lines, but each candidate is a full line so Orderless tokens
+  apply. Better than =isearch= when the goal is /jump to/ rather than
+  /step through/.
+- =C-x b= run =consult-buffer= — a unified picker over open
+  buffers, recent files, and bookmarks. Type the narrowing key (=b=, =f=,
+  =m=, =p=, …) at the start to restrict the source.
+- =C-c s= runs =consult-ripgrep= — streams =rg= results into the
+  minibuffer with live preview. The de facto project search.
+- =M-y= runs =consult-yank-pop= — pick from the kill ring as a previewable
+  list instead of cycling blindly. Persisted across restarts because
+  =savehist-additional-variables= keeps =kill-ring=.
+- =M-g g= and =M-g M-g= remap to =consult-goto-line=, which previews the
+  destination line as you type the number.
+
+
+=consult-narrow-key= is set to =<= so a leading =<= followed by a narrowing
+character restricts the source (e.g. =< b= for buffers in =consult-buffer=).
+The =xref-show-*-function= hooks route =M-.= and =xref-find-references=
+through Consult, so =Vertico= replaces the legacy =*xref*= buffer when
+multiple candidates exist. Previews are debounced via =consult-customize=:
+buffers/recent files preview after 0.2s of stillness, ripgrep/grep/line
+previews wait 0.4s, which keeps large repos from churning the display while
+you scroll candidates.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package consult
+    :ensure t
+    :bind
+    (("C-c j c" . consult-mode-command)
+     ("C-c j l"   . consult-line)
+     ([remap switch-to-buffer] . consult-buffer)
+     ("C-c j m" . consult-imenu)
+     ("C-c j s" . consult-ripgrep)
+     ("C-c j i" . consult-info)
+     ("M-y"   . consult-yank-pop)
+     ([remap goto-line] . consult-goto-line)
+     ([remap bookmark-jump] . consult-bookmark))
+    :custom
+    (consult-narrow-key "<")
+    (xref-show-xrefs-function       #'consult-xref)
+    (xref-show-definitions-function #'consult-xref)
+    :config
+    (consult-customize
+     consult-buffer consult-recent-file
+     :preview-key '(:debounce 0.2 any)
+     consult-ripgrep consult-grep consult-line
+     :preview-key '(:debounce 0.4 any)))
+#+end_src
+
 ** Orderless
 
 [[https://github.com/oantolin/orderless#overview][Orderless]] matches space-separated pieces in any order, treating each piece
