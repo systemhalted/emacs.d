@@ -176,6 +176,32 @@ expands to =~/Work/environment/emacs=.
       '((file (styles basic partial-completion)))))
 #+end_src
 
+** Corfu
+
+[[https://github.com/minad/corfu][Corfu]] shows in-buffer completion candidates in a popup at point, so
+=completion-at-point= no longer jumps to the =*Completions*= buffer.
+
+Corfu does not create completion candidates itself; it renders whatever the
+active completion source already provides. That means Java and Rust receive LSP
+completions through Eglot, while other programming modes benefit automatically
+when they expose a standard CAPF source of their own.
+
+This setup enables Corfu globally, opens completions automatically after a
+short prefix, and cycles back to the start of the candidate list when moving
+past the last entry.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package corfu
+    :ensure t
+    :custom
+    (corfu-auto t)
+    (corfu-auto-prefix 2)
+    (corfu-auto-delay 0.2)
+    (corfu-cycle t)
+    :config
+    (global-corfu-mode 1))
+#+end_src
+
 ** which-key
 
 [[https://github.com/justbur/emacs-which-key][which-key]] pops up the possible completions shortly after a prefix key like
