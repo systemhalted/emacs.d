@@ -159,10 +159,20 @@ Emacs' own matching machinery, which the Orderless style (below) drives.
 - =C-l= (=vertico-directory-up=) moves one directory up.
 - =RET= (=vertico-directory-enter=) enters the highlighted directory and keeps
   completing inside it, instead of accepting it as the final value.
+- =DEL= (=vertico-delete-char=) at the end of =~/.emacs.d/foo/=
+  deletes the trailing path component back to =~/.emacs.d/=.
+  Outside that context it is an ordinary backspace.
+- =M-DEL= (=vertico-directory-delete-word=) deletes a word inside the path.
 
+  
 Example: with =~/Work/e= typed, =C-l= pops you up to =~/Work/=; when a directory
 such as =emacs.d= is highlighted, =RET= opens it and completion continues
 inside.
+
+The =rfn-eshadow-update-overlay= hook installs vertico-directory-tidy so
+shadowed prefixes collapse cleanly:
+typing =/etc= after =~/foo/= shows =/etc=, not =~/foo//etc=.
+This is part of =Vertico= package.
 
 #+begin_src emacs-lisp :tangle yes
   (use-package vertico
@@ -176,7 +186,10 @@ inside.
     :bind
     (:map vertico-map
           ("C-l" . vertico-directory-up)
-          ("RET" . vertico-directory-enter)))
+          ("RET" . vertico-directory-enter)
+          ("DEL"   . vertico-directory-delete-char)
+          ("M-DEL" . vertico-directory-delete-word))
+    :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
 #+end_src
 
 ** Orderless
