@@ -192,6 +192,32 @@ This is part of =Vertico= package.
     :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
 #+end_src
 
+** Marginalia — annotations in the minibuffer
+
+[[https://github.com/minad/marginalia][Marginalia]] adds a right-aligned annotation column to Vertico's candidates.
+The annotation depends on the candidate type: commands show their docstring
+summary and key binding, files show mode/size/mtime, buffers show their
+major mode and file path, variables show their current value. This turns
+=M-x= and =describe-variable= into a passive reference — you can browse
+without committing to a selection.
+
+It loads after Vertico because the annotation hook is only useful once a
+minibuffer UI is active. The default =marginalia-annotators= registry
+already lists the rich annotator first for each candidate category, so
+full annotations show on the first prompt — no override required. =M-A=
+inside the minibuffer cycles each category to its lighter variants
+(=builtin=, =none=) when the default annotation feels too long.
+
+#+begin_src emacs-lisp
+(use-package marginalia
+  :ensure t
+  :after vertico
+  :bind (:map minibuffer-local-map
+              ("M-A" . marginalia-cycle))
+  :init
+  (marginalia-mode 1))
+#+end_src
+
 ** Orderless
 
 [[https://github.com/oantolin/orderless#overview][Orderless]] matches space-separated pieces in any order, treating each piece
@@ -461,4 +487,13 @@ away. =C-x g= opens that status buffer.
     :ensure t
     :bind
     (("C-x g" . magit-status)))
+#+end_src
+
+** Try
+
+#+begin_src emacs-lisp :tangle yes
+
+    (use-package try
+      :ensure t)
+
 #+end_src
