@@ -225,26 +225,32 @@ Vertico-style minibuffer. They take something Emacs already knows about
 (buffer lines, open buffers, project files, recent files, bookmarks, the
 kill ring, marks, …) and expose it as a narrowable, previewable list.
 
-The daily bindings here:
+The Consult-specific commands share a =C-c j= prefix, while the stock
+entry points that benefit from a drop-in replacement stay remapped:
 
-- =C-s= runs =consult-line= — incremental search across the current
+- =C-c j l= runs =consult-line= — incremental search across the current
   buffer's lines, but each candidate is a full line so Orderless tokens
   apply. Better than =isearch= when the goal is /jump to/ rather than
   /step through/.
-- =C-x b= run =consult-buffer= — a unified picker over open
-  buffers, recent files, and bookmarks. Type the narrowing key (=b=, =f=,
-  =m=, =p=, …) at the start to restrict the source.
-- =C-c s= runs =consult-ripgrep= — streams =rg= results into the
+- =C-x b= runs =consult-buffer= — a unified picker over open buffers,
+  recent files, and bookmarks.
+- =C-c j s= runs =consult-ripgrep= — streams =rg= results into the
   minibuffer with live preview. The de facto project search.
-- =M-y= runs =consult-yank-pop= — pick from the kill ring as a previewable
-  list instead of cycling blindly. Persisted across restarts because
-  =savehist-additional-variables= keeps =kill-ring=.
+- =C-c j m= runs =consult-imenu= — jump to the current buffer's
+  definitions/headings with preview.
+- =C-c j i= runs =consult-info= — search installed Info manuals through
+  the same minibuffer UI.
+- =C-c j c= runs =consult-mode-command= — list commands relevant to the
+  active major and minor modes.
+- =M-y= runs =consult-yank-pop= — pick from the current session's
+  =kill-ring= as a previewable list instead of cycling blindly.
 - =M-g g= and =M-g M-g= remap to =consult-goto-line=, which previews the
   destination line as you type the number.
 
 
 =consult-narrow-key= is set to =<= so a leading =<= followed by a narrowing
-character restricts the source (e.g. =< b= for buffers in =consult-buffer=).
+character restricts the source (e.g. =< b= for buffers, =< f= for recent
+files, =< m= for bookmarks inside =consult-buffer=).
 The =xref-show-*-function= hooks route =M-.= and =xref-find-references=
 through Consult, so =Vertico= replaces the legacy =*xref*= buffer when
 multiple candidates exist. Previews are debounced via =consult-customize=:
