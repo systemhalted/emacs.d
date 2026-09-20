@@ -572,6 +572,9 @@ with Info. =C-c w= toggles the mode.
   (defvar wordwise-local-path
         (expand-file-name "~/Work/products/emacs-packages/wordwise.el")
         "Directory holding the local wordwise checkout.")
+  (define-prefix-command 'systemhalted/wordwise-prefix)
+  (global-set-key (kbd "C-c w")
+                  #'systemhalted/wordwise-prefix)
 
   (use-package wordwise
     :ensure nil
@@ -582,7 +585,10 @@ with Info. =C-c w= toggles the mode.
       (add-to-list
        'Info-additional-directory-list wordwise-local-path))
     :bind
-    ("C-c w" . wordwise-mode))
+    (:map systemhalted/wordwise-prefix
+          ("w" . wordwise-mode)
+          ("i" . wordwise-ignore-word)
+          ("d" . wordwise-set-difficulty)))
 #+end_src
 
 
