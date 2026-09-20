@@ -101,6 +101,13 @@ The menu bar, tool bar and scroll bars are all turned off when the corresponding
 mode functions exist. Headless and no-X builds can omit some of these UI
 libraries entirely, so each call is guarded.
 
+Prose-oriented buffers use =visual-line-mode= so long paragraphs wrap to the
+window without inserting hard newlines into the file. This belongs on
+=text-mode-hook= rather than at startup: Org, Markdown and other text-derived
+modes inherit the behavior, while programming and special buffers do not.
+=auto-fill-mode= is intentionally left off by default because it changes file
+contents by inserting real line breaks.
+
 #+begin_src emacs-lisp :tangle yes
   (electric-pair-mode 1)
   (setq-default indent-tabs-mode nil)
@@ -120,8 +127,7 @@ libraries entirely, so each call is guarded.
   (when (fboundp 'scroll-bar-mode)
     (scroll-bar-mode -1))
 
-  (auto-fill-mode 1)
-  (visual-line-mode 1)
+  (add-hook 'text-mode-hook #'visual-line-mode)
 #+end_src
 
 
