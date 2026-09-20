@@ -499,6 +499,11 @@ That is what `project-remember-projects-under' does via `.' and `..'."
   "One hook each must cover js-mode+js-ts-mode and typescript-ts-mode+tsx-ts-mode."
   (dolist (mode '(js-mode js-ts-mode))
     (should (provided-mode-derived-p mode 'js-base-mode)))
+  ;; `typescript-ts-mode' is deliberately deferred by `:mode', so nothing has
+  ;; run `define-derived-mode' yet and the parent link does not exist at init.
+  ;; Opening a .ts file loads the file and establishes it; load it here to
+  ;; assert the same state a real buffer sees.
+  (require 'typescript-ts-mode)
   (dolist (mode '(typescript-ts-mode tsx-ts-mode))
     (should (provided-mode-derived-p mode 'typescript-ts-base-mode)))
   ;; Emacs 30 reparented js-json-mode to prog-mode (bug#67463) so that JSON
@@ -506,8 +511,15 @@ That is what `project-remember-projects-under' does via `.' and `..'."
   (should-not (provided-mode-derived-p 'js-json-mode 'js-base-mode)))
 
 (ert-deftest systemhalted/tree-sitter-grammar-recipes-are-pinned ()
-  "Every recipe names an explicit revision; an unpinned grammar can outrun the ABI."
-  (should (= (length treesit-language-source-alist) 3))
+  "Every recipe this config owns names an explicit revision; an unpinned
+grammar can outrun the ABI.
+
+The alist is not ours alone: Emacs 31's js.el appends its own javascript and
+jsdoc recipes, so its length is an Emacs-version detail and not something to
+assert.  What matters is that our entry is the one that wins.  `alist-get'
+returns the first match, and the config's entries are installed before js.el
+loads, so looking each language up here checks both the pinning and the
+precedence."
   (dolist (lang '(javascript typescript tsx))
     (let ((recipe (alist-get lang treesit-language-source-alist)))
       (should recipe)
@@ -526,6 +538,13 @@ That is what `project-remember-projects-under' does via `.' and `..'."
   (should (memq #'systemhalted/tree-sitter-report-missing emacs-startup-hook)))
 
 (ert-deftest systemhalted/web-indent-offsets-are-two ()
+  "Each mode indents by two once it is actually loaded.
+
+These modes are all deferred by `:mode', so none of their defcustoms exist at
+init; use-package holds the setting and applies it when the file loads.  Load
+them here to read the same values an open buffer would."
+  (dolist (feature '(typescript-ts-mode js css-mode web-mode))
+    (require feature))
   (should (= typescript-ts-mode-indent-offset 2))
   (should (= js-indent-level 2))
   (should (= css-indent-offset 2))

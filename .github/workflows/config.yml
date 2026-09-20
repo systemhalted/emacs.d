@@ -24,9 +24,17 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache/test-packages
-          key: packages-${{ runner.os }}-${{ matrix.emacs }}-${{ hashFiles('systemhalted.org') }}
+          # Bump the vN prefix whenever a package is REMOVED from the config.
+          # restore-keys deliberately falls back to the cache from an older
+          # systemhalted.org, which is what keeps most runs fast -- but it also
+          # restores packages the config has since dropped, and
+          # systemhalted/web-stack-uses-builtin-tree-sitter-modes asserts that
+          # typescript-mode, rjsx-mode and js2-mode are absent.  v2 drops the
+          # caches still carrying typescript-mode from before the tree-sitter
+          # switch.
+          key: packages-v2-${{ runner.os }}-${{ matrix.emacs }}-${{ hashFiles('systemhalted.org') }}
           restore-keys: |
-            packages-${{ runner.os }}-${{ matrix.emacs }}-
+            packages-v2-${{ runner.os }}-${{ matrix.emacs }}-
       - name: Load, regressions, installer, and tangling
         run: bash test/run-config-tests.sh smoke ert installer tangle
       - name: Compiler diagnostics
