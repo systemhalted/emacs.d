@@ -5,6 +5,7 @@ elpa_bkup/
 systemhalted.el
 systemhalted.elc
 eln-cache/
+tree-sitter/
 
 # Runtime state
 .cache/

@@ -6,12 +6,26 @@
 (unless (getenv "SYSTEMHALTED_TEST_ISOLATED")
   (error "Run ERT through bash test/run-config-tests.sh ert (isolates HOME before init)"))
 
+;; Matches the floor `early-init.el' enforces.  Several assertions below hold
+;; only on Emacs 30+ (see `systemhalted/lsp-hooks-use-base-modes'), so fail
+;; with the reason rather than as a puzzling test error.
+(when (< emacs-major-version 30)
+  (error "This test suite requires Emacs 30 or newer; this is %s" emacs-version))
+
 (require 'org)
 (require 'eww)
 
 (defvar systemhalted-test--init-file
   (expand-file-name "init.el" user-emacs-directory))
 (defvar systemhalted-test--freshness nil)
+
+(ert-deftest systemhalted/emacs-version-floor-is-enforced ()
+  "early-init.el must refuse an unsupported Emacs rather than half-loading."
+  (should (>= emacs-major-version 30))
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name "early-init.el" user-emacs-directory))
+    (should (string-match-p "emacs-major-version 30" (buffer-string)))))
 
 (ert-deftest systemhalted/init-loads-missing-stale-and-current-tangles ()
   (dolist (state '(missing stale current))
@@ -451,6 +465,71 @@ That is what `project-remember-projects-under' does via `.' and `..'."
           (should-not (systemhalted/personal-package-checkout
                        "SYSTEMHALTED_TEST_CHECKOUT")))
       (delete-directory dir t))))
+
+(ert-deftest systemhalted/web-stack-uses-builtin-tree-sitter-modes ()
+  "typescript-mode, rjsx-mode and js2-mode must stay gone."
+  (dolist (pkg '(typescript-mode rjsx-mode js2-mode))
+    (should-not (package-installed-p pkg)))
+  (should (fboundp 'typescript-ts-mode))
+  (should (fboundp 'tsx-ts-mode))
+  (should (fboundp 'js-ts-mode)))
+
+(ert-deftest systemhalted/web-extensions-route-to-their-modes ()
+  (should (eq (assoc-default "a.ts" auto-mode-alist #'string-match-p)
+              'typescript-ts-mode))
+  (should (eq (assoc-default "a.tsx" auto-mode-alist #'string-match-p)
+              'tsx-ts-mode))
+  ;; web-mode keeps HTML and only HTML.
+  (should (eq (assoc-default "a.html" auto-mode-alist #'string-match-p)
+              'web-mode))
+  ;; .mjs/.cjs are in no default alist; the config adds them.
+  (dolist (file '("a.mjs" "a.cjs"))
+    (should (memq (assoc-default file auto-mode-alist #'string-match-p)
+                  '(js-mode js-ts-mode)))))
+
+(ert-deftest systemhalted/js-remap-covers-the-javascript-mode-alias ()
+  "files.el registers .js under `javascript-mode'; a js-mode-only remap never fires."
+  (if (treesit-ready-p 'javascript t)
+      (dolist (mode '(js-mode javascript-mode))
+        (should (eq (alist-get mode major-mode-remap-alist) 'js-ts-mode)))
+    ;; No grammar in this environment: plain js-mode must remain the fallback.
+    (should-not (alist-get 'js-mode major-mode-remap-alist))))
+
+(ert-deftest systemhalted/lsp-hooks-use-base-modes ()
+  "One hook each must cover js-mode+js-ts-mode and typescript-ts-mode+tsx-ts-mode."
+  (dolist (mode '(js-mode js-ts-mode))
+    (should (provided-mode-derived-p mode 'js-base-mode)))
+  (dolist (mode '(typescript-ts-mode tsx-ts-mode))
+    (should (provided-mode-derived-p mode 'typescript-ts-base-mode)))
+  ;; Emacs 30 reparented js-json-mode to prog-mode (bug#67463) so that JSON
+  ;; buffers do not ride the js-base-mode hook into ts-ls.  Emacs 30+ only.
+  (should-not (provided-mode-derived-p 'js-json-mode 'js-base-mode)))
+
+(ert-deftest systemhalted/tree-sitter-grammar-recipes-are-pinned ()
+  "Every recipe names an explicit revision; an unpinned grammar can outrun the ABI."
+  (should (= (length treesit-language-source-alist) 3))
+  (dolist (lang '(javascript typescript tsx))
+    (let ((recipe (alist-get lang treesit-language-source-alist)))
+      (should recipe)
+      (should (string-prefix-p "https://github.com/tree-sitter/" (nth 0 recipe)))
+      (should (stringp (nth 1 recipe)))
+      (should (string-match-p "\\`v[0-9]" (nth 1 recipe))))))
+
+(ert-deftest systemhalted/tree-sitter-missing-grammars-is-accurate ()
+  (let ((treesit-language-source-alist
+         (append treesit-language-source-alist
+                 '((systemhalted-no-such-language "https://example.invalid" "v1" "src")))))
+    (should (memq 'systemhalted-no-such-language
+                  (systemhalted/tree-sitter-missing-grammars)))))
+
+(ert-deftest systemhalted/tree-sitter-reports-missing-grammars-at-startup ()
+  (should (memq #'systemhalted/tree-sitter-report-missing emacs-startup-hook)))
+
+(ert-deftest systemhalted/web-indent-offsets-are-two ()
+  (should (= typescript-ts-mode-indent-offset 2))
+  (should (= js-indent-level 2))
+  (should (= css-indent-offset 2))
+  (should (= web-mode-markup-indent-offset 2)))
 
 (provide 'systemhalted-test)
 ;;; systemhalted-test.el ends here

@@ -1169,7 +1169,8 @@ Buffer-local SDKMAN + `lsp-java' state is applied by `global-sdkman-mode'."
 
 The protocol layer. Java attaches through
 =systemhalted/lsp-deferred-unless-excluded=; Lua, JS/TS, web, CSS, and Rust
-through plain =lsp-deferred=. Three reasons for the non-default settings:
+through plain =lsp-deferred= — the JS and TS entries are the /base/ modes, so
+one hook each covers both the classic and the tree-sitter variant. Three reasons for the non-default settings:
 
 *Memory bounds.* A Java session once pushed Emacs past 50 GiB resident. JDT LS
 itself is capped by =lsp-java-vmargs=, so the growth was Emacs retaining
@@ -1197,7 +1198,10 @@ on demand from the =C-c l= bindings below.
   (lsp lsp-deferred)
   :hook
   ((java-mode . systemhalted/lsp-deferred-unless-excluded)
-   ((js-mode rjsx-mode typescript-mode web-mode css-mode lua-mode rustic-mode) . lsp-deferred))
+   ;; Base modes, so one entry each covers js-mode + js-ts-mode and
+   ;; typescript-ts-mode + tsx-ts-mode.
+   ((js-base-mode typescript-ts-base-mode web-mode css-mode lua-mode rustic-mode)
+    . lsp-deferred))
   :bind
   (:map lsp-mode-map
         ("C-c C-f" . lsp-format-buffer)
@@ -1572,18 +1576,47 @@ Ubuntu =apt install rustup= then =rustup component add rust-analyzer=
   (lsp-rust-analyzer-cargo-watch-command "clippy"))
 #+end_src
 
-** Web editing — one mode per file type
+** Web editing — built-in tree-sitter modes
 
-Split by file extension on purpose, one mode per type, all indenting at 2 and
-all feeding the shared =lsp-mode= hook:
+Still one mode per file type, all indenting at 2 and all feeding the shared
+=lsp-mode= hook — but JS and TS are now Emacs' own tree-sitter modes instead of
+three external packages:
 
-- =web-mode= — =.html= and =.tsx=. JSX-in-TS wants the same
-  multi-language-block awareness as a templated HTML file.
-- =rjsx-mode= — =.jsx= and =.js=. =js2-mode='s inline parse errors are
-  silenced: Flycheck owns diagnostics, and that parser is too noisy on modern
-  JS (optional chaining, decorators).
-- =typescript-mode= — =.ts=, plain TS only.
-- =css-mode= — built-in, just the indent offset and =lsp-deferred=.
+- =typescript-ts-mode= — =.ts=.
+- =tsx-ts-mode= — =.tsx=. This takes =.tsx= /off/ =web-mode=: a real TSX
+  grammar beats web-mode's block heuristics for JSX-in-TypeScript.
+- =js-ts-mode= — =.js=, =.jsx=, =.mjs=, =.cjs=, via =major-mode-remap-alist=,
+  so js.el keeps owning the extensions and plain =js-mode= remains the
+  fallback when the grammar is missing.
+- =web-mode= — =.html= only now.
+- =css-mode= — built-in, indent offset and =lsp-deferred=.
+
+=typescript-mode= and =rjsx-mode= are gone, and =js2-mode= with them. Both were
+effectively unmaintained, and =rjsx-mode= cost two settings purely to silence
+=js2-mode='s parser on modern JS (optional chaining, decorators) — a real
+grammar has no such trouble. The tree-sitter modes need Emacs 30 for
+=js-json-mode=, which upstream reparented from =js-mode= to =prog-mode=
+(bug#67463); on Emacs 29 it still inherits from =js-mode= and would ride the
+=js-base-mode= hook below into =ts-ls=.
+
+*The hooks.* =lsp-mode= attaches through two /base/ modes rather than four
+concrete ones: =js-base-mode= is the shared parent of =js-mode= and
+=js-ts-mode=, and =typescript-ts-base-mode= of =typescript-ts-mode= and
+=tsx-ts-mode=. =lsp-mode='s own =ts-ls= activation predicate already names
+=js-ts-mode= and =typescript-ts-mode=, and matches =.tsx= on the filename, so
+no client configuration changes.
+
+*Grammars are a per-machine step.* Unlike a package, a grammar is compiled
+locally, so =git= and a C compiler must be present (Xcode command line tools on
+macOS; =gcc= from =build-essential= / =@development-tools= on Linux). Run
+=M-x systemhalted/install-tree-sitter-grammars= once per machine. The revisions
+are pinned rather than tracking each grammar's default branch, because a
+grammar built against a newer tree-sitter ABI than Emacs supports will not
+load; these pins build at ABI 14 and load on any Emacs 30 or newer.
+
+Without the grammars, =.ts= and =.tsx= open in a tree-sitter mode with no
+highlighting or indentation, and =.js= stays on the plain =js-mode= fallback —
+so the config reports what is missing at startup rather than failing silently.
 
 JS/TS/TSX are served by =ts-ls=, which needs its binary on =PATH=. The global
 =typescript= install is only a fallback — the server prefers a project's own
@@ -1591,35 +1624,93 @@ JS/TS/TSX are served by =ts-ls=, which needs its binary on =PATH=. The global
 
 #+begin_src sh
 npm install -g typescript-language-server typescript
+
+# Tree-sitter grammar builds need git and a C compiler:
+# macOS:             xcode-select --install
+# Fedora:            sudo dnf groupinstall "Development Tools"
+# Ubuntu / Debian:   sudo apt install build-essential
+# Then, inside Emacs, once per machine:
+# M-x systemhalted/install-tree-sitter-grammars
 #+end_src
 
 #+begin_src emacs-lisp
+(use-package treesit
+  :ensure nil
+  :custom
+  ;; Pinned, not tracking the default branch: a grammar compiled against a
+  ;; newer tree-sitter ABI than this Emacs supports silently fails to load.
+  ;; These build at ABI 14, which every Emacs 30+ can read.
+  (treesit-language-source-alist
+   '((javascript "https://github.com/tree-sitter/tree-sitter-javascript"
+                 "v0.23.1" "src")
+     (typescript "https://github.com/tree-sitter/tree-sitter-typescript"
+                 "v0.23.2" "typescript/src")
+     (tsx        "https://github.com/tree-sitter/tree-sitter-typescript"
+                 "v0.23.2" "tsx/src"))))
+
+(defun systemhalted/tree-sitter-missing-grammars ()
+  "Return the languages in `treesit-language-source-alist' with no grammar."
+  (seq-remove (lambda (lang) (treesit-ready-p lang t))
+              (mapcar #'car treesit-language-source-alist)))
+
+(defun systemhalted/install-tree-sitter-grammars (&optional all)
+  "Build the tree-sitter grammars this configuration expects.
+Only missing ones are built; with a prefix argument ALL, rebuild every
+grammar in `treesit-language-source-alist' -- which is what an Emacs upgrade
+to a newer tree-sitter ABI needs."
+  (interactive "P")
+  (let ((langs (if all
+                   (mapcar #'car treesit-language-source-alist)
+                 (systemhalted/tree-sitter-missing-grammars))))
+    (if (null langs)
+        (message "Tree-sitter grammars are already installed")
+      (dolist (lang langs)
+        (message "Building tree-sitter grammar for %s..." lang)
+        (treesit-install-language-grammar lang))
+      (message "Built %d grammar(s); reopen affected buffers" (length langs)))))
+
+(defun systemhalted/tree-sitter-report-missing ()
+  "Say once at startup which grammars still need building."
+  (when-let* ((missing (systemhalted/tree-sitter-missing-grammars)))
+    (message "Tree-sitter grammars missing (%s); run M-x systemhalted/install-tree-sitter-grammars"
+             (mapconcat #'symbol-name missing ", "))))
+
+(add-hook 'emacs-startup-hook #'systemhalted/tree-sitter-report-missing)
+
+(use-package typescript-ts-mode
+  :ensure nil
+  :mode (("\\.ts\\'" . typescript-ts-mode)
+         ("\\.tsx\\'" . tsx-ts-mode))
+  :custom
+  (typescript-ts-mode-indent-offset 2))
+
+(use-package js
+  :ensure nil
+  :custom
+  (js-indent-level 2)
+  :config
+  ;; No default alist entry covers these two.
+  (dolist (pattern '("\\.mjs\\'" "\\.cjs\\'"))
+    (add-to-list 'auto-mode-alist (cons pattern 'js-mode)))
+  ;; Remap rather than re-listing extensions, so js.el keeps owning them and
+  ;; plain `js-mode' stays the fallback when the grammar is not built yet.
+  ;; Both symbols are needed: files.el registers .js/.jsx/.jsm/.har under the
+  ;; `javascript-mode' alias, and `major-mode-remap-alist' is looked up with
+  ;; whichever symbol `auto-mode-alist' actually holds -- a remap keyed only
+  ;; on `js-mode' silently never fires.  js.el's own js-ts-mode entry cannot
+  ;; help here: it is added from inside the mode body, so it exists only after
+  ;; the mode has already been entered once.
+  (when (treesit-ready-p 'javascript t)
+    (dolist (mode '(js-mode javascript-mode))
+      (add-to-list 'major-mode-remap-alist (cons mode 'js-ts-mode)))))
+
 (use-package web-mode
   :ensure t
-  :mode
-  (("\\.html?\\'" . web-mode)
-   ("\\.tsx\\'" . web-mode))
+  :mode ("\\.html?\\'" . web-mode)
   :custom
   (web-mode-markup-indent-offset 2)
   (web-mode-css-indent-offset 2)
   (web-mode-code-indent-offset 2))
-
-(use-package rjsx-mode
-  :ensure t
-  :mode
-  (("\\.jsx?\\'" . rjsx-mode))
-  :custom
-  (js-indent-level 2)
-  (js2-basic-offset 2)
-  (js2-mode-show-parse-errors nil)
-  (js2-mode-show-strict-warnings nil))
-
-(use-package typescript-mode
-  :ensure t
-  :mode
-  (("\\.ts\\'" . typescript-mode))
-  :custom
-  (typescript-indent-level 2))
 
 (use-package css-mode
   :ensure nil
@@ -1756,8 +1847,8 @@ Documentation only — nothing here tangles.
 *** Everyday code intelligence
 
 LSP attaches automatically in =java-mode=, =python-mode=, =lua-mode=,
-=js-mode=, =rjsx-mode=, =typescript-mode=, =web-mode=, =css-mode=,
-=rustic-mode=, and =sh-mode=. The mode line shows =LSP[<server>]= once the
+=js-mode=, =js-ts-mode=, =typescript-ts-mode=, =tsx-ts-mode=, =web-mode=,
+=css-mode=, =rustic-mode=, and =sh-mode=. The mode line shows =LSP[<server>]= once the
 server is up; if it never appears, check =*lsp-log*=.
 
 =M-.= jumps to a definition and =M-,= comes back — =lsp-mode= installs an

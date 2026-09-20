@@ -42,7 +42,11 @@ change =systemhalted/projects-root= in Projects for a different location.
 
 * Requirements
 
-- Emacs 30 or newer is recommended.
+- Emacs 30 or newer is required, built with tree-sitter support
+  (=M-x treesit-available-p= should return =t=).
+- =git= and a C compiler, for building tree-sitter grammars. Run
+  =M-x systemhalted/install-tree-sitter-grammars= once per machine; JS/TS
+  files have no highlighting or indentation until you do.
 - =git= and =rg= should be on =PATH=.
 - The first startup needs network access to install external Emacs packages.
 - A Nerd Font enables the configured icons and ligatures.

@@ -47,7 +47,7 @@ Language intelligence is centralized on `lsp-mode` + `lsp-ui`. Do not reintroduc
 - `lua-mode` + `lsp-mode`'s built-in `lua-language-server` client — Lua; formatting stays on `lsp-format-buffer`, REPL/Org Babel share the detected Lua interpreter, and `luacheck` on PATH adds Flycheck linting.
   - `dap-mode` + `dap-java` — debugging via Debug Adapter Protocol.
 
-Web editing is split by file type: `web-mode` for `.html`/`.tsx`, `rjsx-mode` for `.jsx`/`.js`, `typescript-mode` for `.ts`, built-in `css-mode` for CSS. Do not collapse onto a single mode.
+Web editing is split by file type, on Emacs' built-in tree-sitter modes: `typescript-ts-mode` for `.ts`, `tsx-ts-mode` for `.tsx`, `js-ts-mode` for `.js`/`.jsx`/`.mjs`/`.cjs`, `web-mode` for `.html` only, built-in `css-mode` for CSS. Do not collapse onto a single mode, and do not reintroduce `typescript-mode`, `rjsx-mode` or `js2-mode`. Grammars are built per machine via `M-x systemhalted/install-tree-sitter-grammars`; `treesit-language-source-alist` pins revisions for ABI compatibility and `tree-sitter/` is gitignored.
 
 Minibuffer completion: `vertico` + `orderless` + `marginalia` + `consult` + `corfu`. Do not replace with Ivy/Helm/company.
 

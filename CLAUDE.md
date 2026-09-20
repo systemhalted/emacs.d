@@ -87,7 +87,11 @@ Language intelligence is centralized on `lsp-mode` + `lsp-ui`. Older language-sp
 - `lua-mode` + `lsp-mode`'s built-in `lua-language-server` client — Lua; formatting stays on `lsp-format-buffer`, REPL/Org Babel share the detected Lua interpreter, and `luacheck` on PATH adds Flycheck linting.
 - `rustic` + `lsp-mode`'s built-in `rust-analyzer` client — Rust; requires the `rust-analyzer` binary on PATH (clippy diagnostics, rustfmt-on-save). `rustic` is the one deliberate cargo-integrated mode (its own lsp auto-setup is disabled via `rustic-lsp-client nil`; the buffer attaches through `lsp-mode`'s shared hook like every other language).
 
-Web editing is split by file type and is intentional: `web-mode` for `.html`/`.tsx`, `rjsx-mode` for `.jsx`/`.js`, `typescript-mode` for `.ts`, built-in `css-mode` for CSS. Do not collapse these onto a single mode.
+Web editing is split by file type and is intentional — but on Emacs' own tree-sitter modes, not external packages: `typescript-ts-mode` for `.ts`, `tsx-ts-mode` for `.tsx`, `js-ts-mode` for `.js`/`.jsx`/`.mjs`/`.cjs` (via `major-mode-remap-alist`), `web-mode` for `.html` only, built-in `css-mode` for CSS. Do not collapse these onto a single mode, and do not reintroduce `typescript-mode`, `rjsx-mode` or `js2-mode`.
+
+`lsp-mode` attaches through the *base* modes `js-base-mode` and `typescript-ts-base-mode`, so one hook each covers the classic and tree-sitter variants. This is safe only on Emacs 30+: Emacs 29's `js-json-mode` derives from `js-mode`, so it would ride the `js-base-mode` hook into `ts-ls`; Emacs 30 reparented it to `prog-mode` (bug#67463).
+
+Grammars are compiled per machine, not installed as packages — `treesit-language-source-alist` pins revisions (a grammar built against a newer tree-sitter ABI than Emacs supports will not load), and `M-x systemhalted/install-tree-sitter-grammars` builds the missing ones. `tree-sitter/` is gitignored because grammars land in `user-emacs-directory`, which is this repo. A startup hook reports missing grammars rather than failing silently.
 
 ## Completion stack
 
