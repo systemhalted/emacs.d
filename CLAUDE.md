@@ -13,8 +13,8 @@ source; `systemhalted.el` is generated and ignored. Keep explanations beside
 source blocks. `C-c e` visits the folded configuration overview; `C-c r` reloads.
 
 The Org file is grouped by subsystem. Environment import runs before local
-checkout selection; SDKMAN precedes LSP integration; Projectile precedes
-Dashboard. Omarchy may own fonts/themes through an external home-config shim.
+checkout selection; SDKMAN precedes LSP integration; Projects precedes
+Dashboard (its `project-el` backend reads `project.el`'s list). Omarchy may own fonts/themes through an external home-config shim.
 Preserve that ownership and resolve runtime paths through `user-emacs-directory`.
 
 macOS, Fedora, Ubuntu, and Omarchy Linux installations remain supported. Guard
@@ -37,10 +37,13 @@ state stays in ignored `.cache/test-packages/`; never commit it. Compiler
 warnings are informational; compilation errors fail. CI is configured for
 Emacs 30.2 and the Emacs 31 release branch (`release-snapshot`).
 
-Project discovery runs only on explicit request under `~/Work`
-(`systemhalted/discover-projects` wraps Projectile's own
-`projectile-discover-projects-in-search-path`); `projectile-auto-discover-projects`
-is nil, so startup uses Projectile's saved list. Snippets activate in programming and Org buffers.
+Projects use the built-in `project.el` on the standard `C-x p` prefix;
+Projectile was removed. Discovery runs only on explicit request:
+`systemhalted/discover-projects` registers every project directly under
+`systemhalted/projects-root` (`~/Work`). It walks that level itself rather than
+calling `project-remember-projects-under`, whose non-recursive pass tests DIR's
+children on Emacs 30 but DIR itself on Emacs 29. Startup reads only
+`project-list-file`. Snippets activate in programming and Org buffers.
 Git editor libraries load eagerly in regular and daemon sessions.
 Emacs handles Git editor input without custom key replay; keep the With-Editor
 hint timer's buffer-liveness guard. Register advice and timers safely
@@ -67,7 +70,7 @@ The old `todo.org`/`backlog.org`/`notes.org` are legacy user data: the config mu
 
 ## Keybinding collision to remember
 
-`C-c p` is the Projectile command prefix (the conventional default) — `C-c p *` belongs to Projectile. Custom bindings take capitals (`C-c B`) or other letters; check for collisions before binding anything new.
+`C-c p` is free (it was Projectile's prefix and is now explicitly unbound); project commands live on Emacs' own `C-x p`. Custom bindings still take capitals (`C-c B`) or other letters — check for collisions before binding anything new, since Org and Flycheck both claim keys under `C-c`.
 
 Other notable bindings established in the config: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c l` store-link, `C-c n` `systemhalted/notes-search` (consult-ripgrep over `~/organicely/`), `C-c o` `systemhalted/org-open-in-system-browser` (Org buffers only; links there default to EWW via a buffer-local `browse-url-browser-function`, and `C-c o` opens the link at point in the system browser instead), `C-c J` `systemhalted/journal` (opens today's `50-journal/daily/YYYY-MM-DD.org` in book view), `C-c j` enable Jupyter (Org-mode only, opt-in), `C-c b` consult-buffer, `C-c B` `systemhalted/book-view-toggle` (book-style reading view: olivetti margins + mixed-pitch body), `C-c w` `wordwise-mode` (Kindle-style inline vocabulary hints with difficulty 1–5, from the locally-maintained `wordwise.el` package), `C-c s` consult-ripgrep, `C-c E` `systemhalted/emergency-ui-reset` (shed expensive UI features; deliberately not `C-c !`, which Org and Flycheck shadow), `C-c T` select theme with Consult, `C-c m` Ghostel terminal, `C-x g` magit-status, `C-h T` `systemhalted/tutorial` (open a tutorial subtree of `systemhalted.org` in a read-only indirect buffer, quit with `q`; registry is `systemhalted/tutorials`). `C-c a` and `C-c P` are deliberately unbound (they were the agenda and promote-to-todo keys in the retired task workflow).
 
@@ -109,4 +112,4 @@ Follow this pattern for any further self-maintained package, and add its variabl
 
 ## What not to commit
 
-`.gitignore` already excludes `systemhalted.el`, `elpa/`, `eclipse.jdt.ls/`, `backups/`, `auto-save-list/`, `transient/`, `url/`, `history`, `recentf`, `places`, `projectile.cache`, `.lsp-session-v1`, `.dap-breakpoints`, `tramp`, etc. Run `git status --short` before committing — runtime state regenerates and should never appear in a diff.
+`.gitignore` already excludes `systemhalted.el`, `elpa/`, `eclipse.jdt.ls/`, `backups/`, `auto-save-list/`, `transient/`, `url/`, `history`, `recentf`, `places`, `.lsp-session-v1`, `.dap-breakpoints`, `tramp`, etc. Run `git status --short` before committing — runtime state regenerates and should never appear in a diff.

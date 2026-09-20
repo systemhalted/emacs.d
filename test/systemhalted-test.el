@@ -355,25 +355,68 @@
     (should (functionp timer-fn))
     (funcall timer-fn)))
 
-(ert-deftest systemhalted/project-discovery-is-explicit-and-refreshes-dashboard ()
-  "Startup must not scan; the manual command delegates to Projectile."
-  (should-not projectile-auto-discover-projects)
-  (should (equal projectile-project-search-path
-                 `((,systemhalted/projects-root . 3))))
+(ert-deftest systemhalted/projects-use-builtin-project-el ()
+  "Projectile is gone: project.el owns C-x p and C-c p is free again."
+  (should (featurep 'project))
+  (should-not (featurep 'projectile))
+  (should (eq (lookup-key (current-global-map) (kbd "C-x p")) project-prefix-map))
+  (should-not (key-binding (kbd "C-c p")))
+  ;; A marker here would re-root buffers inside a monorepo; see the comment
+  ;; in the Projects section.
+  (should-not project-vc-extra-root-markers))
+
+(defun systemhalted-test--with-project-root (fn)
+  "Call FN with a scratch root and an isolated project list."
+  (let* ((root (make-temp-file "work-" t))
+         (project-list-file (expand-file-name "projects" root))
+         (project--list 'unset))
+    (unwind-protect (funcall fn root)
+      (delete-directory root t))))
+
+(ert-deftest systemhalted/project-discovery-registers-one-level-down ()
+  "Repositories directly under the root are registered; nested ones are not."
+  (systemhalted-test--with-project-root
+   (lambda (root)
+     (dolist (name '("alpha" "beta"))
+       (make-directory (expand-file-name (concat name "/.git") root) t))
+     (make-directory (expand-file-name "alpha/vendored/.git" root) t)
+     (make-directory (expand-file-name "plain-dir" root) t)
+     (should (= (systemhalted/discover-projects root) 2))
+     (should (equal (sort (mapcar (lambda (dir)
+                                    (file-name-nondirectory
+                                     (directory-file-name dir)))
+                                  (project-known-project-roots))
+                          #'string<)
+                    '("alpha" "beta"))))))
+
+(ert-deftest systemhalted/project-discovery-ignores-an-ancestor-repository ()
+  "A root inside a repository must not register that repository per child.
+That is what `project-remember-projects-under' does via `.' and `..'."
+  (systemhalted-test--with-project-root
+   (lambda (root)
+     (make-directory (expand-file-name ".git" root) t)
+     (make-directory (expand-file-name "child" root) t)
+     (should (= (systemhalted/discover-projects root) 0))
+     (should-not (project-known-project-roots)))))
+
+(ert-deftest systemhalted/project-discovery-refreshes-dashboard-without-selecting ()
   (let* ((dashboard-buffer-name " *manual discovery dashboard*")
          (dashboard (get-buffer-create dashboard-buffer-name))
          (selected (current-buffer))
-         discovered refreshed)
+         refreshed)
     (unwind-protect
-        (cl-letf (((symbol-function 'projectile-discover-projects-in-search-path)
-                   (lambda () (setq discovered t)))
-                  ((symbol-function 'dashboard-insert-startupify-lists)
-                   (lambda (&optional _) (setq refreshed t))))
-          (systemhalted/discover-projects)
-          (should discovered)
-          (should refreshed)
-          (should (eq selected (current-buffer))))
+        (systemhalted-test--with-project-root
+         (lambda (root)
+           (cl-letf (((symbol-function 'dashboard-insert-startupify-lists)
+                      (lambda (&optional _) (setq refreshed t))))
+             (systemhalted/discover-projects root))
+           (should refreshed)
+           (should (eq selected (current-buffer)))))
       (kill-buffer dashboard))))
+
+(ert-deftest systemhalted/project-discovery-rejects-a-missing-root ()
+  (should-error (systemhalted/discover-projects "/nonexistent/project/root")
+                :type 'user-error))
 
 (ert-deftest systemhalted/savehist-persists-lazy-package-caches ()
   "corfu-history and wordwise-cache must survive a session that never loaded them."

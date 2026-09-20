@@ -28,16 +28,17 @@ removing hooks, advice, or bindings, or changing package sources.
 Markdown tables use =valign= for display. Run =M-x markdown-table-align= inside
 a table when you want to reformat its text; visiting and saving files leave
 table whitespace alone. File prompts show dotfiles normally. Dashboard uses
-its standard Projectile project list. =C-c T= opens Consult's theme picker;
+its standard `project.el` project list. =C-c T= opens Consult's theme picker;
 the former =C-c t= theme cycle and =M-h= dotfile toggle are retired.
 Restart once after updating from the version with those customizations.
 
 * Projects
 
-Projectile uses its saved project list at startup. Run
+Project commands are Emacs' built-in =project.el= on the =C-x p= prefix
+(=C-x p p= switch, =C-x p f= find file, =C-x p b= buffer, =C-x p g= grep;
+=C-x p C-h= lists the rest). Startup reads only the saved project list. Run
 =M-x systemhalted/discover-projects= after adding repositories under =~/Work=;
 change =systemhalted/projects-root= in Projects for a different location.
-Discovery is manual so startup does not traverse your workspace tree.
 
 * Requirements
 

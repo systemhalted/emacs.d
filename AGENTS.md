@@ -30,7 +30,7 @@ Enforcement is **soft by design**: `systemhalted/org-warn-done-state` warns (nev
 
 ## Keybinding Conventions
 
-`C-c p` is the Projectile command prefix (the conventional default) — `C-c p *` belongs to Projectile. Custom bindings take capitals (`C-c B`, `C-c J`, `C-c E`) or other letters; check for major/minor-mode collisions before binding anything new (Org and Flycheck both claim keys under `C-c`). `C-c a` and `C-c P` are deliberately unbound (retired agenda/promote keys).
+`C-c p` is free (Projectile's old prefix, now explicitly unbound); project commands are on Emacs' own `C-x p`. Custom bindings take capitals (`C-c B`, `C-c J`, `C-c E`) or other letters; check for major/minor-mode collisions before binding anything new (Org and Flycheck both claim keys under `C-c`). `C-c a` and `C-c P` are deliberately unbound (retired agenda/promote keys).
 
 Notable bindings: `C-c r` reload, `C-c e` visit config, `C-c c` capture, `C-c J` journal, `C-c n` notes search, `C-c l` LSP prefix (and `org-store-link` globally), `C-c j` enable Jupyter (Org only), `C-c b` consult-buffer, `C-c B` book view, `C-c w` wordwise, `C-c s` consult-ripgrep, `C-c E` emergency UI reset, `C-c m` Ghostel terminal, `C-x g` magit-status, `C-h T` tutorials.
 
@@ -57,9 +57,9 @@ Focused regressions live in `test/systemhalted-test.el`. Run them through `bash 
 
 ## Architecture and Ownership
 
-Keep one literate file organized by subsystem; preserve tutorial heading text for `C-h T`. Environment import precedes personal-checkout selection, SDKMAN precedes shared LSP integration, and Projectile precedes Dashboard. Omarchy hosts set `systemhalted/omarchy-owned-ui` and repoint `user-emacs-directory` in their external shim; do not edit desktop configuration as part of a repository refactor.
+Keep one literate file organized by subsystem; preserve tutorial heading text for `C-h T`. Environment import precedes personal-checkout selection, SDKMAN precedes shared LSP integration, and Projects precedes Dashboard. Omarchy hosts set `systemhalted/omarchy-owned-ui` and repoint `user-emacs-directory` in their external shim; do not edit desktop configuration as part of a repository refactor.
 
-Project discovery is manual (`systemhalted/discover-projects`, a wrapper over Projectile's `projectile-discover-projects-in-search-path`), defaulting to `~/Work`; `projectile-auto-discover-projects` is nil, so startup uses Projectile's saved list without traversing anything. Snippets activate in programming and Org buffers. Git editor libraries load eagerly in regular and daemon sessions. Emacs handles Git editor input without custom key replay; retain the With-Editor delayed-hint buffer guard. Keep advice and timers safe across reloads. Shell imports are direct, with no environment cache. Package-install failures are reported without automatic retries; stale archive metadata is refreshed manually. The recorder for those failures is `test/package-error-check.el`, loaded ahead of `init.el` by the checks that assert on them — keep it out of the config.
+Projects use the built-in `project.el` (`C-x p`); Projectile was removed. Discovery is manual (`systemhalted/discover-projects`), registering projects one level under `~/Work`; it does not call `project-remember-projects-under`, whose non-recursive pass means different things on Emacs 29 and 30. Startup reads only `project-list-file`. Snippets activate in programming and Org buffers. Git editor libraries load eagerly in regular and daemon sessions. Emacs handles Git editor input without custom key replay; retain the With-Editor delayed-hint buffer guard. Keep advice and timers safe across reloads. Shell imports are direct, with no environment cache. Package-install failures are reported without automatic retries; stale archive metadata is refreshed manually. The recorder for those failures is `test/package-error-check.el`, loaded ahead of `init.el` by the checks that assert on them — keep it out of the config.
 
 ## Commit & Pull Request Guidelines
 

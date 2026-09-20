@@ -42,7 +42,7 @@ Package responsibilities are intentionally separate:
 | Flycheck   | Diagnostics                    |
 | Yasnippet  | Snippets in code and Org       |
 | dap-mode   | Debugging                      |
-| Projectile | Project operations             |
+| project.el | Project operations             |
 
 * Core
 
@@ -949,74 +949,109 @@ to the source remain visible without losing place.  Quit with `q'."
 
 * Projects
 
-Projectile owns the saved project list and project commands.
+The built-in =project.el= owns the saved project list and project commands.
 
-** Projectile — project-scoped commands
+** project.el — project-scoped commands
 
-[[https://github.com/bbatsov/projectile][Projectile]] scopes commands to a project — any directory with a =.git=, a
-recognized build file, or a =.projectile= marker. Its keymap owns the
-conventional =C-c p= prefix, which is why every other custom binding in this
-config takes a capital (=C-c B=) or a different letter (=C-c n=).
+[[info:emacs#Projects][project.el]] ships with Emacs, so this is a built-in
+(=:ensure nil=). Its command map lives on the standard =C-x p= prefix:
 
-=projectile-completion-system 'default= keeps its prompts on Emacs' standard
-completion, so Vertico, Orderless, and Marginalia apply to project pickers too.
-=projectile-indexing-method 'alien= hands file listing to =git ls-files= /
-=find= instead of traversing in Emacs — on a large repo that is the difference
-between instant and seconds.
+- =C-x p p= — switch project.
+- =C-x p f= — find file in the current project.
+- =C-x p b= — switch buffer within the project.
+- =C-x p g= — regexp search across the project (=C-c s= for ripgrep via
+  Consult is usually faster).
+- =C-x p k= — kill the project's buffers.
+- =C-x p c= — compile; =C-x p d= / =D= find-dir and dired; =C-x p v= vc-dir.
+- =C-x p m= — Ghostel terminal rooted at the project (added in the Terminal
+  section).
 
-Projects live under =systemhalted/projects-root= (default =~/Work=), wired into
-=projectile-project-search-path= at depth 3. =projectile-auto-discover-projects=
-is nil, so startup uses only Projectile's saved list — no filesystem scan. Run
-=M-x systemhalted/discover-projects= after adding a repository; it calls
-Projectile's own =projectile-discover-projects-in-search-path= and then
-refreshes an open Dashboard without selecting it.
+=C-x p C-h= lists the rest.
 
-Projectile's walk is depth-bounded, stops at project roots, and skips remote
-trees. Unlike the hand-rolled scan it replaced, it does not skip dotted
-directories or canonicalise symlinked aliases, and an unreadable directory
-aborts the scan rather than being logged and skipped.
+*Why not Projectile.* Most of this config was already on =project.el= before
+the switch: Consult resolves =consult-buffer='s project source and
+=consult-ripgrep='s root through =consult-project-function=, which calls
+=project-current= — and Ghostel registers itself in =project-prefix-map= and
+=project-switch-commands=. Only the =C-c p= keymap and Dashboard's backend
+were Projectile's, so keeping it meant two project systems disagreeing about
+what the current project is. Dropping it also frees =C-c p=, which used to
+constrain every other binding in this file.
 
-Common entry points (all under =C-c p=):
+Two Projectile behaviours are deliberately given up: recency ordering of
+=project-find-file= candidates (=projectile-sort-order 'recentf=, which
+=project.el= has no equivalent for — Orderless narrowing covers it), and
+=.projectile= marker files. Project /switching/ still favours recent
+projects: =project-remember-project= pushes to the front of the list and
+=project-prompt-project-dir= passes the known roots as completion history,
+which Vertico's history-aware sort picks up.
 
-- =C-c p p= — switch project.
-- =C-c p f= — find file in current project.
-- =C-c p b= — switch buffer within current project.
-- =C-c p s g= — grep across the project (or use =C-c s= for ripgrep via
-  Consult, which is usually faster).
+Roots come from the VC backend — a =.git= directory and friends. For a
+project that is not under version control, or a subdirectory of a monorepo
+that should be its own root, add its build file to
+=project-vc-extra-root-markers= (="pom.xml"=, ="Cargo.toml"=,
+="package.json"=, …). It is left empty here so a marker file deep inside a
+git repository never silently re-roots a buffer.
+
+*Discovery.* Nothing scans at startup — =project.el= only ever reads
+=project-list-file=. Run =M-x systemhalted/discover-projects= after adding a
+repository under =systemhalted/projects-root= (default =~/Work=); it registers
+every project directly below that root, then refreshes an open Dashboard
+without selecting it.
+
+It walks that one level itself rather than calling
+=project-remember-projects-under=, whose non-recursive behaviour is *not the
+same across supported Emacs versions*: on Emacs 30 it tests DIR's children,
+but on Emacs 29 the queue starts at DIR itself and only descends when RECURSIVE
+is set — so the same call finds nothing on 29. The loop below also skips =.=
+and =..=, and requires the project root to /be/ the child directory, so a
+=~/Work= that happens to sit inside a repository does not register that
+ancestor once per child. For a nested layout, Emacs's own
+=M-x project-remember-projects-under= with a prefix argument still works.
 
 #+begin_src emacs-lisp
   (defvar systemhalted/projects-root "~/Work"
     "Root directory under which projects are discovered.")
 
-  (use-package projectile
-    :ensure t
-    :demand t
-    :bind-keymap
-    ("C-c p" . projectile-command-map)
+  (use-package project
+    :ensure nil
     :custom
-    (projectile-completion-system 'default)
-    (projectile-indexing-method 'alien)
-    (projectile-sort-order 'recentf)
-    (projectile-project-search-path `((,systemhalted/projects-root . 3)))
-    ;; Discovery is explicit only: with this nil, the saved list is what
-    ;; startup and the switch commands see.
-    (projectile-auto-discover-projects nil)
-    :config
-    (projectile-mode 1))
+    ;; Empty on purpose: with markers set, a package.json inside a monorepo
+    ;; would re-root buffers below it.  Add one when a real non-VC project
+    ;; turns up.
+    (project-vc-extra-root-markers nil))
+
+  ;; C-x p is project.el's own prefix, so C-c p is free now.  Unbinding it
+  ;; (rather than just not binding it) clears Projectile's keymap from a
+  ;; long-running session on C-c r.
+  (global-unset-key (kbd "C-c p"))
 
   (defun systemhalted/discover-projects (&optional root)
-    "Scan ROOT, defaulting to `systemhalted/projects-root', and register projects.
-Thin wrapper over `projectile-discover-projects-in-search-path' that reads the
-root at call time — so changing `systemhalted/projects-root' takes effect
-without a restart — and refreshes an open Dashboard afterwards."
+    "Register every project directly under ROOT (`systemhalted/projects-root').
+Returns the number registered.  Reads the root at call time, so changing
+`systemhalted/projects-root' needs no restart.
+
+Deliberately not `project-remember-projects-under': its non-recursive pass
+tests DIR's children on Emacs 30 but DIR itself on Emacs 29, so the same call
+means different things on the versions this config supports."
     (interactive)
-    (let* ((root (or root systemhalted/projects-root))
-           (projectile-project-search-path `((,root . 3))))
-      (projectile-discover-projects-in-search-path)
+    (let ((root (expand-file-name (or root systemhalted/projects-root)))
+          (count 0))
+      (unless (file-directory-p root)
+        (user-error "Project root does not exist: %s" root))
+      (dolist (dir (directory-files root t directory-files-no-dot-files-regexp))
+        (when-let* (((file-directory-p dir))
+                    (pr (project-current nil dir))
+                    ;; Register the child, never an ancestor repository that
+                    ;; happens to contain ROOT.
+                    ((equal (expand-file-name (project-root pr))
+                            (file-name-as-directory dir))))
+          (project-remember-project pr)
+          (setq count (1+ count))))
       (when (get-buffer dashboard-buffer-name)
         (save-selected-window
           (dashboard-insert-startupify-lists t)))
-      (message "Project discovery complete under %s" root)))
+      (message "%d project%s under %s" count (if (= count 1) "" "s") root)
+      count))
 #+end_src
 
 * Development & Languages
@@ -3078,7 +3113,7 @@ the glyphs.
 
 ** Dashboard — startup screen
 
-Recent files, Projectile's saved projects, bookmarks, and buttons for the
+Recent files, =project.el='s saved projects, bookmarks, and buttons for the
 journal, notes search, and tutorials. =initial-buffer-choice= selects it for
 startup and for new client frames opened without a file.
 
@@ -3102,7 +3137,7 @@ startup and for new client frames opened without a file.
     (dashboard-display-icons-p t)
     (dashboard-set-heading-icons t)
     (dashboard-set-file-icons t)
-    (dashboard-projects-backend 'projectile)
+    (dashboard-projects-backend 'project-el)
     (dashboard-items '((recents   . 5)
                        (projects  . 5)
                        (bookmarks . 5)))
