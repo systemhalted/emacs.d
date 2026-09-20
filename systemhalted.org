@@ -562,3 +562,13 @@ away. =C-x g= opens that status buffer.
     :bind
     (("C-c m" . ghostel)))
 #+end_src
+
+** TrustRail
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package trustrail
+    :ensure nil
+    :load-path "~/Work/products/emacs-packages/trustrail.el"
+    :commands trustrail-list-packages)
+
+#+end_src
