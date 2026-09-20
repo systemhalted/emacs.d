@@ -97,6 +97,11 @@ Handy conveniences: the column number in the mode line, the clock,
 remembering where point was when a file is reopened, and a list of recently
 opened files.
 
+The menu bar, tool bar and scroll bars are all turned off. =scroll-bar-mode=
+needs a guard the other two do not: =menu-bar.el= and =tool-bar.el= are always
+preloaded, while =scroll-bar.el= is preloaded only when the build actually has
+scroll bars, so the symbol is undefined on a no-X Emacs like the CI runner.
+
 #+begin_src emacs-lisp :tangle yes
   (electric-pair-mode 1)
   (setq-default indent-tabs-mode nil)
@@ -111,7 +116,10 @@ opened files.
 
   (menu-bar-mode -1)
   (tool-bar-mode -1)
-  (scroll-bar-mode -1)
+  ;; scroll-bar.el is only preloaded when the build has scroll bars, so
+  ;; scroll-bar-mode is undefined on a no-X Emacs such as the CI runner.
+  (when (fboundp 'scroll-bar-mode)
+    (scroll-bar-mode -1))
 
   (auto-fill-mode 1)
   (visual-line-mode 1)
