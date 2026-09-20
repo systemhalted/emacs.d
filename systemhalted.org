@@ -5,8 +5,9 @@
 ** Startup
 
 #+begin_src emacs-lisp :tangle yes
-;; -*- lexical-binding: t; -*-
-  (setq inhibit-startup-screen t)
+  ;; -*- lexical-binding: t; -*-
+    (setq inhibit-startup-screen t)
+  
 #+end_src
 
 
@@ -107,6 +108,9 @@ opened files.
   (display-time-mode 1)
   (save-place-mode 1)
   (recentf-mode 1)
+  (menu-bar-mode -1)
+  (tool-bar-mode -1)
+  (scroll-bar-mode -1)
 #+end_src
 
 * Interaction
@@ -255,6 +259,12 @@ This is a utility function mapped to =C-c r=.
     (interactive)
     (find-file systemhalted/config-file))
   (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
+
+  (defun systemhalted/visit-generated-config ()
+    "Open the generated config file"
+    (interactive)
+    (find-file (expand-file-name "systemhalted.el" systemhalted/config-directory)))
+  (global-set-key (kbd "C-c E") #'systemhalted/visit-generated-config)
 #+end_src
 
 
