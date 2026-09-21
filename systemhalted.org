@@ -2,8 +2,9 @@
 #+author: systemhalted
 #+language: en
 #+property: header-args:emacs-lisp :tangle yes
-#+options: num:nil toc:nil
+#+options: num:nil toc:2
 #+startup: Core
+
 * Core
 
 ** Startup
@@ -186,7 +187,6 @@ as =dired= for buffers.
     :ensure nil
     :bind ("C-x C-b" . ibuffer))
 #+end_src
-
 
 ** Vertico
 
@@ -402,38 +402,6 @@ past the last entry.
 #+end_src
 
 
-** Config Reload and Visit
-
-I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
-This is a utility function mapped to =C-c r=.
-
-#+begin_src emacs-lisp  
-  (defun systemhalted/config-reload ()
-      "Save and reload the current config"
-    (interactive)
-    (let* ((config-buffer (get-file-buffer systemhalted/config-file)))
-    (when (and config-buffer (buffer-modified-p config-buffer))
-      (with-current-buffer config-buffer
-      (save-buffer)))
-    (message "Reload Emacs Configuration...")
-    (org-babel-load-file systemhalted/config-file)
-    (message "Reloaded Emacs Configuration")))
-   (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
-
-  (defun systemhalted/config-visit ()
-    "Open the literate config as a buffer in Emacs for editing"
-    (interactive)
-    (find-file systemhalted/config-file))
-  (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
-
-  (defun systemhalted/visit-generated-config ()
-    "Open the generated config file"
-    (interactive)
-    (find-file (expand-file-name "systemhalted.el" systemhalted/config-directory)))
-  (global-set-key (kbd "C-c E") #'systemhalted/visit-generated-config)
-#+end_src
-
-
 * Development
 
 ** Language Servers
@@ -626,7 +594,6 @@ hints too.
 
 #+end_src
 
-
 ** Wordwise
 
 [[https://github.com/systemhalted/wordwise.el][Wordwise]] displays a short dictionary definition above uncommon English words,
@@ -691,6 +658,38 @@ away. =C-x g= opens that status buffer.
     :load-path "~/Work/products/emacs-packages/trustrail.el"
     :commands trustrail-list-packages)
 #+end_src
+
+** Config Reload and Visit
+
+I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
+This is a utility function mapped to =C-c r=.
+
+#+begin_src emacs-lisp  
+  (defun systemhalted/config-reload ()
+      "Save and reload the current config"
+    (interactive)
+    (let* ((config-buffer (get-file-buffer systemhalted/config-file)))
+    (when (and config-buffer (buffer-modified-p config-buffer))
+      (with-current-buffer config-buffer
+      (save-buffer)))
+    (message "Reload Emacs Configuration...")
+    (org-babel-load-file systemhalted/config-file)
+    (message "Reloaded Emacs Configuration")))
+   (global-set-key (kbd "C-c r") #'systemhalted/config-reload)
+
+  (defun systemhalted/config-visit ()
+    "Open the literate config as a buffer in Emacs for editing"
+    (interactive)
+    (find-file systemhalted/config-file))
+  (global-set-key (kbd "C-c e") #'systemhalted/config-visit)
+
+  (defun systemhalted/visit-generated-config ()
+    "Open the generated config file"
+    (interactive)
+    (find-file (expand-file-name "systemhalted.el" systemhalted/config-directory)))
+  (global-set-key (kbd "C-c E") #'systemhalted/visit-generated-config)
+#+end_src
+
 
 
 * Presentation
