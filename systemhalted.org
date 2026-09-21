@@ -1,15 +1,18 @@
-#+TITLE: SystemHalted's Emacs Config
-
+#+title: systemhalted's Emacs Config
+#+author: systemhalted
+#+language: en
+#+property: header-args:emacs-lisp :tangle yes
+#+options: num:nil toc:nil
+#+startup: Core
 * Core
 
 ** Startup
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp 
   ;; -*- lexical-binding: t; -*-
     (setq inhibit-startup-screen t)
 
 #+end_src
-
 
 ** Custom Settings
 
@@ -17,7 +20,7 @@ Let's protect the startup file from changes made through Emacs' =Customize= inte
 By default, it can write settings into initialization file. However, we want those saved
 separately. The =custom.el= will be created only when =Customize= is used.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp 
   (setq custom-file
         (expand-file-name "var/custom.el" user-emacs-directory))
 
@@ -33,7 +36,7 @@ separately. The =custom.el= will be created only when =Customize= is used.
 priorities pick the more official archive first when a package exists in
 several.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   ;; require loads a library unless it has already been loaded
   (require 'package)
 
@@ -69,7 +72,7 @@ file can warn about the clash. Nothing here opens one file from two Emacs
 instances at once, and the symlinks confuse tools that walk a directory, so
 they are turned off.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (let ((auto-save-dir
          (file-name-as-directory
           (expand-file-name "var/auto-save" user-emacs-directory))))
@@ -108,7 +111,7 @@ modes inherit the behavior, while programming and special buffers do not.
 =auto-fill-mode= is intentionally left off by default because it changes file
 contents by inserting real line breaks.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (electric-pair-mode 1)
   (setq-default indent-tabs-mode nil)
 
@@ -135,7 +138,7 @@ contents by inserting real line breaks.
 
 ** Process I/O and shell environment
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (setq read-process-output-max (* 1024 1024))
 
   (use-package exec-path-from-shell
@@ -162,7 +165,7 @@ The minibuffer history (previous commands, file names, search terms) is lost
 when Emacs exits. [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Savehist.html][savehist]] is built into Emacs (hence =:ensure nil=) and
 restores that history on the next start.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   ;; enable savehist-mode;
   ;; `:ensure nil` means it would use existing library
   (use-package savehist
@@ -178,7 +181,7 @@ major-mode listing where buffers can be marked, filtered (by mode, file
 name, size, project), killed or saved in bulk, and grouped. Think of it
 as =dired= for buffers.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package ibuffer
     :ensure nil
     :bind ("C-x C-b" . ibuffer))
@@ -211,7 +214,7 @@ shadowed prefixes collapse cleanly:
 typing =/etc= after =~/foo/= shows =/etc=, not =~/foo//etc=.
 This is part of =Vertico= package.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package vertico
     :ensure t
     :config
@@ -245,7 +248,7 @@ full annotations show on the first prompt — no override required. =M-A=
 inside the minibuffer cycles each category to its lighter variants
 (=builtin=, =none=) when the default annotation feels too long.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
 (use-package marginalia
   :ensure t
   :after vertico
@@ -295,7 +298,7 @@ buffers/recent files preview after 0.2s of stillness, ripgrep/grep/line
 previews wait 0.4s, which keeps large repos from churning the display while
 you scroll candidates.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package consult
     :ensure t
     :bind
@@ -334,7 +337,7 @@ switches the =file= category to =basic= plus =partial-completion=, so path
 components expand by prefix and wildcards are honored. Example: =~/Wo/e/emac=
 expands to =~/Work/environment/emacs=.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package orderless
     :ensure t
     :custom
@@ -357,7 +360,7 @@ This setup enables Corfu globally, opens completions automatically after a
 short prefix, and cycles back to the start of the candidate list when moving
 past the last entry.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package corfu
     :ensure t
     :custom
@@ -374,7 +377,7 @@ past the last entry.
 [[https://github.com/justbur/emacs-which-key][which-key]] pops up the possible completions shortly after a prefix key like
 =C-c p= is pressed, so bindings can be discovered instead of memorized.
 
- #+begin_src emacs-lisp :tangle yes
+ #+begin_src emacs-lisp  
     (use-package which-key
       :ensure nil
       :config
@@ -383,7 +386,7 @@ past the last entry.
 
 ** Helpful
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package helpful
     :ensure t
     :bind
@@ -404,7 +407,7 @@ past the last entry.
 I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
 This is a utility function mapped to =C-c r=.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (defun systemhalted/config-reload ()
       "Save and reload the current config"
     (interactive)
@@ -442,7 +445,7 @@ Eglot is used as the LSP client. It is [[https://www.gnu.org/software/emacs/manu
 it provides completion, go-to-definition, documentation, refactoring and
 diagnostics.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
     (use-package eglot
       :ensure nil
       :hook
@@ -460,7 +463,7 @@ diagnostics.
 support. It stays deliberately small: the language server (rust-analyzer,
 managed by mise) is connected through Eglot.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package rust-mode
     :ensure t)
 #+end_src
@@ -476,7 +479,7 @@ After startup, an idle timer registers projects below =~/Work=. The final =t=
 makes the search recursive. The same scan can be started manually with
 =C-u M-x project-remember-projects-under=.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package project
      :ensure nil
      :config
@@ -494,7 +497,7 @@ makes the search recursive. The same scan can be started manually with
 only in =prog-mode=, =org-mode= and =markdown-mode= so it stays out of the way while writing
 prose. [[https://github.com/AndreaCrotti/yasnippet-snippets][yasnippet-snippets]] adds a collection of ready-made snippets.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package yasnippet
     :ensure t
     :hook
@@ -520,7 +523,7 @@ a note to its final place, use =M-x dired-jump= then =R (dired-do-rename)=.
 
 The tasks are currently not managed in Emacs.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
 
   (defun systemhalted/org-new-inbox-note ()
          "Create a new Org note in the Organicely inbox"
@@ -574,7 +577,7 @@ headline navigation and markup helpers. Since Wordwise works on Markdown
 buffers, =.md= files are associated with this mode so they get the vocabulary
 hints too.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package markdown-mode
     :ensure t
     :mode
@@ -584,7 +587,7 @@ hints too.
 
 *** Blog Capture Template
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
 
   (defun systemhalted/blog ()
     "Create a new Jekyll Markdown post."
@@ -631,7 +634,7 @@ like Kindle's Word Wise. It lives in a local checkout rather than a package
 archive, so that directory is added to =load-path= and its manual is registered
 with Info. =C-c w= toggles the mode.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (defvar wordwise-local-path
         (expand-file-name "~/Work/products/emacs-packages/wordwise.el")
         "Directory holding the local wordwise checkout.")
@@ -664,7 +667,7 @@ with Info. =C-c w= toggles the mode.
 action (staging, committing, branching, diffing, pushing) is one or two keys
 away. =C-x g= opens that status buffer.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package magit
     :ensure t
     :bind
@@ -673,7 +676,7 @@ away. =C-x g= opens that status buffer.
 
 ** Ghostel
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package ghostel
     :ensure t
     :bind
@@ -682,7 +685,7 @@ away. =C-x g= opens that status buffer.
 
 ** TrustRail
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package trustrail
     :ensure nil
     :load-path "~/Work/products/emacs-packages/trustrail.el"
@@ -697,7 +700,7 @@ away. =C-x g= opens that status buffer.
 The projects section reads the projects remembered by =project.el=. Dashboard
 calls this backend =project-el=.
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp  
   (use-package dashboard
     :ensure t
     :custom
