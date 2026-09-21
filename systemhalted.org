@@ -376,7 +376,7 @@ past the last entry.
 
  #+begin_src emacs-lisp :tangle yes
     (use-package which-key
-      :ensure t
+      :ensure nil
       :config
       (which-key-mode 1))
   #+end_src
