@@ -28,6 +28,9 @@
   "Dashboard should read its projects from the built-in project library."
   (require 'project)
   (should (bound-and-true-p project-mode-line))
+  (should (fboundp 'systemhalted/project-refresh-known-projects))
+  (should (eq (lookup-key project-prefix-map (kbd "R"))
+              #'systemhalted/project-refresh-known-projects))
   (should (eq dashboard-projects-backend 'project-el))
   (should (equal dashboard-items
                  '((recents . 5)

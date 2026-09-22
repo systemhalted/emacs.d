@@ -9,7 +9,7 @@
 
 ** Startup
 
-#+begin_src emacs-lisp 
+#+begin_src emacs-lisp :tangle yes
   ;; -*- lexical-binding: t; -*-
     (setq inhibit-startup-screen t)
 
@@ -21,7 +21,7 @@ Let's protect the startup file from changes made through Emacs' =Customize= inte
 By default, it can write settings into initialization file. However, we want those saved
 separately. The =custom.el= will be created only when =Customize= is used.
 
-#+begin_src emacs-lisp 
+#+begin_src emacs-lisp :tangle yes
   (setq custom-file
         (expand-file-name "var/custom.el" user-emacs-directory))
 
@@ -37,7 +37,7 @@ separately. The =custom.el= will be created only when =Customize= is used.
 priorities pick the more official archive first when a package exists in
 several.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   ;; require loads a library unless it has already been loaded
   (require 'package)
 
@@ -73,7 +73,7 @@ file can warn about the clash. Nothing here opens one file from two Emacs
 instances at once, and the symlinks confuse tools that walk a directory, so
 they are turned off.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (let ((auto-save-dir
          (file-name-as-directory
           (expand-file-name "var/auto-save" user-emacs-directory))))
@@ -112,7 +112,7 @@ modes inherit the behavior, while programming and special buffers do not.
 =auto-fill-mode= is intentionally left off by default because it changes file
 contents by inserting real line breaks.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (electric-pair-mode 1)
   (setq-default indent-tabs-mode nil)
 
@@ -139,7 +139,7 @@ contents by inserting real line breaks.
 
 ** Process I/O and shell environment
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (setq read-process-output-max (* 1024 1024))
 
   (use-package exec-path-from-shell
@@ -166,7 +166,7 @@ The minibuffer history (previous commands, file names, search terms) is lost
 when Emacs exits. [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Savehist.html][savehist]] is built into Emacs (hence =:ensure nil=) and
 restores that history on the next start.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   ;; enable savehist-mode;
   ;; `:ensure nil` means it would use existing library
   (use-package savehist
@@ -182,7 +182,7 @@ major-mode listing where buffers can be marked, filtered (by mode, file
 name, size, project), killed or saved in bulk, and grouped. Think of it
 as =dired= for buffers.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package ibuffer
     :ensure nil
     :bind ("C-x C-b" . ibuffer))
@@ -214,7 +214,7 @@ shadowed prefixes collapse cleanly:
 typing =/etc= after =~/foo/= shows =/etc=, not =~/foo//etc=.
 This is part of =Vertico= package.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package vertico
     :ensure t
     :config
@@ -248,7 +248,7 @@ full annotations show on the first prompt — no override required. =M-A=
 inside the minibuffer cycles each category to its lighter variants
 (=builtin=, =none=) when the default annotation feels too long.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
 (use-package marginalia
   :ensure t
   :after vertico
@@ -298,7 +298,7 @@ buffers/recent files preview after 0.2s of stillness, ripgrep/grep/line
 previews wait 0.4s, which keeps large repos from churning the display while
 you scroll candidates.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package consult
     :ensure t
     :bind
@@ -337,7 +337,7 @@ switches the =file= category to =basic= plus =partial-completion=, so path
 components expand by prefix and wildcards are honored. Example: =~/Wo/e/emac=
 expands to =~/Work/environment/emacs=.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package orderless
     :ensure t
     :custom
@@ -360,7 +360,7 @@ This setup enables Corfu globally, opens completions automatically after a
 short prefix, and cycles back to the start of the candidate list when moving
 past the last entry.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package corfu
     :ensure t
     :custom
@@ -386,7 +386,7 @@ past the last entry.
 
 ** Helpful
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package helpful
     :ensure t
     :bind
@@ -413,7 +413,7 @@ Eglot is used as the LSP client. It is [[https://www.gnu.org/software/emacs/manu
 it provides completion, go-to-definition, documentation, refactoring and
 diagnostics.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
     (use-package eglot
       :ensure nil
       :hook
@@ -431,7 +431,7 @@ diagnostics.
 support. It stays deliberately small: the language server (rust-analyzer,
 managed by mise) is connected through Eglot.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package rust-mode
     :ensure t)
 #+end_src
@@ -443,19 +443,35 @@ version-controlled roots, remembers known projects, and groups its commands
 under =C-x p=. Setting =project-mode-line= shows the current project in the
 mode line.
 
-After startup, an idle timer registers projects below =~/Work=. The final =t=
-makes the search recursive. The same scan can be started manually with
-=C-u M-x project-remember-projects-under=.
+Known projects are already remembered when you visit them through
+=project.el=. A recursive startup scan of =~/Work= blocked Emacs a few seconds
+after the first frame appeared, so project discovery is now manual.
+=C-x p R= runs the recursive scan on demand, prompting for a root and
+defaulting to =~/Work=. It can still be expensive, but only when explicitly
+requested.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
+  (defvar systemhalted/project-discovery-root
+    (expand-file-name "~/Work")
+    "Default root scanned by `systemhalted/project-refresh-known-projects'.")
+
+  (defun systemhalted/project-refresh-known-projects (root)
+    "Recursively remember projects under ROOT."
+    (interactive
+     (list
+      (read-directory-name "Remember projects under: "
+                           systemhalted/project-discovery-root
+                           nil t)))
+    (message "Remembering projects under %s..." root)
+    (project-remember-projects-under root t)
+    (message "Finished remembering projects under %s" root))
+
   (use-package project
      :ensure nil
+     :bind
+     (:map project-prefix-map
+           ("R" . systemhalted/project-refresh-known-projects))
      :config
-     (run-with-idle-timer
-      2 nil
-      #'project-remember-projects-under
-      (expand-file-name "~/Work")
-      t)
      (setq project-mode-line t))
 #+end_src
 
@@ -465,7 +481,7 @@ makes the search recursive. The same scan can be started manually with
 only in =prog-mode=, =org-mode= and =markdown-mode= so it stays out of the way while writing
 prose. [[https://github.com/AndreaCrotti/yasnippet-snippets][yasnippet-snippets]] adds a collection of ready-made snippets.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package yasnippet
     :ensure t
     :hook
@@ -491,7 +507,7 @@ a note to its final place, use =M-x dired-jump= then =R (dired-do-rename)=.
 
 The tasks are currently not managed in Emacs.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
 
   (defun systemhalted/org-new-inbox-note ()
          "Create a new Org note in the Organicely inbox"
@@ -545,7 +561,7 @@ headline navigation and markup helpers. Since Wordwise works on Markdown
 buffers, =.md= files are associated with this mode so they get the vocabulary
 hints too.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package markdown-mode
     :ensure t
     :mode
@@ -555,7 +571,7 @@ hints too.
 
 *** Blog Capture Template
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
 
   (defun systemhalted/blog ()
     "Create a new Jekyll Markdown post."
@@ -601,7 +617,7 @@ like Kindle's Word Wise. It lives in a local checkout rather than a package
 archive, so that directory is added to =load-path= and its manual is registered
 with Info. =C-c w= toggles the mode.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (defvar wordwise-local-path
         (expand-file-name "~/Work/products/emacs-packages/wordwise.el")
         "Directory holding the local wordwise checkout.")
@@ -634,7 +650,7 @@ with Info. =C-c w= toggles the mode.
 action (staging, committing, branching, diffing, pushing) is one or two keys
 away. =C-x g= opens that status buffer.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package magit
     :ensure t
     :bind
@@ -643,7 +659,7 @@ away. =C-x g= opens that status buffer.
 
 ** Ghostel
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package ghostel
     :ensure t
     :bind
@@ -652,7 +668,7 @@ away. =C-x g= opens that status buffer.
 
 ** TrustRail
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package trustrail
     :ensure nil
     :load-path "~/Work/products/emacs-packages/trustrail.el"
@@ -664,7 +680,7 @@ away. =C-x g= opens that status buffer.
 I don't want to open init.el and do =C-x C-e= everytime I make changes to this config.
 This is a utility function mapped to =C-c r=.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (defun systemhalted/config-reload ()
       "Save and reload the current config"
     (interactive)
@@ -699,7 +715,7 @@ This is a utility function mapped to =C-c r=.
 The projects section reads the projects remembered by =project.el=. Dashboard
 calls this backend =project-el=.
 
-#+begin_src emacs-lisp  
+#+begin_src emacs-lisp :tangle yes
   (use-package dashboard
     :ensure t
     :custom
@@ -712,4 +728,124 @@ calls this backend =project-el=.
     :config
     (dashboard-setup-startup-hook))
 
+#+end_src
+
+** Dired, Fonts and theme
+
+In Dired, =c= creates an empty file. GUI frames use Fira Code and Cantarell at
+15 pt when available; the helper re-runs for new client frames. On Omarchy the
+host owns those faces and only the Nerd Font icon fallback is added.
+
+The fallback is registered on both the current and the default fontset, so it
+outranks the default face's catch-all unicode mapping in new frames too. Prefer
+a =Mono= Nerd Font, or icons render double-width.
+
+No theme loads at startup; =C-c T= opens Consult's picker with previews. On
+Omarchy a manual choice lasts until the host changes the theme again.
+
+
+#+begin_src emacs-lisp :tangle yes
+ (defvar systemhalted/omarchy-owned-ui nil
+  "When non-nil, the host system (Omarchy) owns Emacs UI styling.
+The config then skips setting its own default and variable-pitch fonts;
+the startup theme is deferred regardless. Set this in
+~/.config/emacs/init.el before loading this config.")
+
+(with-eval-after-load 'dired
+  (define-key dired-mode-map (kbd "c") #'dired-create-empty-file))
+
+(defconst systemhalted/gui-default-font-candidates
+  '("Fira Code" "FiraCode Nerd Font")
+  "Monospaced fonts to try for the default face, in order.")
+
+(defconst systemhalted/gui-nerd-font-candidates
+  '("FiraCode Nerd Font Mono"
+    "MesloLGS NF"
+    "MesloLGS Nerd Font Mono"
+    "JetBrainsMono Nerd Font Mono"
+    "MesloLGM Nerd Font Mono")
+  "Nerd Fonts to try for Private Use Area glyph fallback, in order.")
+
+(defconst systemhalted/gui-nerd-font-ranges
+  '((#xe000  . #xf8ff)    ; BMP Private Use Area (Powerline, Devicons)
+    (#xf0000 . #xfffff)) ; Supplementary PUA-A (Material Design, etc.)
+  "Unicode ranges that should render with the Nerd Font fallback.")
+
+(defun systemhalted/apply-graphical-frame-fonts (&optional frame)
+  "Apply GUI fonts and icon fallbacks to FRAME."
+  (let ((frame (or frame (selected-frame))))
+    (when (display-graphic-p frame)
+      (with-selected-frame frame
+        (unless (bound-and-true-p systemhalted/omarchy-owned-ui)
+          (let ((mono-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                                     systemhalted/gui-default-font-candidates)))
+            (when mono-font
+              (set-face-attribute 'default frame :font mono-font :height 150)))
+          (when (find-font (font-spec :name "Cantarell"))
+            (set-face-attribute 'variable-pitch frame :font "Cantarell" :height 150)))
+
+        ;; Register on both the default fontset (t, inherited by future
+        ;; frames) AND the current frame's fontset (nil) so the Nerd Font
+        ;; takes priority over the default face's catch-all unicode mapping.
+        (let ((nerd-font (seq-find (lambda (name) (find-font (font-spec :name name)))
+                                   systemhalted/gui-nerd-font-candidates)))
+          (when nerd-font
+            (dolist (range systemhalted/gui-nerd-font-ranges)
+              (set-fontset-font t range nerd-font nil 'prepend)
+              (set-fontset-font nil range nerd-font nil 'prepend))))))))
+
+(add-hook 'after-make-frame-functions #'systemhalted/apply-graphical-frame-fonts)
+(systemhalted/apply-graphical-frame-fonts)
+
+#+end_src
+
+*Ligatures.* Fira Code ships programming ligatures but Emacs does not compose
+them by default. The [[https://github.com/mickeynp/ligature.el][ligature]] package fills in
+=composition-function-table=; enabled globally, so =prog-mode=, Ghostel, and Org
+source blocks all get them.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package ligature
+    :ensure t
+    :config
+    (ligature-set-ligatures
+     t
+     '("www" "**" "***" "**/" "*>" "*/" "\\\\" "\\\\\\" "{-" "[]" "::"
+       ":::" ":=" "!!" "!=" "!==" "-}" "--" "---" "-->" "->" "->>" "-<"
+       "-<<" "-~" "#{" "#[" "##" "###" "####" "#(" "#?" "#_" "#_(" ".-"
+       ".=" ".." "..<" "..." "?=" "??" ";;" "/*" "/**" "/=" "/==" "/>"
+       "//" "///" "&&" "||" "||=" "|=" "|>" "^=" "$>" "++" "+++" "+>"
+       "=:=" "==" "===" "==>" "=>" "=>>" "<=" "<==" "<=>" "<=<" "<>"
+       "<<" "<<-" "<<=" "<<<" "<+" "<+>" "<*" "<*>" "<-" "<->" "<--"
+       "</" "</>" "<|" "<||" "<|>" "<:" "~-" "~>" "~~" "~~>" "%%"))
+    (global-ligature-mode t))
+#+end_src
+
+#+begin_src emacs-lisp :tangle yes
+(use-package nord-theme
+  :ensure t
+  :defer t
+  :custom
+  (nord-region-highlight "frost"))
+
+(use-package modus-themes
+  :ensure t
+  :defer t)
+
+(use-package ef-themes
+  :ensure t
+  :defer t)
+
+(use-package catppuccin-theme
+  :ensure t
+  :defer t)
+
+(use-package doom-themes
+  :ensure t
+  :defer t
+  :config
+  (setq doom-themes-enable-bold t
+        doom-themes-enable-italic t))
+
+(global-set-key (kbd "C-c T") #'consult-theme)
 #+end_src
