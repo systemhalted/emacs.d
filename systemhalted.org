@@ -569,45 +569,43 @@ hints too.
 
 #+end_src
 
-*** Blog Capture Template
+*** Blog Publishing
+
+The blog at =~/Work/blog/systemhalted.github.io= is written in Org and built
+by Emacs. Its commands live in the repo's =publish/systemhalted-workflow.el=,
+so they are autoloaded here: Emacs knows the names at startup and loads the
+publisher the first time one of them runs. =C-c b= is the prefix.
+
+- =C-c b n= runs =systemhalted-new-post= — ask for a title and description
+  and open a new draft in =org/drafts/=.
+- =C-c b p= runs =systemhalted-preview= — save, build with drafts, and open
+  the current post in a local preview server.
+- =C-c b b= runs =systemhalted-build= — production build into =_site/=.
+- =C-c b P= runs =systemhalted-publish= — build, then open Magit to commit
+  and push.
+- =C-c b s= runs =systemhalted-stop-preview-server=.
 
 #+begin_src emacs-lisp :tangle yes
+  (defvar systemhalted/blog-workflow
+    (expand-file-name
+     "Work/blog/systemhalted.github.io/publish/systemhalted-workflow" "~")
+    "The blog's publishing workflow library, loaded on first use.")
 
-  (defun systemhalted/blog ()
-    "Create a new Jekyll Markdown post."
-    (interactive)
-    (let* ((directory
-            (expand-file-name
-             "Work/blog/systemhalted.github.io/collections/_posts"
-             "~"))
-           (title (string-trim (read-string
-           "Post title: ")))
-           (slug (string-trim
-                  (replace-regexp-in-string
-                   "[^[:alnum:]]+" "-"
-                   (downcase title))
-                  "-"))
-           (filename
-            (format "%s-%s.md"
-                    (format-time-string
-                    "%Y-%m-%d")
-                    slug))
-           (file (expand-file-name filename
-           directory)))
-      (when (string-empty-p title)
-        (user-error "Title cannot be
-        empty"))
-      (when (file-exists-p file)
-        (user-error "Post already exists:
-        %s" file))
-      (make-directory directory t)
-      (find-file file)
-      (insert "blog-post")
-      (unless (yas-expand)
-        (user-error "Could not expand the blog-post snippet"))))
+  (dolist (command '(systemhalted-new-post
+                     systemhalted-preview
+                     systemhalted-build
+                     systemhalted-publish
+                     systemhalted-stop-preview-server))
+    (autoload command systemhalted/blog-workflow nil t))
 
-  (global-set-key (kbd "C-c b") #'systemhalted/blog)
-
+  (define-prefix-command 'systemhalted/blog-prefix)
+  (global-set-key (kbd "C-c b") #'systemhalted/blog-prefix)
+  (define-key systemhalted/blog-prefix (kbd "n") #'systemhalted-new-post)
+  (define-key systemhalted/blog-prefix (kbd "p") #'systemhalted-preview)
+  (define-key systemhalted/blog-prefix (kbd "b") #'systemhalted-build)
+  (define-key systemhalted/blog-prefix (kbd "P") #'systemhalted-publish)
+  (define-key systemhalted/blog-prefix (kbd "s")
+              #'systemhalted-stop-preview-server)
 #+end_src
 
 ** Wordwise
