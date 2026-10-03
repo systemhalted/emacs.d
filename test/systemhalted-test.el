@@ -71,9 +71,38 @@
     (should-not (bound-and-true-p auto-fill-function))))
 
 (ert-deftest systemhalted-test/eglot-hooks-cover-current-languages ()
-  "The rewrite currently promises Eglot for Java and Rust."
+  "The rewrite currently promises Eglot for Java, Rust and Go."
   (should (systemhalted-test/hook-contains-p 'java-mode-hook #'eglot-ensure))
-  (should (systemhalted-test/hook-contains-p 'rust-mode-hook #'eglot-ensure)))
+  (should (systemhalted-test/hook-contains-p 'rust-mode-hook #'eglot-ensure))
+  (should (systemhalted-test/hook-contains-p 'go-ts-mode-hook #'eglot-ensure))
+  (should (systemhalted-test/hook-contains-p 'go-mod-ts-mode-hook #'eglot-ensure)))
+
+(ert-deftest systemhalted-test/go-save-hook-is-safe-without-gopls ()
+  "Saving a Go buffer must not fail when gopls is not connected."
+  (should (systemhalted-test/hook-contains-p
+           'go-ts-mode-hook #'systemhalted/go-setup-format-on-save))
+  (should (fboundp 'systemhalted/go-before-save))
+  (with-temp-buffer
+    (should-not (systemhalted/go-before-save))))
+
+(ert-deftest systemhalted-test/rust-save-hook-is-installed-and-safe ()
+  "Rust buffers format on save, and saving works without rust-analyzer."
+  (with-temp-buffer
+    (rust-mode)
+    (should (memq #'systemhalted/rust-setup-format-on-save rust-mode-hook))
+    (should (memq #'systemhalted/rust-before-save before-save-hook))
+    (should-not (systemhalted/rust-before-save))))
+
+(ert-deftest systemhalted-test/auto-save-visited-is-scoped ()
+  "Idle saves in place are on, but only for Eglot-managed Rust and Go buffers."
+  (should (bound-and-true-p auto-save-visited-mode))
+  (should (eq auto-save-visited-predicate #'systemhalted/auto-save-visited-p))
+  (with-temp-buffer
+    (fundamental-mode)
+    (should-not (systemhalted/auto-save-visited-p)))
+  (with-temp-buffer
+    (rust-mode)
+    (should-not (systemhalted/auto-save-visited-p))))
 
 (ert-deftest systemhalted-test/config-commands-remain-bound ()
   "The literate config should remain directly reloadable and visitable."

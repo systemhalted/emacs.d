@@ -352,7 +352,7 @@ expands to =~/Work/environment/emacs=.
 =completion-at-point= no longer jumps to the =*Completions*= buffer.
 
 Corfu does not create completion candidates itself; it renders whatever the
-active completion source already provides. That means Java and Rust receive LSP
+active completion source already provides. That means Java, Rust and Go receive LSP
 completions through Eglot, while other programming modes benefit automatically
 when they expose a standard CAPF source of their own.
 
@@ -377,7 +377,7 @@ past the last entry.
 [[https://github.com/justbur/emacs-which-key][which-key]] pops up the possible completions shortly after a prefix key like
 =C-c p= is pressed, so bindings can be discovered instead of memorized.
 
- #+begin_src emacs-lisp  
+ #+begin_src emacs-lisp
     (use-package which-key
       :ensure nil
       :config
@@ -418,7 +418,9 @@ diagnostics.
       :ensure nil
       :hook
         ((java-mode . eglot-ensure)
-         (rust-mode . eglot-ensure)))
+         (rust-mode . eglot-ensure)
+         (go-ts-mode . eglot-ensure)
+         (go-mod-ts-mode . eglot-ensure)))
         ;; equivalent to   (add-hook 'java-mode-hook #'eglot-ensure)
         ;;  (add-hook 'rust-mode-hook #'eglot-ensure)
 #+end_src
@@ -431,9 +433,101 @@ diagnostics.
 support. It stays deliberately small: the language server (rust-analyzer,
 managed by mise) is connected through Eglot.
 
+Formatting on save goes through rust-analyzer (which runs rustfmt), so
+rust-mode's own =rust-format-on-save= is turned off to avoid formatting twice.
+The save hook only formats when rust-analyzer is connected. A =.rs= file
+outside a Cargo project has no server, and an error from
+=eglot-format-buffer= in =before-save-hook= would abort the save.
+
+The hook is added when a buffer enters =rust-mode=, so buffers that were
+already open when the config was reloaded need =M-x revert-buffer= to pick it
+up. The mode hooks use named functions rather than lambdas: reloading the
+config re-adds a named function in place, while each reload would stack
+another copy of a lambda, and stale copies keep running after the config no
+longer mentions them.
+
 #+begin_src emacs-lisp :tangle yes
+  (defun systemhalted/rust-before-save ()
+    "Format the buffer when rust-analyzer is connected."
+    (when (and (fboundp 'eglot-managed-p) (eglot-managed-p))
+      (eglot-format-buffer)))
+
+  (defun systemhalted/rust-setup-format-on-save ()
+    "Format the current Rust buffer before each save."
+    (add-hook 'before-save-hook #'systemhalted/rust-before-save nil t))
+
   (use-package rust-mode
-    :ensure t)
+    :ensure t
+    :init
+    (setq rust-format-on-save nil)
+    :hook
+    (rust-mode . systemhalted/rust-setup-format-on-save))
+#+end_src
+
+*** Go
+
+Go uses the tree-sitter modes built into Emacs: =go-ts-mode= for =.go= files
+and =go-mod-ts-mode= for =go.mod=. Emacs picks them automatically once the
+=go= and =gomod= grammars are installed; if a grammar is missing it offers to
+download and compile it the first time a Go file is opened. The language
+server (gopls) and the Go toolchain are managed by mise and connected through
+Eglot.
+
+On save, imports are organized and the buffer is formatted with gopls (the
+same result as =goimports=). The organize-imports request is made directly
+rather than through =eglot-code-action-organize-imports=, because that command
+signals an error when there is nothing to change, and an error in
+=before-save-hook= aborts the save. Both steps are skipped when gopls is not
+connected, so saving still works without it.
+
+=go-ts-mode= already binds =C-c C-t t=, =C-c C-t f= and =C-c C-t p= to run the
+test at point, the tests in the file and the tests in the package, and
+=C-c C-d= to insert a doc comment for the declaration at point.
+
+#+begin_src emacs-lisp :tangle yes
+  (defun systemhalted/go-organize-imports ()
+    "Apply gopls' organize-imports edits to the current buffer, if any."
+    (dolist (action (eglot-code-actions (point-min) (point-max)
+                                        "source.organizeImports"))
+      (eglot-execute (eglot-current-server) action)))
+
+  (defun systemhalted/go-before-save ()
+    "Organize imports and format the buffer when gopls is connected."
+    (when (and (fboundp 'eglot-managed-p) (eglot-managed-p))
+      (systemhalted/go-organize-imports)
+      (eglot-format-buffer)))
+
+  (defun systemhalted/go-setup-format-on-save ()
+    "Organize imports and format the current Go buffer before each save."
+    (add-hook 'before-save-hook #'systemhalted/go-before-save nil t))
+
+  (use-package go-ts-mode
+    :ensure nil
+    :hook
+    (go-ts-mode . systemhalted/go-setup-format-on-save))
+#+end_src
+
+*** Auto-save formatting
+
+Plain auto-save only writes =#file#= recovery copies and never runs
+=before-save-hook=, so it cannot format anything. =auto-save-visited-mode=
+instead saves the visited file itself after =auto-save-visited-interval=
+seconds of idle time (5 by default), through the normal save path, so the
+format-on-save hooks above run.
+
+It is limited to Rust and Go buffers that Eglot is managing. Every other
+buffer keeps the usual recovery-file auto-save and is only written on an
+explicit save.
+
+#+begin_src emacs-lisp :tangle yes
+  (defun systemhalted/auto-save-visited-p ()
+    "Return non-nil when the current buffer should be saved in place on idle."
+    (and (memq major-mode '(rust-mode rust-ts-mode go-ts-mode))
+         (fboundp 'eglot-managed-p)
+         (eglot-managed-p)))
+
+  (setq auto-save-visited-predicate #'systemhalted/auto-save-visited-p)
+  (auto-save-visited-mode 1)
 #+end_src
 
 ** Project Management - project.el
