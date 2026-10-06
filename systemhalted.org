@@ -661,9 +661,19 @@ hints too.
     :mode
     (("\\.md\\'" . markdown-mode)))
 
+  ;;mermaid overlay rendering using md-mermaid
+
+  (use-package md-mermaid
+    :vc (:url "https://github.com/ahmetus/md-mermaid" :rev :newest)
+    :init
+    (with-eval-after-load 'md-mermaid-live
+      (setq md-mermaid-live-width nil))
+    :config
+    (setq md-mermaid-default-preset 'svg))
+
 #+end_src
 
-*** Blog Publishing
+** Blog Publishing
 
 The blog at =~/Work/blog/systemhalted.github.io= is written in Org and built
 by Emacs. Its commands live in the repo's =publish/systemhalted-workflow.el=,
