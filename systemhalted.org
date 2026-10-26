@@ -400,216 +400,79 @@ past the last entry.
      ("C-h S"                   . helpful-symbol)))
 #+end_src
 
-** EWW PDF links
+** PDF
 
-EWW can render HTML itself, but PDF links need a separate path. Direct
-=.pdf= links, including relative ones such as =3/5/plai-v325.pdf=, are matched
-before EWW tries to display them as pages and are downloaded to a temporary
-file, then opened through a small helper.
+[[https://github.com/vedang/pdf-tools][pdf-tools]] renders PDFs with poppler directly in Emacs. Unlike DocView,
+which shows each page as a picture, the text layer is live: text can be
+selected, searched with =C-s= (matches are highlighted on the page), and marked
+up with annotations that are saved into the PDF itself. Zoom stays sharp.
 
-That helper prefers staying inside Emacs, but only when the current frame can
-display images /and/ DocView has a working PDF backend. Emacs' built-in DocView
-normally expects Ghostscript or MuPDF; on this machine only =pdftoppm= is
-available, so a small adapter teaches DocView to use that too. If no in-Emacs
-backend is available, the PDF is handed off to the system's default external
-application instead of leaving raw bytes in the buffer.
+=:mode= and =:magic= register =pdf-view-mode= for PDF files as an autoloaded
+command, so pdf-tools is not loaded at startup. The first PDF opened loads
+it, and =pdf-tools-install= then builds pdf-tools' =epdfinfo= server if it is
+missing, without asking. Its build dependencies (poppler-glib, libpng, zlib, a
+C toolchain) are system packages, so pdf-tools is told not to install them.
+The build runs in the background, so on a fresh install the very first PDF
+may fail to open until it finishes. pdf-tools' own =pdf-loader-install= is not
+used: its loader is an anonymous function in =auto-mode-alist=, and mailcap
+skips viewers that are not defined functions, so EWW would fall back to
+DocView.
 
-When a site does not expose =.pdf= in the URL but still responds with
-=application/pdf=, EWW's MIME handling is overridden in the same way: use
-DocView when it can actually render the document, otherwise fall back cleanly
-to the external app.
+EWW needs no special handling. Its built-in =eww-display-pdf= sends every
+=application/pdf= response, including plain =.pdf= links, through mailcap.
+Mailcap lists =doc-view-mode= before =pdf-view-mode=, so a user entry puts
+pdf-tools first. A PDF opened from EWW lives in an =*eww pdf*= buffer with no
+file behind it; =C-x C-w= saves a copy along with any annotations.
+
+Annotation keys live under =C-c C-a=: =h= highlight, =u= underline, =s=
+squiggly, =o= strike-out, =t= text note, =l= list annotations, =D= delete.
+Those markup commands act on a mouse selection, because pdf-tools has no text
+cursor to set a mark from. =systemhalted/pdf-annotate-search-match= is the
+keyboard path: search for the text with =C-s= (or =C-M-s= for a regexp, which
+can span lines), press =RET=, then =C-c C-a H= to highlight the match. With
+=C-u=, it asks for underline, squiggly or strike-out instead. pdf-isearch keeps
+the match in pixel coordinates of the displayed page, while annotations need
+coordinates relative to the page size, hence the conversion.
 
 #+begin_src emacs-lisp :tangle yes
-  (defconst systemhalted/pdf-url-regexp
-    "\\.[Pp][Dd][Ff]\\(?:[?#].*\\)?\\'"
-    "Regexp matching URLs that likely point to PDF documents.")
+  (defun systemhalted/pdf-annotate-search-match (type)
+    "Mark up the current PDF search match with TYPE (highlight by default)."
+    (interactive
+     (list (if current-prefix-arg
+               (intern (completing-read
+                        "Markup: " '("highlight" "underline"
+                                     "squiggly" "strike-out")
+                        nil t))
+             'highlight)))
+    (unless (bound-and-true-p pdf-isearch-current-match)
+      (user-error "No search match; search with C-s first"))
+    (pdf-annot-add-markup-annotation
+     (cons pdf-isearch-current-page
+           (pdf-util-scale-pixel-to-relative pdf-isearch-current-match))
+     type))
 
-  (defconst systemhalted/eww-use-browse-url-regexp
-    (concat "\\`mailto:\\|" systemhalted/pdf-url-regexp)
-    "Regexp matching URLs that EWW should delegate to `browse-url'.")
-
-  (defvar systemhalted/pdf-download-directory
-    (expand-file-name "var/pdf" user-emacs-directory)
-    "Directory used for PDFs downloaded from web links.")
-
-  (defun systemhalted/doc-view-default-pdf-backend-available-p ()
-    "Return non-nil when DocView's standard PDF renderers are available."
-    (or (and doc-view-ghostscript-program
-             (executable-find doc-view-ghostscript-program))
-        (and doc-view-pdfdraw-program
-             (executable-find doc-view-pdfdraw-program))))
-
-  (defun systemhalted/doc-view-pdftoppm-backend-available-p ()
-    "Return non-nil when DocView can be backed by pdftoppm."
-    (executable-find "pdftoppm"))
-
-  (defun systemhalted/doc-view-pdftoppm-output-prefix (png page)
-    "Return the pdftoppm output prefix for PNG path PNG and PAGE.
-When PAGE is non-nil, PNG names a single image file. Otherwise PNG is
-DocView's multi-page pattern ending in =-%d.png=."
-    (let ((without-extension (file-name-sans-extension png)))
-      (if page
-          without-extension
-        (replace-regexp-in-string "[-_]?%d\\'" "" without-extension))))
-
-  (defun systemhalted/normalize-pdftoppm-output-files (png)
-    "Rename pdftoppm outputs derived from PNG to the names DocView expects."
-    (let* ((directory (file-name-directory png))
-           (basename (file-name-base png))
-           (extension (or (file-name-extension png) "png"))
-           (prefix (replace-regexp-in-string "[-_]?%d\\'" "" basename)))
-      (dolist (file (directory-files directory t
-                                     (format "\\`%s-[0-9]+\\.%s\\'"
-                                             (regexp-quote prefix)
-                                             (regexp-quote extension))))
-        (let* ((name (file-name-base file))
-               (page-string (car (last (split-string name "-"))))
-               (page (string-to-number page-string))
-               (target (expand-file-name
-                        (format "%s-%d.%s" prefix page extension)
-                        directory)))
-          (unless (string= file target)
-            (rename-file file target t))))))
-
-  (defun systemhalted/doc-view-pdf->png-converter-pdftoppm (pdf png page callback)
-    "Convert PDF to PNG asynchronously through pdftoppm, then run CALLBACK.
-PNG is a single output file when PAGE is non-nil, and DocView's file pattern
-when PAGE is nil."
-    (doc-view-start-process
-     "pdf->png" "pdftoppm"
-     `("-r" ,(format "%d" (round doc-view-resolution))
-       "-png"
-       ,@(if page
-             `("-f" ,(format "%d" page)
-               "-l" ,(format "%d" page)
-               "-singlefile"))
-       ,pdf
-       ,(systemhalted/doc-view-pdftoppm-output-prefix png page))
-     (if page
-         (lambda ()
-           ;; DocView clamps the page to its known file list, which is still
-           ;; empty here, so refresh it before the callback shows the page.
-           (doc-view-display (current-buffer))
-           (funcall callback))
-       (lambda ()
-         (systemhalted/normalize-pdftoppm-output-files png)
-         (funcall callback)))))
-
-  (defun systemhalted/configure-doc-view-pdf-backend ()
-    "Teach DocView to use pdftoppm when its standard PDF backends are missing."
-    (when (and (require 'doc-view nil t)
-               (not (systemhalted/doc-view-default-pdf-backend-available-p))
-               (systemhalted/doc-view-pdftoppm-backend-available-p))
-      (setq doc-view-pdf->png-converter-function
-            #'systemhalted/doc-view-pdf->png-converter-pdftoppm)))
-
-  (defun systemhalted/doc-view-mode-p-advice (orig type)
-    "Treat pdftoppm as a valid DocView PDF backend for TYPE."
-    (or (funcall orig type)
-        (and (eq type 'pdf)
-             (display-graphic-p)
-             (image-type-available-p 'png)
-             (systemhalted/doc-view-pdftoppm-backend-available-p))))
-
-  (defun systemhalted/doc-view-active-pages-advice (orig)
-    "Fall back to the current page when DocView reports no active pages."
-    (or (funcall orig)
-        (when-let ((page (doc-view-current-page)))
-          (list page))))
-
-  (defun systemhalted/pdf-viewable-in-emacs-p ()
-    "Return non-nil when the current frame can render PDFs in Emacs."
-    (and (require 'doc-view nil t)
-         (systemhalted/configure-doc-view-pdf-backend)
-         (doc-view-mode-p 'pdf)))
-
-  (defun systemhalted/pdf-temp-file ()
-    "Return a new temporary file name for a downloaded PDF."
-    (make-directory systemhalted/pdf-download-directory t)
-    (make-temp-file
-     (expand-file-name "eww-" systemhalted/pdf-download-directory)
-     nil ".pdf"))
-
-  (defun systemhalted/expand-url-for-current-eww-page (url)
-    "Return URL expanded against the current EWW page when possible."
-    (if-let ((base (and (boundp 'eww-data)
-                        (plist-get eww-data :url))))
-        (shr-expand-url url base)
-      url))
-
-  (defun systemhalted/open-file-externally (file)
-    "Open FILE with the system's default external application."
-    (if (eq system-type 'darwin)
-        (start-process "open" nil "open" file)
-      (browse-url-of-file file)))
-
-  (defun systemhalted/show-pdf-buffer-in-emacs (buffer)
-    "Display BUFFER, then switch it to DocView in the visible window."
-    (let* ((result (pop-to-buffer-same-window buffer))
-           (window (if (windowp result) result (selected-window))))
-      (with-selected-window window
-        (with-current-buffer buffer
-          (unless (derived-mode-p 'doc-view-mode)
-            (doc-view-mode))
-          (set-buffer-modified-p nil)))
-      buffer))
-
-  (defun systemhalted/open-pdf-file (file)
-    "Open PDF FILE in Emacs when possible, otherwise externally."
-    (if (systemhalted/pdf-viewable-in-emacs-p)
-        (systemhalted/show-pdf-buffer-in-emacs
-         (find-file-noselect file))
-      (systemhalted/open-file-externally file)))
-
-  (defun systemhalted/view-pdf-mime ()
-    "View PDF data from the current buffer."
-    (let ((source (current-buffer))
-          (file (systemhalted/pdf-temp-file))
-          (coding-system-for-write 'binary))
-      (write-region nil nil file nil 'silent)
-      (systemhalted/open-pdf-file file)
-      (with-current-buffer source
-        (let ((inhibit-read-only t))
-          (erase-buffer)))))
-
-  (defun systemhalted/browse-url-pdf (url &optional _new-window)
-    "Download PDF URL and open it through the configured PDF viewer."
-    (require 'url-handlers)
-    (setq url (systemhalted/expand-url-for-current-eww-page url))
-    (let ((file (systemhalted/pdf-temp-file)))
-      (url-copy-file url file t)
-      (systemhalted/open-pdf-file file)))
-
-  (use-package browse-url
-    :ensure nil
+  (use-package pdf-tools
+    :ensure t
+    :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
+    :magic ("%PDF" . pdf-view-mode)
     :config
-    (add-to-list 'browse-url-handlers
-                 `(,systemhalted/pdf-url-regexp . systemhalted/browse-url-pdf)))
-
-  (use-package doc-view
-    :ensure nil
+    (pdf-tools-install t t)
     :custom
-    ;; Let wheel/trackpad scrolling continue onto the next page.
-    (doc-view-continuous t)
-    :config
-    (unless (advice-member-p #'systemhalted/doc-view-mode-p-advice
-                             'doc-view-mode-p)
-      (advice-add 'doc-view-mode-p :around
-                  #'systemhalted/doc-view-mode-p-advice))
-    (unless (advice-member-p #'systemhalted/doc-view-active-pages-advice
-                             'doc-view-active-pages)
-      (advice-add 'doc-view-active-pages :around
-                  #'systemhalted/doc-view-active-pages-advice))
-    (systemhalted/configure-doc-view-pdf-backend))
+    (pdf-view-display-size 'fit-page))
 
-  (use-package eww
+  (use-package pdf-annot
     :ensure nil
-    :custom
-    (eww-use-browse-url systemhalted/eww-use-browse-url-regexp)
+    :bind
+    (:map pdf-annot-minor-mode-map
+          ("C-c C-a H" . systemhalted/pdf-annotate-search-match)))
+
+  (use-package mailcap
+    :ensure nil
     :config
-    (require 'mailcap)
     (add-to-list 'mailcap-user-mime-data
-                 '(systemhalted/view-pdf-mime "application/pdf")))
+                 '((viewer . pdf-view-mode)
+                   (type . "application/pdf")
+                   (test . window-system))))
 #+end_src
 
 
