@@ -867,13 +867,17 @@ network.
 - =tramp-verbose= is 1, so only errors show in the echo area. When a connection
   fails, raise it to 6 for a moment and read the =*debug tramp*= buffer.
 
+Both are set in =:config=, after TRAMP loads, rather than with =:custom=. On
+Emacs 30, TRAMP's own loaddefs define =tramp-verbose= with a plain =defvar=,
+which overwrites a value =:custom= stored before TRAMP was loaded.
+
 #+begin_src emacs-lisp :tangle yes
   (use-package tramp
     :ensure nil
     :defer t
-    :custom
-    (tramp-default-method "ssh")
-    (tramp-verbose 1))
+    :config
+    (setopt tramp-default-method "ssh"
+            tramp-verbose 1))
 
   (setq remote-file-name-inhibit-cache nil)
 #+end_src
