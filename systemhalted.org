@@ -842,6 +842,35 @@ away. =C-x g= opens that status buffer.
     (("C-c m" . ghostel)))
 #+end_src
 
+** TRAMP
+
+[[https://www.gnu.org/software/tramp/][TRAMP]] opens files on other machines as if they were local. Mainly, I use it to
+reach the home NAS: =/ssh:mrshudson:/srv/bakerstreet/= opens the bakerstreet drive
+in Dired. The =mrshudson= alias in =~/.ssh/config= goes over Tailscale, so it also
+works away from home. =mrshudson-lan= is the faster direct route on the home
+network.
+
+- =tramp-default-method= is =ssh=, so a path that names no method, such as
+  =/-:mrshudson:/srv/bakerstreet/=, still connects over ssh instead of the =scp=
+  default.
+- =remote-file-name-inhibit-cache= is =nil=, so Emacs remembers remote file
+  details instead of asking the Pi again for every file. Large folders like
+  =Media/Music= then list much faster. If a file changes on the Pi from
+  elsewhere, Dired may lag for a moment; =g= refreshes it.
+- =tramp-verbose= is 1, so only errors show in the echo area. When a connection
+  fails, raise it to 6 for a moment and read the =*debug tramp*= buffer.
+
+#+begin_src emacs-lisp :tangle yes
+  (use-package tramp
+    :ensure nil
+    :defer t
+    :custom
+    (tramp-default-method "ssh")
+    (tramp-verbose 1))
+
+  (setq remote-file-name-inhibit-cache nil)
+#+end_src
+
 ** TrustRail
 
 #+begin_src emacs-lisp :tangle yes

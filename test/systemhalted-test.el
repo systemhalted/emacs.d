@@ -131,6 +131,13 @@ epdfinfo server, which the isolated test setup does not build."
   (should (eq (key-binding (kbd "C-c r")) #'systemhalted/config-reload))
   (should (eq (key-binding (kbd "C-c e")) #'systemhalted/config-visit)))
 
+(ert-deftest systemhalted-test/tramp-defaults-suit-the-home-nas ()
+  "Remote files on mrshudson should open over ssh, cache file details, and log quietly."
+  (require 'tramp)
+  (should (equal tramp-default-method "ssh"))
+  (should (null remote-file-name-inhibit-cache))
+  (should (= tramp-verbose 1)))
+
 (ert-deftest systemhalted-test/emacs-lisp-blocks-declare-tangle-intent ()
   "Every Emacs Lisp source block must explicitly say whether it tangles.
 This prevents a visually configured package from silently disappearing from
