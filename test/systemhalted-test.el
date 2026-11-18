@@ -124,6 +124,19 @@ epdfinfo server, which the isolated test setup does not build."
     (should-error (systemhalted/pdf-annotate-search-match 'highlight)
                   :type 'user-error)))
 
+(ert-deftest systemhalted-test/pdf-server-builds-only-interactively ()
+  "Batch Emacs must not build epdfinfo; CI runners lack poppler and the
+failed build aborts the run.  Interactive sessions still build it."
+  (let ((calls 0))
+    (cl-letf (((symbol-function 'pdf-tools-install)
+               (lambda (&rest _) (setq calls (1+ calls)))))
+      (let ((noninteractive t))
+        (systemhalted/pdf-tools-setup))
+      (should (= calls 0))
+      (let ((noninteractive nil))
+        (systemhalted/pdf-tools-setup))
+      (should (= calls 1)))))
+
 (ert-deftest systemhalted-test/config-commands-remain-bound ()
   "The literate config should remain directly reloadable and visitable."
   (should (fboundp 'systemhalted/config-reload))

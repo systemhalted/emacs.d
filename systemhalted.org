@@ -413,7 +413,9 @@ it, and =pdf-tools-install= then builds pdf-tools' =epdfinfo= server if it is
 missing, without asking. Its build dependencies (poppler-glib, libpng, zlib, a
 C toolchain) are system packages, so pdf-tools is told not to install them.
 The build runs in the background, so on a fresh install the very first PDF
-may fail to open until it finishes. pdf-tools' own =pdf-loader-install= is not
+may fail to open until it finishes. Batch Emacs skips the build: installing
+the package byte-compiles it, which loads pdf-tools, and on a machine without
+poppler (such as the CI runner) the failed build aborts the run. pdf-tools' own =pdf-loader-install= is not
 used: its loader is an anonymous function in =auto-mode-alist=, and mailcap
 skips viewers that are not defined functions, so EWW would fall back to
 DocView.
@@ -451,12 +453,17 @@ coordinates relative to the page size, hence the conversion.
            (pdf-util-scale-pixel-to-relative pdf-isearch-current-match))
      type))
 
+  (defun systemhalted/pdf-tools-setup ()
+    "Build or activate the epdfinfo server, but not in batch Emacs."
+    (unless noninteractive
+      (pdf-tools-install t t)))
+
   (use-package pdf-tools
     :ensure t
     :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
     :magic ("%PDF" . pdf-view-mode)
     :config
-    (pdf-tools-install t t)
+    (systemhalted/pdf-tools-setup)
     :custom
     (pdf-view-display-size 'fit-page))
 
